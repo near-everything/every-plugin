@@ -1,0 +1,10 @@
+node_modules
+.turbo
+.alchemy
+.env
+
+# START Ruler Generated Files
+*.bak
+.clinerules
+.clinerules.bak
+# END Ruler Generated Files
