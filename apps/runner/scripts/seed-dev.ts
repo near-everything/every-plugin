@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as schema from "@usersdotfun/shared-db/src/schema";
+import * as schema from "../src/db";
 
 async function main() {
   console.log("Seeding dev database... ", process.env.DATABASE_URL);

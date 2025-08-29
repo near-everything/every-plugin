@@ -5,8 +5,9 @@ import { rateLimiter } from 'hono-rate-limiter';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { AppConfig } from '../config';
-import { appRouter } from '../routers';
 import { createContext } from '../lib/context';
+import { generateOpenAPISpec } from '../lib/openapi';
+import { appRouter } from '../routers';
 import { AuthService } from './auth.service';
 
 export interface HttpServerServiceData {
@@ -32,7 +33,7 @@ export const HttpServerServiceLive = Layer.scoped(
 
     // CORS middleware
     app.use('*', cors({
-      origin: ['http://localhost:3000', 'http://localhost:5173'],
+      origin: ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:4000'],
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization', 'Cookie'],
       credentials: true,
@@ -70,6 +71,17 @@ export const HttpServerServiceLive = Layer.scoped(
     // Health check endpoint
     app.get("/", (c) => {
       return c.text("OK");
+    });
+
+    // OpenAPI spec endpoint
+    app.get("/spec.json", async (c) => {
+      try {
+        const spec = await generateOpenAPISpec();
+        return c.json(spec);
+      } catch (error) {
+        console.error('Failed to generate OpenAPI spec:', error);
+        return c.json({ error: 'Failed to generate OpenAPI specification' }, 500);
+      }
     });
 
     let server: any = null;

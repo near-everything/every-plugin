@@ -1,4 +1,4 @@
-import { createOutputSchema } from '@usersdotfun/core-sdk';
+import { createOutputSchema } from '@every-plugin/types';
 import { PluginServiceTag } from '../plugin-runtime/plugin.service';
 import { WorkflowService } from '../db';
 import { QUEUE_NAMES, QueueService, StateService } from '../queue';

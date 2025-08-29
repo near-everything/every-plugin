@@ -6,15 +6,18 @@
 		"build": "next build",
 		"dev": "next dev --turbo --port=4000",
 		"start": "next start",
-		"postinstall": "fumadocs-mdx"
+		"postinstall": "fumadocs-mdx",
+		"generate:docs": "bun run scripts/generate-docs.ts"
 	},
 	"dependencies": {
+		"fumadocs-core": "15.7.2",
+		"fumadocs-mdx": "11.8.0",
+		"fumadocs-openapi": "^9.3.2",
+		"fumadocs-ui": "15.7.2",
 		"next": "15.5.0",
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",
-		"fumadocs-ui": "15.7.2",
-		"fumadocs-core": "15.7.2",
-		"fumadocs-mdx": "11.8.0"
+		"shiki": "^3.12.0"
 	},
 	"devDependencies": {
 		"@types/node": "24.3.0",

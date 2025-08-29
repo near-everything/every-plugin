@@ -28,7 +28,4 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "references": [
-    { "path": "../../packages/shared-types" }
-  ]
 }

@@ -1,4 +1,4 @@
-import { PluginLoggerTag } from "@usersdotfun/core-sdk";
+import { PluginLoggerTag } from "@every-plugin/types";
 import { Effect, Layer } from "effect";
 
 export const PluginLoggerLive = Layer.succeed(

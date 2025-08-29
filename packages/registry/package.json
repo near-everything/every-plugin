@@ -1,5 +1,5 @@
 {
-  "name": "@usersdotfun/registry-builder",
+  "name": "@every-plugin/registry",
   "module": "index.ts",
   "type": "module",
   "devDependencies": {
@@ -10,6 +10,6 @@
   },
   "dependencies": {
     "zod": "^4.0.8",
-    "@usersdotfun/core-sdk": "workspace:*"
+    "@every-plugin/types": "workspace:*"
   }
 }

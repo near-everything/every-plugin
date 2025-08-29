@@ -1,10 +1,9 @@
-import { schema } from "@usersdotfun/shared-db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin, anonymous, jwt } from "better-auth/plugins";
 // import { siwn } from "better-near-auth";
 // import { generateNonce } from "near-sign-verify";
-import { db } from "../db";
+import { db, schema } from "../db";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {

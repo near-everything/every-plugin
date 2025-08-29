@@ -1,4 +1,4 @@
-import { createSourceOutputSchema, PlatformStateSchema, type SourcePlugin } from '@usersdotfun/core-sdk';
+import { createSourceOutputSchema, PlatformStateSchema, type SourcePlugin } from '@every-plugin/types';
 import { PluginServiceTag } from '../plugin-runtime/plugin.service';
 import type { ExecutePipelineJobData, SourceQueryJobData } from '@usersdotfun/shared-types/types';
 import { type Job } from 'bullmq';

@@ -1,4 +1,4 @@
-# registry-builder
+# registry
 
 To install dependencies:
 

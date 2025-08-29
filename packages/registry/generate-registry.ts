@@ -105,7 +105,7 @@ for (const [pluginId, schemaPrefix] of Object.entries(pluginsToRegister)) {
   }
 }
 
-const registryPath = path.resolve(process.cwd(), 'packages/registry-builder/registry.json');
+const registryPath = path.resolve(process.cwd(), 'packages/registry/registry.json');
 await fs.writeFile(registryPath, JSON.stringify(registry, null, 2));
 
 console.log(`\nRegistry generated successfully at: ${registryPath}`);

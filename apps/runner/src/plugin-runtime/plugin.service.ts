@@ -1,9 +1,9 @@
 
-import type { Config, Plugin, PluginExecutionError, PluginMetadata } from "@usersdotfun/core-sdk";
-import { ConfigurationError, PluginLoggerTag } from "@usersdotfun/core-sdk";
+import type { Config, Plugin, PluginExecutionError, PluginMetadata } from "@every-plugin/types";
+import { ConfigurationError, PluginLoggerTag } from "@every-plugin/types";
 import { Cache, Context, Duration, Effect, Layer, Schedule } from "effect";
 import type z from "zod";
-import registryData from "../../../../packages/registry-builder/registry.json" with { type: "json" };
+import registryData from "../../../../packages/registry/registry.json" with { type: "json" };
 import {
   PluginError
 } from "../pipeline/errors";

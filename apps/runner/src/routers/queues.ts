@@ -1,8 +1,8 @@
-import { QueueService, QueueStatusService } from '../queue';
 import type { QueueName } from '@usersdotfun/shared-types/types';
 import { Effect } from 'effect';
 import { z } from 'zod';
 import { authenticatedProcedure } from '../lib/orpc';
+import { QueueService, QueueStatusService } from '../queue';
 
 // Inline schema definitions
 const deleteJobParamSchema = z.object({
@@ -44,7 +44,7 @@ export const queueRouter = {
     .input(z.object({ queueName: z.string() }))
     .handler(async ({ input, context }) => {
       const { queueName } = input;
-      
+
       const program = Effect.gen(function* () {
         const queueStatusService = yield* QueueStatusService;
         const jobs = yield* queueStatusService.getAllJobs({ queueName: queueName as QueueName });
@@ -58,7 +58,7 @@ export const queueRouter = {
     .input(deleteJobParamSchema)
     .handler(async ({ input, context }) => {
       const { queueName, jobId } = input;
-      
+
       const program = Effect.gen(function* () {
         const queueService = yield* QueueService;
         yield* queueService.removeJob(queueName as QueueName, jobId);
@@ -72,7 +72,7 @@ export const queueRouter = {
     .input(queueNameParamSchema)
     .handler(async ({ input, context }) => {
       const { queueName } = input;
-      
+
       const program = Effect.gen(function* () {
         const queueService = yield* QueueService;
         yield* queueService.resumeQueue(queueName as QueueName);
@@ -86,7 +86,7 @@ export const queueRouter = {
     .input(queueNameParamSchema)
     .handler(async ({ input, context }) => {
       const { queueName } = input;
-      
+
       const program = Effect.gen(function* () {
         const queueService = yield* QueueService;
         yield* queueService.pauseQueue(queueName as QueueName);
@@ -100,7 +100,7 @@ export const queueRouter = {
     .input(clearQueueSchema)
     .handler(async ({ input, context }) => {
       const { queueName, jobType } = input;
-      
+
       const program = Effect.gen(function* () {
         const queueService = yield* QueueService;
         const result = yield* queueService.clearQueue(queueName as QueueName, jobType);
