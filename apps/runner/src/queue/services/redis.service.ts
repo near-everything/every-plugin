@@ -1,9 +1,9 @@
-import { RedisClient as BunRedisClient } from "bun";
 import { Context, Effect, Layer, Redacted } from "effect";
+import { Redis as IORedis } from "ioredis";
 import { AppConfig } from "../../config";
 
 export interface RedisClient {
-	readonly client: BunRedisClient;
+	readonly client: IORedis;
 }
 
 export const RedisClient = Context.GenericTag<RedisClient>("RedisClient");
@@ -17,35 +17,49 @@ export const RedisClientLive = Layer.scoped(
 		const client = yield* Effect.acquireRelease(
 			Effect.sync(() => {
 				console.log("Creating Redis client for Railway...");
+				const redisClient = new IORedis(redisUrl, {
+					family: 0, // Enable dual stack lookup (IPv4 and IPv6)
+					connectTimeout: 30000, // 30s timeout for Railway's network
+					commandTimeout: 10000, // 10s command timeout
+					lazyConnect: true, // Don't connect immediately
+					enableAutoPipelining: false,
+					maxRetriesPerRequest: 5,
 
-				const redisClient = new BunRedisClient(redisUrl, {
-					connectionTimeout: 30000, // 30s timeout for Railway's network
-					autoReconnect: true,
-					maxRetries: 10,
-					enableOfflineQueue: true,
-					enableAutoPipelining: true,
+					retryStrategy(times) {
+						if (times > 3) return null; // Stop after 3 command retries
+						const delay = Math.min(times * 100, 1000);
+						return delay;
+					},
 				});
 
-				// Add connection event handlers for Railway debugging
-				redisClient.onconnect = () => {
-					console.log('✅ Redis client connected to Railway');
-				};
+				redisClient.on('connect', () => {
+					console.log('Redis client connecting to Railway...');
+				});
 
-				redisClient.onclose = (error) => {
-					if (error) {
-						console.error('❌ Redis connection closed with error:', error.message);
-					} else {
-						console.log('Redis connection closed');
-					}
-				};
+				redisClient.on('ready', () => {
+					console.log('✅ Redis client connected and ready (Railway)');
+				});
+
+				redisClient.on('error', (error) => {
+					console.error('❌ Redis client error:', error.message);
+				}
+				);
+
+				redisClient.on('end', () => {
+					console.log('Redis connection ended');
+				});
 
 				return redisClient;
 			}),
 			(client) =>
-				Effect.sync(() => {
-					console.log("Closing Redis client...");
-					client.close();
-				}),
+				Effect.promise(() => {
+					console.log("Redis client closing...");
+					return client.quit();
+				}).pipe(
+					Effect.catchAllDefect((error) =>
+						Effect.logError(`Error closing Redis client: ${error}`),
+					),
+				),
 		);
 
 		return { client };
