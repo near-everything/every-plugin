@@ -1,13 +1,13 @@
-import { Context, Layer } from 'effect';
-import { auth } from '../lib/auth';
+import { Context, Layer } from "effect";
+import { auth } from "../lib/auth";
 
 export interface AuthServiceData {
-  readonly auth: typeof auth;
+	readonly auth: typeof auth;
 }
 
 export class AuthService extends Context.Tag("AuthService")<
-  AuthService,
-  AuthServiceData
+	AuthService,
+	AuthServiceData
 >() {}
 
 export const AuthServiceLive = Layer.succeed(AuthService, { auth });

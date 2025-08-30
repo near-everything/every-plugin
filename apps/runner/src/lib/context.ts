@@ -1,6 +1,6 @@
 import type { Context as HonoContext } from "hono";
-import { auth } from "./auth";
 import { ORPCRuntime } from "../runtime/rpc";
+import { auth } from "./auth";
 
 export type CreateContextOptions = {
 	context: HonoContext;
@@ -15,15 +15,15 @@ export async function createContext({ context }: CreateContextOptions) {
 		return {
 			user: null,
 			session: null,
-			runtime: ORPCRuntime
-		}
+			runtime: ORPCRuntime,
+		};
 	}
 
 	return {
 		session: session.session,
 		user: session.user,
-		runtime: ORPCRuntime
-	}
+		runtime: ORPCRuntime,
+	};
 }
 
 export type Context = Awaited<ReturnType<typeof createContext>>;

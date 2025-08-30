@@ -1,37 +1,39 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Context, Effect, Layer, Redacted } from "effect";
 import { Pool } from "pg";
-import { schema } from "../schema";
 import { AppConfig } from "../../config";
+import { schema } from "../schema";
 
 export interface DatabaseClient {
-  readonly db: NodePgDatabase<typeof schema>;
+	readonly db: NodePgDatabase<typeof schema>;
 }
 
 export const DatabaseClient = Context.GenericTag<DatabaseClient>("Database");
 
 export const DatabaseLive = Layer.scoped(
-  DatabaseClient,
-  Effect.gen(function* () {
-    const config = yield* AppConfig;
+	DatabaseClient,
+	Effect.gen(function* () {
+		const config = yield* AppConfig;
 
-    const pool = yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        console.log("Database pool created.");
-        return new Pool({ connectionString: Redacted.value(config.databaseUrl) });
-      }),
-      (pool) =>
-        Effect.promise(() => {
-          console.log("Database pool closing...");
-          return pool.end();
-        }).pipe(
-          Effect.catchAllDefect((error) =>
-            Effect.logError(`Error closing database pool: ${error}`)
-          )
-        )
-    );
+		const pool = yield* Effect.acquireRelease(
+			Effect.sync(() => {
+				console.log("Database pool created.");
+				return new Pool({
+					connectionString: Redacted.value(config.databaseUrl),
+				});
+			}),
+			(pool) =>
+				Effect.promise(() => {
+					console.log("Database pool closing...");
+					return pool.end();
+				}).pipe(
+					Effect.catchAllDefect((error) =>
+						Effect.logError(`Error closing database pool: ${error}`),
+					),
+				),
+		);
 
-    const db = drizzle(pool, { schema, casing: "snake_case" });
-    return { db };
-  })
+		const db = drizzle(pool, { schema, casing: "snake_case" });
+		return { db };
+	}),
 );

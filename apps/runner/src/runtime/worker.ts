@@ -1,26 +1,32 @@
-import { ConfigProvider, Layer, ManagedRuntime, Logger, LogLevel } from "effect";
 import { BunTerminal } from "@effect/platform-bun";
+import {
+	ConfigProvider,
+	Layer,
+	Logger,
+	LogLevel,
+	ManagedRuntime,
+} from "effect";
 import { AppConfigLive } from "../config";
 import { DatabaseLive, WorkflowServiceLive } from "../db";
-import {
-  QueueClientLive,
-  QueueServiceLive,
-  QueueStatusServiceLive,
-  RedisClientLive,
-  StateServiceLive,
-} from "../queue";
 import { PluginRuntimeLive } from "../plugin-runtime";
+import {
+	QueueClientLive,
+	QueueServiceLive,
+	QueueStatusServiceLive,
+	RedisClientLive,
+	StateServiceLive,
+} from "../queue";
 
 // Logging for workers
 const LoggingLayer = Layer.mergeAll(
-  BunTerminal.layer,
-  Logger.pretty,
-  Logger.minimumLogLevel(LogLevel.Debug)
+	BunTerminal.layer,
+	Logger.pretty,
+	Logger.minimumLogLevel(LogLevel.Debug),
 );
 
 // Config from env
 const ConfigLayer = AppConfigLive.pipe(
-  Layer.provide(Layer.setConfigProvider(ConfigProvider.fromEnv()))
+	Layer.provide(Layer.setConfigProvider(ConfigProvider.fromEnv())),
 );
 
 // Infra layers
@@ -36,23 +42,23 @@ const StateLayer = StateServiceLive.pipe(Layer.provide(RedisLayer));
 
 // Base infrastructure layers
 const InfraLayer = Layer.mergeAll(
-  ConfigLayer,
-  DatabaseLayer,
-  RedisLayer,
-  QueueClientLayer
+	ConfigLayer,
+	DatabaseLayer,
+	RedisLayer,
+	QueueClientLayer,
 );
 
 // Workers runtime with plugin execution capabilities
 export const WorkersLayer = Layer.mergeAll(
-  LoggingLayer,
-  WorkflowLayer,
-  QueueLayer,
-  QueueStatusLayer,
-  StateLayer,
-  PluginRuntimeLive
+	LoggingLayer,
+	WorkflowLayer,
+	QueueLayer,
+	QueueStatusLayer,
+	StateLayer,
+	PluginRuntimeLive,
 ).pipe(
-  Layer.provide(InfraLayer),
-  Layer.orDie // Convert any config errors to defects to get 'never' error type
+	Layer.provide(InfraLayer),
+	Layer.orDie, // Convert any config errors to defects to get 'never' error type
 );
 
 export const WorkersRuntime = ManagedRuntime.make(WorkersLayer);

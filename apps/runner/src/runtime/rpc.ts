@@ -2,16 +2,16 @@ import { ConfigProvider, Layer, ManagedRuntime } from "effect";
 import { AppConfigLive } from "../config";
 import { DatabaseLive, WorkflowServiceLive } from "../db";
 import {
-  QueueClientLive,
-  QueueServiceLive,
-  QueueStatusServiceLive,
-  RedisClientLive,
-  StateServiceLive,
+	QueueClientLive,
+	QueueServiceLive,
+	QueueStatusServiceLive,
+	RedisClientLive,
+	StateServiceLive,
 } from "../queue";
 
 // Config from env
 const ConfigLayer = AppConfigLive.pipe(
-  Layer.provide(Layer.setConfigProvider(ConfigProvider.fromEnv()))
+	Layer.provide(Layer.setConfigProvider(ConfigProvider.fromEnv())),
 );
 
 // Infra layers
@@ -27,21 +27,21 @@ const StateLayer = StateServiceLive.pipe(Layer.provide(RedisLayer));
 
 // Base infrastructure layers
 const InfraLayer = Layer.mergeAll(
-  ConfigLayer,
-  DatabaseLayer,
-  RedisLayer,
-  QueueClientLayer
+	ConfigLayer,
+	DatabaseLayer,
+	RedisLayer,
+	QueueClientLayer,
 );
 
 // Only what routes need
 export const ORPCServicesLayer = Layer.mergeAll(
-  WorkflowLayer,
-  QueueLayer,
-  QueueStatusLayer,
-  StateLayer
+	WorkflowLayer,
+	QueueLayer,
+	QueueStatusLayer,
+	StateLayer,
 ).pipe(
-  Layer.provide(InfraLayer),
-  Layer.orDie // Convert any config errors to defects to get 'never' error type
+	Layer.provide(InfraLayer),
+	Layer.orDie, // Convert any config errors to defects to get 'never' error type
 );
 
 export const ORPCRuntime = ManagedRuntime.make(ORPCServicesLayer);

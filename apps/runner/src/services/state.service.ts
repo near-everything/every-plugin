@@ -1,6 +1,6 @@
+import { Context } from "effect";
 import type { StateService as RedisStateService } from "../queue";
-import { Context } from 'effect';
 
 export type StateService = RedisStateService;
 
-export const StateServiceTag = Context.GenericTag<StateService>('StateService');
+export const StateServiceTag = Context.GenericTag<StateService>("StateService");
