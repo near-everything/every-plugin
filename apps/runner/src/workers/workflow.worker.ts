@@ -5,7 +5,7 @@ import type {
 	SourceQueryJobData,
 	StartWorkflowRunJobData,
 } from "../interfaces";
-import { QUEUE_NAMES, QueueService, StateService } from "../queue";
+import { QUEUE_NAMES, QueueService } from "../queue";
 
 const processWorkflowRun = (job: Job<StartWorkflowRunJobData>) =>
 	Effect.gen(function* () {
@@ -13,7 +13,6 @@ const processWorkflowRun = (job: Job<StartWorkflowRunJobData>) =>
 		const { triggeredBy } = data;
 		const workflowService = yield* WorkflowService;
 		const queueService = yield* QueueService;
-		const stateService = yield* StateService;
 
 		const workflow = yield* workflowService.getWorkflowById(workflowId);
 
@@ -33,11 +32,6 @@ const processWorkflowRun = (job: Job<StartWorkflowRunJobData>) =>
 					status: "RUNNING",
 					triggeredBy: triggeredBy ?? null,
 				});
-
-		yield* stateService.publish({
-			type: "WORKFLOW_RUN_STARTED",
-			data: run,
-		});
 
 		yield* Effect.log(`Started Run ${run.id} for Workflow "${workflow.name}"`);
 
@@ -71,10 +65,6 @@ const processWorkflowRun = (job: Job<StartWorkflowRunJobData>) =>
 					const updatedRun = yield* workflowService.updateWorkflowRun(run.id, {
 						status: "FAILED",
 						completedAt: new Date(),
-					});
-					yield* stateService.publish({
-						type: "WORKFLOW_RUN_FAILED",
-						data: updatedRun,
 					});
 					yield* Effect.logError(
 						`Run for workflow ${workflowId} failed.`,

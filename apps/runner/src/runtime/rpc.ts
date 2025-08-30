@@ -5,8 +5,7 @@ import {
 	QueueClientLive,
 	QueueServiceLive,
 	QueueStatusServiceLive,
-	RedisClientLive,
-	StateServiceLive,
+	RedisClientLive
 } from "../queue";
 
 // Config from env
@@ -23,7 +22,6 @@ const QueueClientLayer = QueueClientLive.pipe(Layer.provide(ConfigLayer));
 const WorkflowLayer = WorkflowServiceLive.pipe(Layer.provide(DatabaseLayer));
 const QueueLayer = QueueServiceLive.pipe(Layer.provide(QueueClientLayer));
 const QueueStatusLayer = QueueStatusServiceLive.pipe(Layer.provide(RedisLayer));
-const StateLayer = StateServiceLive.pipe(Layer.provide(RedisLayer));
 
 // Base infrastructure layers
 const InfraLayer = Layer.mergeAll(
@@ -37,8 +35,7 @@ const InfraLayer = Layer.mergeAll(
 export const ORPCServicesLayer = Layer.mergeAll(
 	WorkflowLayer,
 	QueueLayer,
-	QueueStatusLayer,
-	StateLayer,
+	QueueStatusLayer
 ).pipe(
 	Layer.provide(InfraLayer),
 	Layer.orDie, // Convert any config errors to defects to get 'never' error type

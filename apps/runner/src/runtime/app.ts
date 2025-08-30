@@ -13,7 +13,6 @@ import {
 	QueueServiceLive,
 	QueueStatusServiceLive,
 	RedisClientLive,
-	StateServiceLive,
 } from "../queue";
 import { AuthServiceLive, HttpServerServiceLive } from "../services";
 
@@ -34,32 +33,30 @@ const QueueClientLayer = QueueClientLive.pipe(Layer.provide(ConfigLayer));
 const WorkflowLayer = WorkflowServiceLive.pipe(Layer.provide(DatabaseLayer));
 const QueueLayer = QueueServiceLive.pipe(Layer.provide(QueueClientLayer));
 const QueueStatusLayer = QueueStatusServiceLive.pipe(Layer.provide(RedisLayer));
-const StateLayer = StateServiceLive.pipe(Layer.provide(RedisLayer));
 
-const InfrastructureLayer = Layer.mergeAll(
-	ConfigLayer,
-	DatabaseLayer,
-	RedisLayer,
-	QueueClientLayer,
+const AuthLayer = AuthServiceLive.pipe(
+	Layer.provide(Layer.mergeAll(ConfigLayer, DatabaseLayer))
 );
 
-const AuthLayer = AuthServiceLive.pipe(Layer.provide(InfrastructureLayer));
-
 const HttpLayer = HttpServerServiceLive.pipe(
-	Layer.provide(Layer.mergeAll(InfrastructureLayer, AuthLayer)),
+	Layer.provide(Layer.mergeAll(ConfigLayer, DatabaseLayer, AuthLayer))
+);
+
+const QueueServicesLayer = Layer.mergeAll(QueueLayer, QueueStatusLayer).pipe(
+	Layer.provide(Layer.mergeAll(ConfigLayer, RedisLayer, QueueClientLayer))
 );
 
 export const AppLayer = Layer.mergeAll(
 	LoggingLayer,
 	ConfigLayer,
+	DatabaseLayer,
+	RedisLayer,
+	QueueClientLayer,
 	WorkflowLayer,
-	QueueLayer,
-	StateLayer,
-	QueueStatusLayer,
 	AuthLayer,
 	HttpLayer,
+	QueueServicesLayer,
 ).pipe(
-	Layer.provide(InfrastructureLayer),
 	Layer.orDie, // TODO: proper error handling
 );
 

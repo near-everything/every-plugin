@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { WorkflowService } from "../db";
 import { adminProcedure, authenticatedProcedure } from "../lib/orpc";
-import { QUEUE_NAMES, QueueService, StateService } from "../queue";
+import { QUEUE_NAMES, QueueService } from "../queue";
 
 // Inline schema definitions
 const runIdParamSchema = z.object({
@@ -79,14 +79,9 @@ export const runRouter = {
 
 			const program = Effect.gen(function* () {
 				const workflowService = yield* WorkflowService;
-				const stateService = yield* StateService;
 				const run = yield* workflowService.getWorkflowRunById(runId);
 				yield* workflowService.updateWorkflowRun(runId, {
 					status: "CANCELLED",
-				});
-				yield* stateService.publish({
-					type: "WORKFLOW_RUN_CANCELLED",
-					data: run,
 				});
 				return {
 					success: true,
@@ -104,13 +99,8 @@ export const runRouter = {
 
 			const program = Effect.gen(function* () {
 				const workflowService = yield* WorkflowService;
-				const stateService = yield* StateService;
 				const run = yield* workflowService.getWorkflowRunById(runId);
 				yield* workflowService.deleteWorkflowRun(runId);
-				yield* stateService.publish({
-					type: "WORKFLOW_RUN_DELETED",
-					data: run,
-				});
 				return {
 					success: true,
 					data: { message: `Workflow run ${runId} has been deleted.` },

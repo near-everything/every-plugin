@@ -5,7 +5,7 @@ import { z } from "zod";
 import { WorkflowService } from "../db";
 import type { ExecutePipelineJobData, PluginRun } from "../interfaces";
 import { PluginServiceTag } from "../plugin-runtime/plugin.service";
-import { QUEUE_NAMES, QueueService, StateService } from "../queue";
+import { QUEUE_NAMES, QueueService } from "../queue";
 
 // Create a generic output schema for parsing plugin outputs
 const GenericPluginOutputSchema = createOutputSchema(z.unknown());
@@ -22,7 +22,6 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 		const { sourceItemId, input, startAtStepId } = data;
 		const workflowService = yield* WorkflowService;
 		const pluginService = yield* PluginServiceTag;
-		const stateService = yield* StateService;
 
 		const run = yield* workflowService.getWorkflowRunById(workflowRunId);
 		const workflow = yield* workflowService.getWorkflowById(workflowId);
@@ -91,11 +90,6 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 				});
 			}
 
-			yield* stateService.publish({
-				type: "PLUGIN_RUN_STARTED",
-				data: pluginRun,
-			});
-
 			const pluginEffect = Effect.gen(function* () {
 				const execute = Effect.acquireUseRelease(
 					pluginService.initializePlugin(
@@ -118,7 +112,7 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 					const error = new Error(
 						`Plugin output validation failed: ${parseResult.error.message}`,
 					);
-					const updatedRun = yield* workflowService.updatePluginRun(
+					yield* workflowService.updatePluginRun(
 						pluginRun.id,
 						{
 							status: "FAILED",
@@ -126,10 +120,6 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 							completedAt: new Date(),
 						},
 					);
-					yield* stateService.publish({
-						type: "PLUGIN_RUN_FAILED",
-						data: updatedRun,
-					});
 					return yield* Effect.fail(error);
 				}
 
@@ -141,7 +131,7 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 							stepDefinition.pluginId
 						} execution failed: ${JSON.stringify(output.errors)}`,
 					);
-					const updatedRun = yield* workflowService.updatePluginRun(
+					yield* workflowService.updatePluginRun(
 						pluginRun.id,
 						{
 							status: "FAILED",
@@ -149,14 +139,10 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 							completedAt: new Date(),
 						},
 					);
-					yield* stateService.publish({
-						type: "PLUGIN_RUN_FAILED",
-						data: updatedRun,
-					});
 					return yield* Effect.fail(error);
 				}
 
-				const updatedRun = yield* workflowService.updatePluginRun(
+				yield* workflowService.updatePluginRun(
 					pluginRun.id,
 					{
 						status: "COMPLETED",
@@ -165,16 +151,11 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 					},
 				);
 
-				yield* stateService.publish({
-					type: "PLUGIN_RUN_COMPLETED",
-					data: updatedRun,
-				});
-
 				return output.data;
 			}).pipe(
 				Effect.catchAll((error) =>
 					Effect.gen(function* () {
-						const updatedRun = yield* workflowService.updatePluginRun(
+						yield* workflowService.updatePluginRun(
 							pluginRun.id,
 							{
 								status: "FAILED",
@@ -185,10 +166,6 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 								completedAt: new Date(),
 							},
 						);
-						yield* stateService.publish({
-							type: "PLUGIN_RUN_FAILED",
-							data: updatedRun,
-						});
 						return yield* Effect.fail(error);
 					}),
 				),
@@ -222,17 +199,13 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 
 		// If all items are processed, mark the workflow run as completed
 		if (processedCount === runItems.length && runItems.length > 0) {
-			const updatedRun = yield* workflowService.updateWorkflowRun(
+			yield* workflowService.updateWorkflowRun(
 				workflowRunId,
 				{
 					status: "COMPLETED",
 					completedAt: new Date(),
 				},
 			);
-			yield* stateService.publish({
-				type: "WORKFLOW_RUN_COMPLETED",
-				data: updatedRun,
-			});
 			yield* Effect.log(
 				`Workflow run ${workflowRunId} completed - all ${runItems.length} items processed`,
 			);

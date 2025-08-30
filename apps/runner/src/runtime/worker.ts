@@ -14,7 +14,6 @@ import {
 	QueueServiceLive,
 	QueueStatusServiceLive,
 	RedisClientLive,
-	StateServiceLive,
 } from "../queue";
 
 // Logging for workers
@@ -38,7 +37,6 @@ const QueueClientLayer = QueueClientLive.pipe(Layer.provide(ConfigLayer));
 const WorkflowLayer = WorkflowServiceLive.pipe(Layer.provide(DatabaseLayer));
 const QueueLayer = QueueServiceLive.pipe(Layer.provide(QueueClientLayer));
 const QueueStatusLayer = QueueStatusServiceLive.pipe(Layer.provide(RedisLayer));
-const StateLayer = StateServiceLive.pipe(Layer.provide(RedisLayer));
 
 // Base infrastructure layers
 const InfraLayer = Layer.mergeAll(
@@ -54,7 +52,6 @@ export const WorkersLayer = Layer.mergeAll(
 	WorkflowLayer,
 	QueueLayer,
 	QueueStatusLayer,
-	StateLayer,
 	PluginRuntimeLive,
 ).pipe(
 	Layer.provide(InfraLayer),

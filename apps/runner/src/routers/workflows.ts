@@ -3,7 +3,7 @@ import { z } from "zod";
 import { WorkflowService } from "../db";
 import { createWorkflowSchema, updateWorkflowSchema } from "../interfaces";
 import { adminProcedure, authenticatedProcedure } from "../lib/orpc";
-import { QUEUE_NAMES, QueueService, StateService } from "../queue";
+import { QUEUE_NAMES, QueueService } from "../queue";
 
 const idParamSchema = z.object({
 	id: z.string().min(1),
@@ -107,17 +107,11 @@ export const workflowRouter = {
 			const program = Effect.gen(function* () {
 				const queueService = yield* QueueService;
 				const workflowService = yield* WorkflowService;
-				const stateService = yield* StateService;
 
 				const run = yield* workflowService.createWorkflowRun({
 					workflowId: id,
 					status: "PENDING",
 					triggeredBy: user!.id,
-				});
-
-				yield* stateService.publish({
-					type: "WORKFLOW_RUN_CREATED",
-					data: run,
 				});
 
 				yield* queueService.add(

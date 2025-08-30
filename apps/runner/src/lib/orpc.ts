@@ -1,14 +1,14 @@
 import { ORPCError, os } from "@orpc/server";
 import type { ManagedRuntime } from "effect";
 import type { WorkflowService } from "../db";
-import type { QueueService, QueueStatusService, StateService } from "../queue";
+import type { QueueService, QueueStatusService } from "../queue";
 import type { auth } from "./auth";
 import type { Context } from "./context";
 
 export const o = os.$context<
 	Context & {
 		runtime: ManagedRuntime.ManagedRuntime<
-			WorkflowService | QueueService | QueueStatusService | StateService,
+			WorkflowService | QueueService | QueueStatusService,
 			never
 		>;
 	}
