@@ -1,3 +1,4 @@
+import { Cache, Context, Duration, Effect, Layer, Schedule } from "effect";
 import type {
 	Config,
 	Plugin,
@@ -5,15 +6,14 @@ import type {
 	PluginMetadata,
 } from "every-plugin";
 import { type ConfigurationError, PluginLoggerTag } from "every-plugin";
-import { Cache, Context, Duration, Effect, Layer, Schedule } from "effect";
 import type z from "zod";
-import registryData from "../../../../packages/registry/registry.json" with {
-	type: "json",
-};
 import { PluginError } from "../pipeline/errors";
 import { SchemaValidator } from "../pipeline/validation";
 import { EnvironmentServiceTag } from "./env.service";
 import { ModuleFederationTag } from "./mf.service";
+import registryData from "./registry.json" with {
+	type: "json",
+};
 
 type PipelinePlugin = Plugin<z.ZodTypeAny, z.ZodTypeAny, z.ZodTypeAny>;
 
@@ -39,7 +39,7 @@ export interface PluginService {
 export class PluginServiceTag extends Context.Tag("PluginService")<
 	PluginServiceTag,
 	PluginService
->() {}
+>() { }
 
 const retrySchedule = Schedule.exponential(Duration.millis(100)).pipe(
 	Schedule.compose(Schedule.recurs(2)),
@@ -199,121 +199,121 @@ export const PluginServiceLive = Layer.effect(
 		// This is the original `loadPlugin` function, now used internally
 		const loadAndInstantiate =
 			(getPluginMetadata: (name: string) => PluginMetadata | undefined) =>
-			<TConfig extends Config>(
-				pluginId: string,
-				config?: TConfig,
-				version?: string,
-			): Effect.Effect<Plugin<any, any, any>, PluginError> => {
-				// Get metadata or fail
-				const getMetadata: Effect.Effect<PluginMetadata, PluginError> =
-					Effect.sync(() => {
-						const metadata = getPluginMetadata(pluginId);
-						if (!metadata) {
-							throw new PluginError({
-								message: `Plugin ${pluginId} not found`,
-								pluginId,
-								operation: "load",
-							});
-						}
-						return metadata;
-					});
-
-				// Build cache key
-				const getCacheKey = getMetadata.pipe(
-					Effect.map((metadata) => ({
-						metadata,
-						url: resolveUrl(metadata.remoteUrl, version),
-						cacheKey: `${pluginId}:${resolveUrl(metadata.remoteUrl, version)}`,
-					})),
-				);
-
-				// Get constructor from cache
-				const getConstructor: Effect.Effect<
-					new () => PipelinePlugin,
-					PluginError
-				> = getCacheKey.pipe(
-					Effect.flatMap(({ cacheKey }) =>
-						moduleCache.get(cacheKey).pipe(
-							Effect.mapError((error): PluginError => {
-								if (error instanceof PluginError) {
-									return error;
-								}
-								return new PluginError({
-									message: `Cache error for ${pluginId}`,
+				<TConfig extends Config>(
+					pluginId: string,
+					config?: TConfig,
+					version?: string,
+				): Effect.Effect<Plugin<any, any, any>, PluginError> => {
+					// Get metadata or fail
+					const getMetadata: Effect.Effect<PluginMetadata, PluginError> =
+						Effect.sync(() => {
+							const metadata = getPluginMetadata(pluginId);
+							if (!metadata) {
+								throw new PluginError({
+									message: `Plugin ${pluginId} not found`,
 									pluginId,
 									operation: "load",
-									cause: error,
 								});
-							}),
-						),
-					),
-				);
+							}
+							return metadata;
+						});
 
-				// Create and initialize instance
-				const createAndInitialize: Effect.Effect<PipelinePlugin, PluginError> =
-					getConstructor.pipe(
-						Effect.flatMap((PluginConstructor: new () => PipelinePlugin) =>
-							// Create instance
-							Effect.try({
-								try: () => new PluginConstructor(),
-								catch: (error) =>
-									new PluginError({
-										message: `Failed to instantiate plugin: ${pluginId}`,
+					// Build cache key
+					const getCacheKey = getMetadata.pipe(
+						Effect.map((metadata) => ({
+							metadata,
+							url: resolveUrl(metadata.remoteUrl, version),
+							cacheKey: `${pluginId}:${resolveUrl(metadata.remoteUrl, version)}`,
+						})),
+					);
+
+					// Get constructor from cache
+					const getConstructor: Effect.Effect<
+						new () => PipelinePlugin,
+						PluginError
+					> = getCacheKey.pipe(
+						Effect.flatMap(({ cacheKey }) =>
+							moduleCache.get(cacheKey).pipe(
+								Effect.mapError((error): PluginError => {
+									if (error instanceof PluginError) {
+										return error;
+									}
+									return new PluginError({
+										message: `Cache error for ${pluginId}`,
 										pluginId,
 										operation: "load",
 										cause: error,
-									}),
-							}).pipe(
-								// Initialize with retry
-								Effect.flatMap((instance) => {
-									// Validate that the plugin ID matches
-									if (instance.id !== pluginId) {
-										return Effect.fail(
-											new PluginError({
-												message: `Plugin ID mismatch: expected ${pluginId}, got ${instance.id}`,
-												pluginId,
-												operation: "initialize",
-												retryable: false,
-											}),
-										);
-									}
-
-									const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
-
-									const initialize: Effect.Effect<void, PluginError> = instance
-										.initialize(config)
-										.pipe(
-											Effect.mapError(
-												(error: ConfigurationError): PluginError => {
-													return new PluginError({
-														message: `Configuration error in ${pluginId}: ${error.message}`,
-														pluginId,
-														operation: "initialize",
-														cause: error,
-														retryable: error.retryable,
-													});
-												},
-											),
-											Effect.catchAll((pluginError) => {
-												if (pluginError.retryable) {
-													return Effect.fail(pluginError).pipe(
-														Effect.retry(retrySchedule),
-													);
-												}
-												return Effect.fail(pluginError);
-											}),
-											Effect.provide(pluginLayer),
-										);
-
-									// Return instance after successful initialization
-									return initialize.pipe(Effect.map(() => instance));
+									});
 								}),
 							),
 						),
 					);
 
-				return createAndInitialize;
-			};
+					// Create and initialize instance
+					const createAndInitialize: Effect.Effect<PipelinePlugin, PluginError> =
+						getConstructor.pipe(
+							Effect.flatMap((PluginConstructor: new () => PipelinePlugin) =>
+								// Create instance
+								Effect.try({
+									try: () => new PluginConstructor(),
+									catch: (error) =>
+										new PluginError({
+											message: `Failed to instantiate plugin: ${pluginId}`,
+											pluginId,
+											operation: "load",
+											cause: error,
+										}),
+								}).pipe(
+									// Initialize with retry
+									Effect.flatMap((instance) => {
+										// Validate that the plugin ID matches
+										if (instance.id !== pluginId) {
+											return Effect.fail(
+												new PluginError({
+													message: `Plugin ID mismatch: expected ${pluginId}, got ${instance.id}`,
+													pluginId,
+													operation: "initialize",
+													retryable: false,
+												}),
+											);
+										}
+
+										const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
+
+										const initialize: Effect.Effect<void, PluginError> = instance
+											.initialize(config)
+											.pipe(
+												Effect.mapError(
+													(error: ConfigurationError): PluginError => {
+														return new PluginError({
+															message: `Configuration error in ${pluginId}: ${error.message}`,
+															pluginId,
+															operation: "initialize",
+															cause: error,
+															retryable: error.retryable,
+														});
+													},
+												),
+												Effect.catchAll((pluginError) => {
+													if (pluginError.retryable) {
+														return Effect.fail(pluginError).pipe(
+															Effect.retry(retrySchedule),
+														);
+													}
+													return Effect.fail(pluginError);
+												}),
+												Effect.provide(pluginLayer),
+											);
+
+										// Return instance after successful initialization
+										return initialize.pipe(Effect.map(() => instance));
+									}),
+								),
+							),
+						);
+
+					return createAndInitialize;
+				};
 
 		const internalPluginLoader = loadAndInstantiate(getPluginMetadata);
 
