@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { Config, Input, Output, Plugin } from './plugin.js';
-import { ErrorDetailsSchema } from './plugin.js';
+import type { Config, Input, Output, Plugin } from './plugin';
+import { ErrorDetailsSchema } from './plugin';
 
 /**
  * Zod schema for the Author interface
