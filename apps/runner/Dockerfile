@@ -32,6 +32,9 @@ COPY --from=builder --chown=app:app /app/dist ./dist
 COPY --from=builder --chown=app:app /app/package.json ./package.json
 COPY --from=builder --chown=app:app /app/node_modules ./node_modules
 
+# Copy migrations folder for database migrations
+COPY --chown=app:app migrations ./migrations
+
 USER app
 
 EXPOSE 3000
