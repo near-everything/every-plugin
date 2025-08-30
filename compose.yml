@@ -1,0 +1,36 @@
+services:
+  redis:
+    image: redis:alpine
+    container_name: run-every-app_redis_dev
+    ports:
+      - '6379:6379'
+  postgres:
+    image: postgres:15
+    container_name: run-every-app_postgres_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: run-every-app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  # handles data migration and database seeding
+  db-migrate-dev:
+    build:
+      context: .
+      dockerfile: packages/shared-db/Dockerfile.dev
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@run-every-app_postgres_dev:5432/run-every-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["dev"]
+
+volumes:
+  postgres_data:

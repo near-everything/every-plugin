@@ -10,6 +10,6 @@
   },
   "dependencies": {
     "zod": "^4.0.8",
-    "@every-plugin/types": "workspace:*"
+    "every-plugin": "0.0.1"
   }
 }

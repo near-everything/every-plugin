@@ -2,7 +2,7 @@ import {
 	createSourceOutputSchema,
 	PlatformStateSchema,
 	type SourcePlugin,
-} from "@every-plugin/types";
+} from "every-plugin";
 import type { Job } from "bullmq";
 import { Effect } from "effect";
 import { z } from "zod";

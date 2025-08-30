@@ -9,7 +9,7 @@
 	},
 	"dependencies": {
 		"@effect/platform-bun": "^0.79.0",
-		"@every-plugin/types": "workspace:*",
+		"every-plugin": "0.0.1",
 		"@module-federation/enhanced": "^0.18.3",
 		"@module-federation/runtime-core": "^0.18.3",
 		"@orpc/openapi": "^1.8.5",

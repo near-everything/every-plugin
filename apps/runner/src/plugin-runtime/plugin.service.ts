@@ -3,8 +3,8 @@ import type {
 	Plugin,
 	PluginExecutionError,
 	PluginMetadata,
-} from "@every-plugin/types";
-import { type ConfigurationError, PluginLoggerTag } from "@every-plugin/types";
+} from "every-plugin";
+import { type ConfigurationError, PluginLoggerTag } from "every-plugin";
 import { Cache, Context, Duration, Effect, Layer, Schedule } from "effect";
 import type z from "zod";
 import registryData from "../../../../packages/registry/registry.json" with {

@@ -1,6 +1,6 @@
 import type { JSONSchemaType } from "ajv/dist/2020";
+import { Context, type Effect } from "effect";
 import { z } from 'zod';
-import { Context, Effect } from "effect";
 import type { ConfigurationError, PluginExecutionError } from "./errors";
 
 // Helpers
@@ -108,4 +108,4 @@ export interface PluginLogger {
 export class PluginLoggerTag extends Context.Tag("PluginLogger")<
   PluginLoggerTag,
   PluginLogger
->() {}
+>() { }

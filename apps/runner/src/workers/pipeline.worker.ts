@@ -1,4 +1,4 @@
-import { createOutputSchema } from "@every-plugin/types";
+import { createOutputSchema } from "every-plugin";
 import type { Job } from "bullmq";
 import { Effect } from "effect";
 import { z } from "zod";
