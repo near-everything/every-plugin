@@ -99,9 +99,6 @@ Thumbs.db
 *.db
 *.sqlite
 
-# Migration files (if not needed in container)
-migrations/
-
 # Development files
 README.md
 *.md
