@@ -1,4 +1,5 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Context, Effect, Layer, Redacted } from "effect";
 import { Pool } from "pg";
 import { AppConfig } from "../../config";
@@ -34,6 +35,18 @@ export const DatabaseLive = Layer.scoped(
 		);
 
 		const db = drizzle(pool, { schema, casing: "snake_case" });
+
+		// Run migrations
+		yield* Effect.tryPromise({
+			try: () => {
+				console.log("Migrating database...");
+				return migrate(db, {
+					migrationsFolder: `${process.cwd()}/migrations`,
+				});
+			},
+			catch: (error) => new Error(`Database migration failed: ${error}`)
+		});
+
 		return { db };
 	}),
 );
