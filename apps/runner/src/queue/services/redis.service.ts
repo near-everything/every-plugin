@@ -16,10 +16,10 @@ export const RedisClientLive = Layer.scoped(
 
 		const client = yield* Effect.acquireRelease(
 			Effect.sync(() => {
-				console.log("Creating Redis client for Railway...");
+				console.log("Creating Redis client...", redisUrl);
 				const redisClient = new IORedis(redisUrl, {
 					family: 0, // Enable dual stack lookup (IPv4 and IPv6)
-					connectTimeout: 30000, // 30s timeout for Railway's network
+					connectTimeout: 30000, // 30s network timeout
 					commandTimeout: 10000, // 10s command timeout
 					lazyConnect: true, // Don't connect immediately
 					enableAutoPipelining: false,
