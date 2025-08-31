@@ -94,7 +94,7 @@ export type PluginType = "transformer" | "distributor" | "source";
 
 export interface PluginMetadata {
 	remoteUrl: string;
-	type?: PluginType;
+	type?: PluginType; // TODO: maybe this could determine the config input, output, config base types instead
 	configSchema: JSONSchemaType<any>;
 	inputSchema: JSONSchemaType<any>;
 	outputSchema: JSONSchemaType<any>;

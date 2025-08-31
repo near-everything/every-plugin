@@ -8,13 +8,13 @@ import {
 } from "effect";
 import { AppConfigLive } from "../config";
 import { DatabaseLive, WorkflowServiceLive } from "../db";
+import { AuthServiceLive, HttpServerServiceLive } from "../http";
 import {
 	QueueClientLive,
 	QueueServiceLive,
 	QueueStatusServiceLive,
 	RedisClientLive,
 } from "../queue";
-import { AuthServiceLive, HttpServerServiceLive } from "../http";
 
 const LoggingLayer = Layer.mergeAll(
 	BunTerminal.layer,

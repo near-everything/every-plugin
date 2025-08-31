@@ -229,8 +229,8 @@ export const WorkflowServiceLive = Layer.effect(
 
 		// Generic helper to parse database entities to public types
 		const parseEntity = <T>(
-			entity: any,
-			schema: any,
+			entity: any, // TODO
+			schema: any, // TODO
 			entityType: string,
 		): Effect.Effect<T, DbError> =>
 			Effect.try({

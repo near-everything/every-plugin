@@ -5,7 +5,7 @@ import { admin, anonymous, jwt } from "better-auth/plugins";
 // import { generateNonce } from "near-sign-verify";
 import { db, schema } from "../../db";
 
-export const auth = betterAuth({
+export const auth = betterAuth({ // TODO: move this to a standalone SQLite database
 	database: drizzleAdapter(db, {
 		provider: "pg",
 		schema: schema,

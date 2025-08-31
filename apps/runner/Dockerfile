@@ -16,7 +16,7 @@ WORKDIR /app
 # Copy source code
 COPY src ./src
 COPY tsconfig.json ./
-COPY migrations ./migrations
+COPY migrations ./migrations 
 
 # Build the application
 RUN bun run build
