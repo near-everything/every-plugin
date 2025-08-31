@@ -1,7 +1,7 @@
 import type { JSONSchemaType } from "ajv/dist/2020";
 import { Context, Effect, Layer, Redacted } from "effect";
 import Mustache from "mustache";
-import { EnvironmentError } from "../pipeline/errors";
+import { EnvironmentError } from "./errors";
 import { SecretsConfigTag } from "./secrets.config";
 
 export interface EnvironmentService {

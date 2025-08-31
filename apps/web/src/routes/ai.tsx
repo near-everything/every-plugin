@@ -1,10 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useChat } from "@ai-sdk/react";
+import { createFileRoute } from "@tanstack/react-router";
 import { DefaultChatTransport } from "ai";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
-import { useRef, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/ai")({
 	component: RouteComponent,

@@ -52,7 +52,7 @@
         "drizzle-orm": "^0.44.5",
         "effect": "^3.17.1",
         "effect-errors": "^1.10.14",
-        "every-plugin": "link:every-plugin",
+        "every-plugin": "0.0.2",
         "hono": "^4.9.4",
         "hono-rate-limiter": "^0.4.2",
         "ioredis": "^5.6.1",
@@ -151,7 +151,7 @@
     },
     "packages/types": {
       "name": "every-plugin",
-      "version": "0.0.1",
+      "version": "0.0.5",
       "dependencies": {
         "ajv": "^8.17.1",
       },
@@ -2827,7 +2827,9 @@
 
     "@esbuild-kit/core-utils/esbuild": ["esbuild@0.18.20", "", { "optionalDependencies": { "@esbuild/android-arm": "0.18.20", "@esbuild/android-arm64": "0.18.20", "@esbuild/android-x64": "0.18.20", "@esbuild/darwin-arm64": "0.18.20", "@esbuild/darwin-x64": "0.18.20", "@esbuild/freebsd-arm64": "0.18.20", "@esbuild/freebsd-x64": "0.18.20", "@esbuild/linux-arm": "0.18.20", "@esbuild/linux-arm64": "0.18.20", "@esbuild/linux-ia32": "0.18.20", "@esbuild/linux-loong64": "0.18.20", "@esbuild/linux-mips64el": "0.18.20", "@esbuild/linux-ppc64": "0.18.20", "@esbuild/linux-riscv64": "0.18.20", "@esbuild/linux-s390x": "0.18.20", "@esbuild/linux-x64": "0.18.20", "@esbuild/netbsd-x64": "0.18.20", "@esbuild/openbsd-x64": "0.18.20", "@esbuild/sunos-x64": "0.18.20", "@esbuild/win32-arm64": "0.18.20", "@esbuild/win32-ia32": "0.18.20", "@esbuild/win32-x64": "0.18.20" }, "bin": { "esbuild": "bin/esbuild" } }, "sha512-ceqxoedUrcayh7Y7ZX6NdbbDzGROiyVBgC4PriJThBKSVPWnnFHZAkfI1lJT8QFkOwH4qOS2SJkS4wvpGl8BpA=="],
 
-    "@every-plugin/job-scheduler/every-plugin": ["every-plugin@link:every-plugin", {}],
+    "@every-plugin/job-scheduler/every-plugin": ["every-plugin@0.0.2", "", { "dependencies": { "ajv": "^8.17.1" }, "peerDependencies": { "effect": ">=3.17.0 <4.0.0", "zod": ">=4.0.0" } }, "sha512-AKIydAsC0Osa71mFKP0CbEnpL29p3pZvk6YPDmgfTOskT6jd+QuMMNVDBzq9WWplNTs7Ev89+F1UrBo5s8Dmuw=="],
+
+    "@every-plugin/registry/every-plugin": ["every-plugin@0.0.1", "", { "dependencies": { "ajv": "^8.17.1" }, "peerDependencies": { "effect": ">=3.17.0 <4.0.0", "zod": ">=4.0.0" } }, "sha512-6HzUVKFTtCdIrtZLDnYM2QLTb9tYTUv+bRPcbWtjwoX36FFwMddY6NQLdo3kJIES8T6VF2VDKi2DRiB+0Z1CjQ=="],
 
     "@isaacs/cliui/string-width": ["string-width@5.1.2", "", { "dependencies": { "eastasianwidth": "^0.2.0", "emoji-regex": "^9.2.2", "strip-ansi": "^7.0.1" } }, "sha512-HnLOCR3vjcY8beoNLtcjZ5/nxn2afmME6lhrDrebokqMap+XbeW8n9TXpPDOqdGK5qcI3oT0GKTW6wC7EMiVqA=="],
 

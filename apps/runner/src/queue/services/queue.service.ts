@@ -107,32 +107,32 @@ export const QueueServiceLive = Layer.effect(
 		const queueClient = yield* QueueClient;
 
 		const queueConfigs: Record<QueueName, { defaultJobOptions: JobsOptions }> =
-		{
-			[QUEUE_NAMES.WORKFLOW_RUN]: {
-				defaultJobOptions: {
-					attempts: 1,
-					backoff: { type: "exponential", delay: 2000 },
-					removeOnComplete: 100,
-					removeOnFail: 50,
+			{
+				[QUEUE_NAMES.WORKFLOW_RUN]: {
+					defaultJobOptions: {
+						attempts: 1,
+						backoff: { type: "exponential", delay: 2000 },
+						removeOnComplete: 100,
+						removeOnFail: 50,
+					},
 				},
-			},
-			[QUEUE_NAMES.SOURCE_QUERY]: {
-				defaultJobOptions: {
-					attempts: 1,
-					backoff: { type: "exponential", delay: 5000 },
-					removeOnComplete: 50,
-					removeOnFail: 25,
+				[QUEUE_NAMES.SOURCE_QUERY]: {
+					defaultJobOptions: {
+						attempts: 1,
+						backoff: { type: "exponential", delay: 5000 },
+						removeOnComplete: 50,
+						removeOnFail: 25,
+					},
 				},
-			},
-			[QUEUE_NAMES.PIPELINE_EXECUTION]: {
-				defaultJobOptions: {
-					attempts: 1,
-					backoff: { type: "exponential", delay: 1000 },
-					removeOnComplete: 100,
-					removeOnFail: 50,
+				[QUEUE_NAMES.PIPELINE_EXECUTION]: {
+					defaultJobOptions: {
+						attempts: 1,
+						backoff: { type: "exponential", delay: 1000 },
+						removeOnComplete: 100,
+						removeOnFail: 50,
+					},
 				},
-			},
-		};
+			};
 
 		const getQueue = (name: QueueName): Effect.Effect<Queue, Error> => {
 			return Effect.try({

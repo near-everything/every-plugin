@@ -1,6 +1,6 @@
-import { createOutputSchema } from "every-plugin";
 import type { Job } from "bullmq";
 import { Effect } from "effect";
+import { createOutputSchema } from "every-plugin";
 import { z } from "zod";
 import { WorkflowService } from "../db";
 import type { ExecutePipelineJobData, PluginRun } from "../interfaces";
@@ -23,7 +23,7 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 		const workflowService = yield* WorkflowService;
 		const pluginService = yield* PluginServiceTag;
 
-		const run = yield* workflowService.getWorkflowRunById(workflowRunId);
+		yield* workflowService.getWorkflowRunById(workflowRunId);
 		const workflow = yield* workflowService.getWorkflowById(workflowId);
 
 		let currentInput: any = input;
@@ -112,14 +112,11 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 					const error = new Error(
 						`Plugin output validation failed: ${parseResult.error.message}`,
 					);
-					yield* workflowService.updatePluginRun(
-						pluginRun.id,
-						{
-							status: "FAILED",
-							error: { message: error.message },
-							completedAt: new Date(),
-						},
-					);
+					yield* workflowService.updatePluginRun(pluginRun.id, {
+						status: "FAILED",
+						error: { message: error.message },
+						completedAt: new Date(),
+					});
 					return yield* Effect.fail(error);
 				}
 
@@ -131,41 +128,32 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 							stepDefinition.pluginId
 						} execution failed: ${JSON.stringify(output.errors)}`,
 					);
-					yield* workflowService.updatePluginRun(
-						pluginRun.id,
-						{
-							status: "FAILED",
-							error: { message: error.message },
-							completedAt: new Date(),
-						},
-					);
+					yield* workflowService.updatePluginRun(pluginRun.id, {
+						status: "FAILED",
+						error: { message: error.message },
+						completedAt: new Date(),
+					});
 					return yield* Effect.fail(error);
 				}
 
-				yield* workflowService.updatePluginRun(
-					pluginRun.id,
-					{
-						status: "COMPLETED",
-						output,
-						completedAt: new Date(),
-					},
-				);
+				yield* workflowService.updatePluginRun(pluginRun.id, {
+					status: "COMPLETED",
+					output,
+					completedAt: new Date(),
+				});
 
 				return output.data;
 			}).pipe(
 				Effect.catchAll((error) =>
 					Effect.gen(function* () {
-						yield* workflowService.updatePluginRun(
-							pluginRun.id,
-							{
-								status: "FAILED",
-								error: {
-									message: "Failed to execute pipeline step",
-									cause: error,
-								},
-								completedAt: new Date(),
+						yield* workflowService.updatePluginRun(pluginRun.id, {
+							status: "FAILED",
+							error: {
+								message: "Failed to execute pipeline step",
+								cause: error,
 							},
-						);
+							completedAt: new Date(),
+						});
 						return yield* Effect.fail(error);
 					}),
 				),
@@ -199,13 +187,10 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 
 		// If all items are processed, mark the workflow run as completed
 		if (processedCount === runItems.length && runItems.length > 0) {
-			yield* workflowService.updateWorkflowRun(
-				workflowRunId,
-				{
-					status: "COMPLETED",
-					completedAt: new Date(),
-				},
-			);
+			yield* workflowService.updateWorkflowRun(workflowRunId, {
+				status: "COMPLETED",
+				completedAt: new Date(),
+			});
 			yield* Effect.log(
 				`Workflow run ${workflowRunId} completed - all ${runItems.length} items processed`,
 			);

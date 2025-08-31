@@ -1,5 +1,5 @@
-import { PluginLoggerTag } from "every-plugin";
 import { Effect, Layer } from "effect";
+import { PluginLoggerTag } from "every-plugin";
 
 export const PluginLoggerLive = Layer.succeed(PluginLoggerTag, {
 	logInfo: (message: string, context?: unknown) =>

@@ -35,15 +35,15 @@ const QueueLayer = QueueServiceLive.pipe(Layer.provide(QueueClientLayer));
 const QueueStatusLayer = QueueStatusServiceLive.pipe(Layer.provide(RedisLayer));
 
 const AuthLayer = AuthServiceLive.pipe(
-	Layer.provide(Layer.mergeAll(ConfigLayer, DatabaseLayer))
+	Layer.provide(Layer.mergeAll(ConfigLayer, DatabaseLayer)),
 );
 
 const HttpLayer = HttpServerServiceLive.pipe(
-	Layer.provide(Layer.mergeAll(ConfigLayer, DatabaseLayer, AuthLayer))
+	Layer.provide(Layer.mergeAll(ConfigLayer, DatabaseLayer, AuthLayer)),
 );
 
 const QueueServicesLayer = Layer.mergeAll(QueueLayer, QueueStatusLayer).pipe(
-	Layer.provide(Layer.mergeAll(ConfigLayer, RedisLayer, QueueClientLayer))
+	Layer.provide(Layer.mergeAll(ConfigLayer, RedisLayer, QueueClientLayer)),
 );
 
 export const AppLayer = Layer.mergeAll(

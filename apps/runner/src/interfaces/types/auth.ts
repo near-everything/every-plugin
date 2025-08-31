@@ -1,10 +1,10 @@
 import type { z } from "zod";
 import {
-  type authenticatedContextSchema,
-  type jwtPayloadSchema,
-  UserRole,
-  type userSchema
-} from '../schemas/auth';
+	type authenticatedContextSchema,
+	type jwtPayloadSchema,
+	UserRole,
+	type userSchema,
+} from "../schemas/auth";
 
 // ============================================================================
 // AUTHENTICATION TYPES

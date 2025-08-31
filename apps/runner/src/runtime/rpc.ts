@@ -5,7 +5,7 @@ import {
 	QueueClientLive,
 	QueueServiceLive,
 	QueueStatusServiceLive,
-	RedisClientLive
+	RedisClientLive,
 } from "../queue";
 
 // Config from env
@@ -35,7 +35,7 @@ const InfraLayer = Layer.mergeAll(
 export const ORPCServicesLayer = Layer.mergeAll(
 	WorkflowLayer,
 	QueueLayer,
-	QueueStatusLayer
+	QueueStatusLayer,
 ).pipe(
 	Layer.provide(InfraLayer),
 	Layer.orDie, // Convert any config errors to defects to get 'never' error type

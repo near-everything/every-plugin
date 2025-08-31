@@ -9,5 +9,5 @@ export const RedisClient = Context.GenericTag<RedisClient>("RedisClient");
 
 export const RedisClientLive = Layer.effect(
 	RedisClient,
-	Effect.succeed({ client: redis })
+	Effect.succeed({ client: redis }),
 );

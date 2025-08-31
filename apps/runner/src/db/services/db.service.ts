@@ -44,7 +44,7 @@ export const DatabaseLive = Layer.scoped(
 					migrationsFolder: `${process.cwd()}/migrations`,
 				});
 			},
-			catch: (error) => new Error(`Database migration failed: ${error}`)
+			catch: (error) => new Error(`Database migration failed: ${error}`),
 		});
 
 		return { db };

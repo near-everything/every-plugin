@@ -1,12 +1,4 @@
-// TODO: This could be cleaned up, proper error handling
-
 import { Data } from "effect";
-import type {
-	DbError,
-	ValidationError as DbValidationError,
-	PluginRunNotFoundError,
-	WorkflowNotFoundError,
-} from "../db";
 
 export class ValidationError extends Data.TaggedError("ValidationError")<{
 	readonly message: string;
@@ -36,20 +28,3 @@ export class PluginError extends Data.TaggedError("PluginError")<{
 	readonly retryable?: boolean;
 	readonly context?: Record<string, unknown>;
 }> {}
-
-export class PipelineError extends Data.TaggedError("PipelineError")<{
-	readonly message: string;
-	readonly pipelineId: string;
-	readonly stepId?: string;
-	readonly cause: StepError | Error;
-	readonly context?: Record<string, unknown>;
-}> {}
-
-export type StepError =
-	| ValidationError
-	| PluginError
-	| DbError
-	| DbValidationError
-	| WorkflowNotFoundError
-	| PluginRunNotFoundError;
-export type PipelineExecutionError = PipelineError | StepError;

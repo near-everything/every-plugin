@@ -27,7 +27,7 @@ export const QueueClientLive = Layer.effect(
 			password: url.password || undefined,
 			username: url.username || undefined,
 			db: url.pathname ? Number.parseInt(url.pathname.slice(1), 10) || 0 : 0,
-			family: 0
+			family: 0, // IPv4 + IPv6
 		};
 
 		const createQueue = (name: string, options?: QueueClientOptions): Queue => {
