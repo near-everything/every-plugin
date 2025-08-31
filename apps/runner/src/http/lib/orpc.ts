@@ -1,7 +1,7 @@
 import { ORPCError, os } from "@orpc/server";
 import type { ManagedRuntime } from "effect";
-import type { WorkflowService } from "../db";
-import type { QueueService, QueueStatusService } from "../queue";
+import type { WorkflowService } from "../../db";
+import type { QueueService, QueueStatusService } from "../../queue";
 import type { auth } from "./auth";
 import type { Context } from "./context";
 

@@ -1,9 +1,9 @@
 import { Effect, Schedule } from "effect";
 import { AppConfig } from "./config";
+import { HttpServerService } from "./http/server";
 import { discoverAndScheduleWorkflows } from "./jobs";
 import { PluginRuntimeLive } from "./plugin-runtime";
 import { AppRuntime } from "./runtime/app";
-import { HttpServerService } from "./services/http-server.service";
 import { createPipelineWorker } from "./workers/pipeline.worker";
 import { createSourceWorker } from "./workers/source.worker";
 import { createWorkflowWorker } from "./workers/workflow.worker";

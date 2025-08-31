@@ -14,7 +14,7 @@ import {
 	QueueStatusServiceLive,
 	RedisClientLive,
 } from "../queue";
-import { AuthServiceLive, HttpServerServiceLive } from "../services";
+import { AuthServiceLive, HttpServerServiceLive } from "../http";
 
 const LoggingLayer = Layer.mergeAll(
 	BunTerminal.layer,

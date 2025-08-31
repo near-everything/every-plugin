@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 import { z } from "zod";
-import { WorkflowService } from "../db";
-import { createWorkflowSchema, updateWorkflowSchema } from "../interfaces";
+import { WorkflowService } from "../../db";
+import { createWorkflowSchema, updateWorkflowSchema } from "../../interfaces";
 import { adminProcedure, authenticatedProcedure } from "../lib/orpc";
-import { QUEUE_NAMES, QueueService } from "../queue";
+import { QUEUE_NAMES, QueueService } from "../../queue";
 
 const idParamSchema = z.object({
 	id: z.string().min(1),
@@ -46,7 +46,7 @@ export const workflowRouter = {
 
 				const newWorkflow = yield* workflowService.createWorkflow({
 					...input,
-					createdBy: user!.id,
+					createdBy: user.id,
 					schedule: input.schedule ?? null,
 					state: input.state ?? null,
 				});
@@ -111,7 +111,7 @@ export const workflowRouter = {
 				const run = yield* workflowService.createWorkflowRun({
 					workflowId: id,
 					status: "PENDING",
-					triggeredBy: user!.id,
+					triggeredBy: user.id,
 				});
 
 				yield* queueService.add(
@@ -121,7 +121,7 @@ export const workflowRouter = {
 						workflowId: id,
 						workflowRunId: run.id,
 						data: {
-							triggeredBy: user!.id,
+							triggeredBy: user.id,
 						},
 					},
 				);

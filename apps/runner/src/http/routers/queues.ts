@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import { z } from "zod";
-import type { QueueName } from "../interfaces";
+import type { QueueName } from "../../interfaces";
 import { authenticatedProcedure } from "../lib/orpc";
-import { QueueService, QueueStatusService } from "../queue";
+import { QueueService, QueueStatusService } from "../../queue";
 
 // Inline schema definitions
 const deleteJobParamSchema = z.object({

@@ -1,5 +1,5 @@
 import type { Context as HonoContext } from "hono";
-import { ORPCRuntime } from "../runtime/rpc";
+import { ORPCRuntime } from "../../runtime/rpc";
 import { auth } from "./auth";
 
 export type CreateContextOptions = {

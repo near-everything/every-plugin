@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import { z } from "zod";
-import { WorkflowService } from "../db";
+import { WorkflowService } from "../../db";
+import { QUEUE_NAMES, QueueService } from "../../queue";
 import { adminProcedure, authenticatedProcedure } from "../lib/orpc";
-import { QUEUE_NAMES, QueueService } from "../queue";
 
 // Inline schema definitions
 const runIdParamSchema = z.object({
@@ -79,7 +79,6 @@ export const runRouter = {
 
 			const program = Effect.gen(function* () {
 				const workflowService = yield* WorkflowService;
-				const run = yield* workflowService.getWorkflowRunById(runId);
 				yield* workflowService.updateWorkflowRun(runId, {
 					status: "CANCELLED",
 				});
@@ -99,7 +98,6 @@ export const runRouter = {
 
 			const program = Effect.gen(function* () {
 				const workflowService = yield* WorkflowService;
-				const run = yield* workflowService.getWorkflowRunById(runId);
 				yield* workflowService.deleteWorkflowRun(runId);
 				return {
 					success: true,

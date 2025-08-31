@@ -5,12 +5,12 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { rateLimiter } from "hono-rate-limiter";
 import { AppConfig } from "../config";
-import { createContext } from "../lib/context";
-import { generateOpenAPISpec } from "../lib/openapi";
-import { appRouter } from "../routers";
-import { AuthService } from "./auth.service";
+import { AuthService } from "./auth";
+import { createContext } from "./lib/context";
+import { generateOpenAPISpec } from "./lib/openapi";
+import { appRouter } from "./routers";
 
-export interface HttpServerServiceData {
+interface IHttpServerService {
 	readonly app: Hono;
 	readonly start: () => Effect.Effect<void>;
 	readonly stop: () => Effect.Effect<void>;
@@ -18,8 +18,8 @@ export interface HttpServerServiceData {
 
 export class HttpServerService extends Context.Tag("HttpServerService")<
 	HttpServerService,
-	HttpServerServiceData
->() {}
+	IHttpServerService
+>() { }
 
 export const HttpServerServiceLive = Layer.scoped(
 	HttpServerService,
@@ -57,7 +57,7 @@ export const HttpServerServiceLive = Layer.scoped(
 			rateLimiter({
 				windowMs: 15 * 60 * 1000, // 15 mins
 				limit: 100,
-				keyGenerator: (c: any) => {
+				keyGenerator: (c: any) => { // TODO
 					const user = c.var.user;
 					return user?.id || c.req.header("x-forwarded-for") || "anonymous";
 				},
@@ -99,7 +99,7 @@ export const HttpServerServiceLive = Layer.scoped(
 			}
 		});
 
-		let server: any = null;
+		let server: any = null; // TODO: type safety
 
 		const start = () =>
 			Effect.gen(function* () {

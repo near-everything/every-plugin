@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import { z } from "zod";
-import { WorkflowService } from "../db";
+import { WorkflowService } from "../../db";
+import { QUEUE_NAMES, QueueService } from "../../queue";
 import { adminProcedure, authenticatedProcedure } from "../lib/orpc";
-import { QUEUE_NAMES, QueueService } from "../queue";
 
 export const itemRouter = {
 	getPluginRuns: authenticatedProcedure
