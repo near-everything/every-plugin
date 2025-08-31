@@ -7,7 +7,7 @@ import type { ExecutePipelineJobData, PluginRun } from "../interfaces";
 import { PluginServiceTag } from "../plugin-runtime/plugin.service";
 import { QUEUE_NAMES, QueueService } from "../queue";
 
-// Create a generic output schema for parsing plugin outputs
+// TODO: replace with just referencing outputZSchema in plugin
 const GenericPluginOutputSchema = createOutputSchema(z.unknown());
 
 const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
@@ -26,7 +26,7 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 		yield* workflowService.getWorkflowRunById(workflowRunId);
 		const workflow = yield* workflowService.getWorkflowById(workflowId);
 
-		let currentInput: any = input;
+		let currentInput: any = input; // better type safety
 
 		// Find starting step index
 		let startIndex = 0;

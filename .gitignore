@@ -2,6 +2,7 @@ node_modules
 .turbo
 .alchemy
 .env
+dist
 
 # START Ruler Generated Files
 *.bak

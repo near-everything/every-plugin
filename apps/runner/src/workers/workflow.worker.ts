@@ -62,7 +62,7 @@ const processWorkflowRun = (job: Job<StartWorkflowRunJobData>) =>
 		return yield* processingEffect.pipe(
 			Effect.catchAll((error) =>
 				Effect.gen(function* () {
-					const updatedRun = yield* workflowService.updateWorkflowRun(run.id, {
+					yield* workflowService.updateWorkflowRun(run.id, {
 						status: "FAILED",
 						completedAt: new Date(),
 					});

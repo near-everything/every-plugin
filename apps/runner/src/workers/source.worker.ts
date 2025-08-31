@@ -15,7 +15,7 @@ import { QUEUE_NAMES, QueueService } from "../queue";
 const GenericPluginSourceOutputSchema = createSourceOutputSchema(
 	z.unknown(),
 	PlatformStateSchema,
-);
+); // TODO: replace with just referencing outputZSchema in plugin
 
 const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 	Effect.gen(function* () {
@@ -87,7 +87,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 				const error = new Error(
 					`Source plugin output validation failed: ${parseResult.error.message}`,
 				);
-				const updatedRun = yield* workflowService.updatePluginRun(
+				yield* workflowService.updatePluginRun(
 					pluginRun.id,
 					{
 						status: "FAILED",
@@ -101,7 +101,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 			const output = parseResult.data;
 			if (!output.success || !output.data) {
 				const error = new Error("Source plugin failed to return data");
-				const updatedRun = yield* workflowService.updatePluginRun(
+				yield* workflowService.updatePluginRun(
 					pluginRun.id,
 					{
 						status: "FAILED",
@@ -115,7 +115,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 				return yield* Effect.fail(error);
 			}
 
-			const updatedRun = yield* workflowService.updatePluginRun(pluginRun.id, {
+			yield* workflowService.updatePluginRun(pluginRun.id, {
 				status: "COMPLETED",
 				output,
 				completedAt: new Date(),
@@ -130,7 +130,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 					const errorCause =
 						error instanceof Error && error.cause ? error.cause : error;
 
-					const updatedRun = yield* workflowService.updatePluginRun(
+					yield* workflowService.updatePluginRun(
 						pluginRun.id,
 						{
 							status: "FAILED",
@@ -237,7 +237,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 					},
 				});
 
-				const updatedRun = yield* workflowService.updateWorkflowRun(
+				yield* workflowService.updateWorkflowRun(
 					workflowRunId,
 					{
 						status: "COMPLETED",
@@ -252,7 +252,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 					`Async job ${job.status} for workflow ${workflowId}. Failing plugin run.`,
 				);
 
-				const updatedPluginRun = yield* workflowService.updatePluginRun(
+				yield* workflowService.updatePluginRun(
 					pluginRun.id,
 					{
 						status: "FAILED",
@@ -263,7 +263,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 						completedAt: new Date(),
 					},
 				);
-				const updatedRun = yield* workflowService.updateWorkflowRun(
+				yield* workflowService.updateWorkflowRun(
 					workflowRunId,
 					{
 						status: "FAILED",
@@ -305,7 +305,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 				);
 			}
 		} else {
-			const updatedRun = yield* workflowService.updateWorkflowRun(
+			yield* workflowService.updateWorkflowRun(
 				workflowRunId,
 				{
 					status: "COMPLETED",
@@ -323,7 +323,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 				const workflowService = yield* WorkflowService;
 				const errorMessage =
 					error instanceof Error ? error.message : "Unknown error";
-				const updatedRun = yield* workflowService.updateWorkflowRun(
+				 yield* workflowService.updateWorkflowRun(
 					workflowRunId!,
 					{
 						status: "FAILED",
