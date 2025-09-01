@@ -38,6 +38,6 @@ COPY --from=builder --chown=app:app /app/migrations ./migrations
 
 USER app
 
-EXPOSE 3000
+EXPOSE 3001
 
 CMD ["bun", "run", "start"]

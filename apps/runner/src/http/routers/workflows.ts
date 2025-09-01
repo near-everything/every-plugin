@@ -3,7 +3,7 @@ import { z } from "zod";
 import { WorkflowService } from "../../db";
 import { createWorkflowSchema, updateWorkflowSchema } from "../../interfaces";
 import { QUEUE_NAMES, QueueService } from "../../queue";
-import { adminProcedure, authenticatedProcedure } from "../lib/orpc";
+import { adminProcedure, authenticatedProcedure, nonAnonymousProcedure } from "../lib/orpc";
 
 const idParamSchema = z.object({
 	id: z.string().min(1),
@@ -36,7 +36,7 @@ export const workflowRouter = {
 			return result;
 		}),
 
-	create: adminProcedure
+	create: nonAnonymousProcedure // although admin would make sense
 		.input(createWorkflowSchema)
 		.handler(async ({ input, context }) => {
 			const user = context.user;

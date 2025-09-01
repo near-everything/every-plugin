@@ -16,7 +16,7 @@ export async function generateOpenAPISpec() {
 		},
 		servers: [
 			{
-				url: process.env.API_BASE_URL || "http://localhost:3000",
+				url: process.env.API_BASE_URL || "http://localhost:3001",
 				description: "Development server",
 			},
 		],

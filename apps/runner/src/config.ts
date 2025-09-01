@@ -17,9 +17,9 @@ export class AppConfig extends Context.Tag("AppConfig")<
 const appConfigSchema = Config.all({
 	redisUrl: Config.redacted("REDIS_URL"),
 	databaseUrl: Config.redacted("DATABASE_URL"),
-	port: Config.integer("PORT").pipe(Config.withDefault(3000)),
+	port: Config.integer("PORT").pipe(Config.withDefault(3001)),
 	betterAuthUrl: Config.string("BETTER_AUTH_URL").pipe(
-		Config.withDefault("http://localhost:3000"),
+		Config.withDefault("http://localhost:3001"),
 	),
 	betterAuthSecret: Config.redacted("BETTER_AUTH_SECRET"),
 	adminUserIds: Config.string("ADMIN_USER_IDS").pipe(
