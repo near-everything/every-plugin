@@ -52,7 +52,7 @@ export interface IPluginRuntime {
 		initializedPlugin: InitializedPlugin<T>,
 		input: z.infer<T["inputSchema"]>,
 	) => Effect.Effect<z.infer<T["outputSchema"]>, PluginRuntimeError>;
-	readonly createPlugin: <T extends AnyPlugin>(
+	readonly usePlugin: <T extends AnyPlugin>(
 		pluginId: string,
 		config: z.infer<T["configSchema"]>,
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
@@ -77,7 +77,7 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 					instantiatePlugin: pluginService.instantiatePlugin,
 					initializePlugin: pluginService.initializePlugin,
 					executePlugin: pluginService.executePlugin,
-					createPlugin: <T extends AnyPlugin>(
+					usePlugin: <T extends AnyPlugin>(
 						pluginId: string,
 						config: z.infer<T["configSchema"]>,
 					) =>

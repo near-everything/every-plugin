@@ -49,7 +49,7 @@ describe("Plugin Runtime Integration", () => {
         const pluginRuntime = yield* PluginRuntime;
         
         // Create plugin (load → instantiate → initialize)
-        const initializedPlugin = yield* pluginRuntime.createPlugin(
+        const initializedPlugin = yield* pluginRuntime.usePlugin(
           "test-plugin",
           TEST_CONFIG
         );
@@ -159,7 +159,7 @@ describe("Plugin Runtime Integration", () => {
       Effect.gen(function* () {
         const pluginRuntime = yield* PluginRuntime;
         
-        const initializedPlugin = yield* pluginRuntime.createPlugin(
+        const initializedPlugin = yield* pluginRuntime.usePlugin(
           "test-plugin",
           configWithSecrets
         );
@@ -209,7 +209,7 @@ describe("Plugin Runtime Integration", () => {
       Effect.gen(function* () {
         const pluginRuntime = yield* PluginRuntime;
         
-        return yield* pluginRuntime.createPlugin(
+        return yield* pluginRuntime.usePlugin(
           "test-plugin",
           configWithoutApiKey
         ).pipe(
@@ -288,7 +288,7 @@ describe("Plugin Runtime Integration", () => {
       Effect.gen(function* () {
         const pluginRuntime = yield* PluginRuntime;
         
-        return yield* pluginRuntime.createPlugin("invalid-plugin", {}).pipe(
+        return yield* pluginRuntime.usePlugin("invalid-plugin", {}).pipe(
           Effect.catchTag("PluginRuntimeError", (error) => {
             expect(error.operation).toBe("register-remote");
             expect(error.retryable).toBe(true);
@@ -383,7 +383,7 @@ describe("Plugin Runtime Integration", () => {
       Effect.gen(function* () {
         const pluginRuntime = yield* PluginRuntime;
         
-        return yield* pluginRuntime.createPlugin("simple-transform", {}).pipe(
+        return yield* pluginRuntime.usePlugin("simple-transform", {}).pipe(
           Effect.timeout(Duration.seconds(1)), // Timeout after 3 seconds
           Effect.catchTag("PluginRuntimeError", (error) => {
             // Validate error properties

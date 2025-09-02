@@ -15,11 +15,11 @@ bun add every-plugin
 ### Basic Plugin Usage
 
 ```typescript
-import { Effect, ManagedRuntime } from "effect";
-import { PluginRuntime } from "every-plugin/runtime";
+import { Effect } from "effect";
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
 
 // Create a managed runtime (do this once per application/worker)
-const runtime = ManagedRuntime.make(PluginRuntime.Live({
+const runtime = createPluginRuntime({
   registry: {
     "@my-org/data-processor": {
       version: "1.0.0",
@@ -33,14 +33,14 @@ const runtime = ManagedRuntime.make(PluginRuntime.Live({
     DATABASE_URL: "postgresql://..."
   },
   logger: customLogger // optional
-}));
+});
 
 // Use the runtime to execute plugins
 const result = await runtime.runPromise(
   Effect.gen(function* () {
     const pluginRuntime = yield* PluginRuntime;
     
-    // Use and execute a plugin in one step
+    // Load, instantiate and initialize a plugin
     const plugin = yield* pluginRuntime.usePlugin("@my-org/data-processor", {
       apiKey: "{{API_KEY}}", // Will be hydrated from secrets
       batchSize: 100
@@ -60,23 +60,25 @@ console.log(result);
 await runtime.dispose();
 ```
 
-### Alternative: Convenience Factory Function
+### Alternative: Direct Layer Construction
 
-If you prefer a factory function, you can use the convenience wrapper:
+If you prefer more explicit control over the runtime construction:
 
 ```typescript
-import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+import { Effect, ManagedRuntime } from "effect";
+import { PluginRuntime } from "every-plugin/runtime";
 
-// This is equivalent to ManagedRuntime.make(PluginRuntime.Live(config))
-const runtime = createPluginRuntime({
+// This is equivalent to createPluginRuntime(config)
+const runtime = ManagedRuntime.make(PluginRuntime.Live({
   registry: { /* ... */ },
   secrets: { /* ... */ }
-});
+}));
 
 const result = await runtime.runPromise(
   Effect.gen(function* () {
     const pluginRuntime = yield* PluginRuntime;
-    return yield* pluginRuntime.usePlugin(pluginId, config);
+    const plugin = yield* pluginRuntime.usePlugin(pluginId, config);
+    return yield* pluginRuntime.executePlugin(plugin, input);
   })
 );
 ```
@@ -245,7 +247,7 @@ Effect service tag for accessing the plugin runtime within Effect workflows.
 - `instantiatePlugin(constructor)`: Create plugin instance
 - `initializePlugin(instance, config)`: Initialize with config and secrets
 - `executePlugin(plugin, input)`: Execute plugin with input
-- `usePlugin(pluginId, config)`: Load + instantiate + initialize in one step
+- `usePlugin(pluginId, config)`: Load + instantiate + initialize in one step (does not execute)
 
 ## Development
 
