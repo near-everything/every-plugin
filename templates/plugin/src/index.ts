@@ -82,7 +82,7 @@ export class TemplatePlugin
 				},
 			});
 
-			yield* logger.logInfo("Template plugin initialized successfully", {
+			yield* logger.logDebug("Template plugin initialized successfully", {
 				pluginId: self.id,
 				baseUrl: config.variables?.baseUrl,
 			});
@@ -148,7 +148,7 @@ export class TemplatePlugin
 		const self = this;
 		return Effect.gen(function* () {
 			const logger = yield* PluginLoggerTag;
-			yield* logger.logInfo("Shutting down Template plugin", {
+			yield* logger.logDebug("Shutting down Template plugin", {
 				pluginId: self.id,
 			});
 			self.config = null;

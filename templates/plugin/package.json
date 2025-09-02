@@ -1,5 +1,5 @@
 {
-	"name": "@curatedotfun/template-plugin",
+	"name": "test-plugin",
 	"version": "0.0.1",
 	"description": "Template plugin for curate.fun - change name and port",
 	"main": "./dist/index.js",

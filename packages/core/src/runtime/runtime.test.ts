@@ -1,5 +1,5 @@
 import { Duration, Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PluginRegistry } from "../plugin";
 import { createPluginRuntime, PluginRuntime } from "./index";
 
@@ -10,6 +10,13 @@ const TEST_REGISTRY: PluginRegistry = {
 		type: "transformer",
 		version: "0.0.1",
 		description: "Local template plugin for testing",
+	},
+	"invalid-plugin": {
+		remoteUrl:
+			"https://invalid-plugin-url-that-does-not-exist.com/plugin.js",
+		type: "transformer" as const,
+		version: "1.0.0",
+		description: "Invalid plugin for testing error handling",
 	},
 };
 
@@ -36,13 +43,22 @@ const SECRETS_CONFIG = {
 };
 
 describe("Plugin Runtime Integration", () => {
-	it("should create and execute plugin end-to-end", async () => {
-		// Create the managed runtime
-		const runtime = createPluginRuntime({
+	let runtime: ReturnType<typeof createPluginRuntime>;
+
+	beforeEach(() => {
+		runtime = createPluginRuntime({
 			registry: TEST_REGISTRY,
 			secrets: SECRETS_CONFIG,
 		});
+	});
 
+	afterEach(async () => {
+		if (runtime) {
+			await runtime.dispose();
+		}
+	});
+
+	it("should create and execute plugin end-to-end", async () => {
 		// Execute the test within the runtime
 		const result = await runtime.runPromise(
 			Effect.gen(function* () {
@@ -99,11 +115,6 @@ describe("Plugin Runtime Integration", () => {
 	});
 
 	it("should handle plugin lifecycle correctly", async () => {
-		const runtime = createPluginRuntime({
-			registry: TEST_REGISTRY,
-			secrets: SECRETS_CONFIG,
-		});
-
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				const pluginRuntime = yield* PluginRuntime;
@@ -206,11 +217,6 @@ describe("Plugin Runtime Integration", () => {
 			},
 		};
 
-		const runtime = createPluginRuntime({
-			registry: TEST_REGISTRY,
-			secrets: SECRETS_CONFIG,
-		});
-
 		const result = await runtime.runPromise(
 			Effect.gen(function* () {
 				const pluginRuntime = yield* PluginRuntime;
@@ -235,7 +241,7 @@ describe("Plugin Runtime Integration", () => {
 								lowerMessage.includes("required");
 							expect(hasApiKeyError).toBe(true);
 
-							console.log("Caught expected validation error:", {
+							console.debug("Caught expected validation error:", {
 								operation: error.operation,
 								pluginId: error.pluginId,
 								retryable: error.retryable,
@@ -278,21 +284,6 @@ describe("Plugin Runtime Integration", () => {
 	});
 
 	it("should handle invalid remoteUrl with proper error handling", async () => {
-		const INVALID_REGISTRY = {
-			"invalid-plugin": {
-				remoteUrl:
-					"https://invalid-plugin-url-that-does-not-exist.com/plugin.js",
-				type: "transformer" as const,
-				version: "1.0.0",
-				description: "Invalid plugin for testing error handling",
-			},
-		};
-
-		const runtime = createPluginRuntime({
-			registry: INVALID_REGISTRY,
-			secrets: {},
-		});
-
 		const result = await runtime.runPromise(
 			Effect.gen(function* () {
 				const pluginRuntime = yield* PluginRuntime;
@@ -351,7 +342,7 @@ describe("Plugin Runtime Integration", () => {
 						expect(error.cause?.message).toContain("not found in registry");
 
 						// Log error details for debugging
-						console.log(
+						console.debug(
 							"Caught expected PluginRuntimeError for missing plugin:",
 							{
 								operation: error.operation,
@@ -405,12 +396,12 @@ describe("Plugin Runtime Integration", () => {
 					Effect.catchTag("PluginRuntimeError", (error) => {
 						// Validate error properties
 						expect(["load-remote"]).toContain(error.operation);
-						expect(error.retryable).toBe(true);
+						expect(error.retryable).toBe(false);
 						expect(error.pluginId).toBe("simple-transform");
 						expect(error.cause).toBeDefined();
 
 						// Log error details for debugging
-						console.log(
+						console.debug(
 							"Caught expected PluginRuntimeError for constructor failure:",
 							{
 								operation: error.operation,
@@ -425,7 +416,7 @@ describe("Plugin Runtime Integration", () => {
 					}),
 					Effect.catchTag("TimeoutException", () => {
 						// Handle timeout as expected failure - remote is too slow
-						console.log(
+						console.debug(
 							"Plugin creation timed out - treating as expected failure",
 						);
 						return Effect.succeed("timeout-handled-properly");

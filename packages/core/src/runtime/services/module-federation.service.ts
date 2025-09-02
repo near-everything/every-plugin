@@ -120,6 +120,7 @@ export class ModuleFederationService extends Effect.Tag(
 
 						return yield* Effect.tryPromise({
 							try: async () => {
+
 								const container = await mf.loadRemote(modulePath);
 								if (!container) {
 									throw new Error(`No container returned for ${modulePath}`);

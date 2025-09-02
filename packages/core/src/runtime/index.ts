@@ -4,7 +4,6 @@ import { type PluginLogger, PluginLoggerTag } from "../plugin";
 import type { PluginRuntimeError } from "./errors";
 import {
 	ModuleFederationService,
-	PluginCacheService,
 	PluginService,
 	SecretsService,
 } from "./services";
@@ -56,7 +55,7 @@ export interface IPluginRuntime {
 		pluginId: string,
 		config: z.infer<T["configSchema"]>,
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
-	readonly shutdown: () => Effect.Effect<void, never>;
+	readonly shutdown: () => Effect.Effect<void, never, never>;
 }
 
 export class PluginRuntime extends Effect.Tag("PluginRuntime")<
@@ -80,16 +79,8 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 					usePlugin: <T extends AnyPlugin>(
 						pluginId: string,
 						config: z.infer<T["configSchema"]>,
-					) =>
-						Effect.gen(function* () {
-							const ctor = yield* pluginService.loadPlugin(pluginId);
-							const instance = yield* pluginService.instantiatePlugin<T>(ctor);
-							return yield* pluginService.initializePlugin<T>(instance, config);
-						}),
-					shutdown: () =>
-						Effect.sync(() => {
-							// Cleanup handled by Layer disposal
-						}),
+					) => pluginService.usePlugin<T>(pluginId, config),
+					shutdown: () => pluginService.cleanup(),
 				};
 			}),
 		).pipe(
@@ -98,9 +89,6 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 					Layer.provide(
 						Layer.mergeAll(
 							ModuleFederationService.Live,
-							PluginCacheService.Live.pipe(
-								Layer.provide(ModuleFederationService.Live),
-							),
 							SecretsService.Live(secrets),
 							Layer.succeed(PluginLoggerTag, logger),
 						),
@@ -108,7 +96,7 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 				),
 			),
 		);
-	};
+	}
 }
 
 export const createPluginRuntime = (config: PluginRuntimeConfig) =>

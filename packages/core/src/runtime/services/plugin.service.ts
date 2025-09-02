@@ -1,4 +1,4 @@
-import { Duration, Effect, Layer, Schedule } from "effect";
+import { Cache, Duration, Effect, Hash, Layer, Schedule } from "effect";
 import { PluginLoggerTag, type PluginRegistry } from "../../plugin";
 import { PluginRuntimeError } from "../errors";
 import type {
@@ -9,7 +9,7 @@ import type {
 	SecretsConfig,
 } from "../types";
 import { validate } from "../validation";
-import { PluginCacheService } from "./plugin-cache.service";
+import { ModuleFederationService } from "./module-federation.service";
 import { SecretsService } from "./secrets.service";
 
 export interface IPluginService {
@@ -27,6 +27,13 @@ export interface IPluginService {
 		initializedPlugin: InitializedPlugin<T>,
 		input: unknown,
 	) => Effect.Effect<any, PluginRuntimeError>;
+	readonly usePlugin: <T extends AnyPlugin>(
+		pluginId: string,
+		config: unknown,
+	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
+	readonly shutdownPlugin: (plugin: InitializedPlugin<AnyPlugin>) => Effect.Effect<void, PluginRuntimeError>;
+	readonly clearCache: () => Effect.Effect<void, never>;
+	readonly cleanup: () => Effect.Effect<void, never>;
 }
 
 export class PluginService extends Effect.Tag("PluginService")<
@@ -37,9 +44,11 @@ export class PluginService extends Effect.Tag("PluginService")<
 		Layer.effect(
 			PluginService,
 			Effect.gen(function* () {
-				const cacheService = yield* PluginCacheService;
+				const moduleFederationService = yield* ModuleFederationService;
 				const secretsService = yield* SecretsService;
 				const logger = yield* PluginLoggerTag;
+
+				const activePlugins = new Set<InitializedPlugin<AnyPlugin>>();
 
 				const retrySchedule = Schedule.exponential(Duration.millis(100)).pipe(
 					Schedule.compose(Schedule.recurs(2)),
@@ -50,154 +59,226 @@ export class PluginService extends Effect.Tag("PluginService")<
 						? baseUrl.replace("@latest", `@${version}`)
 						: baseUrl;
 
-				return {
-					loadPlugin: (pluginId: string) =>
-						Effect.gen(function* () {
-							const metadata = registry[pluginId];
-							if (!metadata) {
-								return yield* Effect.fail(
-									new PluginRuntimeError({
-										pluginId,
-										operation: "load-plugin",
-										cause: new Error(
-											`Plugin ${pluginId} not found in registry`,
-										),
-										retryable: false,
-									}),
-								);
-							}
-
-							const url = resolveUrl(metadata.remoteUrl);
-							const cacheKey = `${pluginId}:${url}`;
-
-							const cachedConstructor =
-								yield* cacheService.getCachedConstructor(cacheKey);
-
-							return {
-								ctor: cachedConstructor.ctor,
-								metadata: {
+				// Implementation functions
+				const loadPluginImpl = (pluginId: string) =>
+					Effect.gen(function* () {
+						const metadata = registry[pluginId];
+						if (!metadata) {
+							return yield* Effect.fail(
+								new PluginRuntimeError({
 									pluginId,
-									version: metadata.version,
-									description: metadata.description,
-									type: metadata.type,
-								},
-							} satisfies PluginConstructor;
-						}),
+									operation: "load-plugin",
+									cause: new Error(
+										`Plugin ${pluginId} not found in registry`,
+									),
+									retryable: false,
+								}),
+							);
+						}
 
-					instantiatePlugin: <T extends AnyPlugin>(
-						pluginConstructor: PluginConstructor,
-					) =>
-						Effect.gen(function* () {
-							const instance = yield* Effect.try({
-								try: () => new pluginConstructor.ctor() as T,
-								catch: (error): PluginRuntimeError =>
+						const url = resolveUrl(metadata.remoteUrl);
+
+						// Register and load the remote constructor
+						yield* moduleFederationService.registerRemote(pluginId, url).pipe(
+							Effect.mapError((error) =>
+								new PluginRuntimeError({
+									pluginId,
+									operation: "register-remote",
+									cause: error.cause,
+									retryable: true,
+								})
+							)
+						);
+						logger.logInfo(`Trying to load ${pluginId}:${url}`)
+						const ctor = yield* moduleFederationService.loadRemoteConstructor(pluginId, url).pipe(
+							Effect.mapError((error) =>
+								new PluginRuntimeError({
+									pluginId,
+									operation: "load-remote",
+									cause: error.cause,
+									retryable: false
+								})
+							)
+						);
+
+						return {
+							ctor,
+							metadata: {
+								pluginId,
+								version: metadata.version,
+								description: metadata.description,
+								type: metadata.type,
+							},
+						} satisfies PluginConstructor;
+					});
+
+				const instantiatePluginImpl = <T extends AnyPlugin>(
+					pluginConstructor: PluginConstructor,
+				) =>
+					Effect.gen(function* () {
+						const instance = yield* Effect.try({
+							try: () => new pluginConstructor.ctor() as T,
+							catch: (error): PluginRuntimeError =>
+								new PluginRuntimeError({
+									pluginId: pluginConstructor.metadata.pluginId,
+									operation: "instantiate-plugin",
+									cause:
+										error instanceof Error ? error : new Error(String(error)),
+									retryable: false,
+								}),
+						});
+
+						// Validate plugin ID matches
+						if (instance.id !== pluginConstructor.metadata.pluginId) {
+							return yield* Effect.fail(
+								new PluginRuntimeError({
+									pluginId: pluginConstructor.metadata.pluginId,
+									operation: "validate-plugin-id",
+									cause: new Error(
+										`Plugin ID mismatch: expected ${pluginConstructor.metadata.pluginId}, got ${instance.id}`,
+									),
+									retryable: false,
+								}),
+							);
+						}
+
+						return {
+							plugin: instance,
+							metadata: pluginConstructor.metadata,
+						} satisfies PluginInstance<T>;
+					});
+
+				const initializePluginImpl = <T extends AnyPlugin>(
+					pluginInstance: PluginInstance<T>,
+					config: unknown,
+				) =>
+					Effect.gen(function* () {
+						const { plugin } = pluginInstance;
+
+						// Validate raw config using plugin's Zod schema
+						const validatedConfig = yield* validate(
+							plugin.configSchema,
+							config,
+							plugin.id,
+							"config",
+						).pipe(
+							Effect.mapError(
+								(validationError): PluginRuntimeError =>
 									new PluginRuntimeError({
-										pluginId: pluginConstructor.metadata.pluginId,
-										operation: "instantiate-plugin",
-										cause:
-											error instanceof Error ? error : new Error(String(error)),
+										pluginId: plugin.id,
+										operation: "validate-config",
+										cause: validationError.zodError,
 										retryable: false,
 									}),
-							});
+							),
+						);
 
-							// Validate plugin ID matches
-							if (instance.id !== pluginConstructor.metadata.pluginId) {
-								return yield* Effect.fail(
+						// Hydrate secrets
+						const hydratedConfig = yield* secretsService.hydrateSecrets(
+							validatedConfig,
+							secrets,
+						);
+
+						// Validate hydrated config
+						const finalConfig = yield* validate(
+							plugin.configSchema,
+							hydratedConfig,
+							plugin.id,
+							"config",
+						).pipe(
+							Effect.mapError(
+								(validationError): PluginRuntimeError =>
 									new PluginRuntimeError({
-										pluginId: pluginConstructor.metadata.pluginId,
-										operation: "validate-plugin-id",
-										cause: new Error(
-											`Plugin ID mismatch: expected ${pluginConstructor.metadata.pluginId}, got ${instance.id}`,
-										),
+										pluginId: plugin.id,
+										operation: "validate-hydrated-config",
+										cause: validationError.zodError,
 										retryable: false,
 									}),
-								);
-							}
+							),
+						);
 
-							return {
-								plugin: instance,
-								metadata: pluginConstructor.metadata,
-							} satisfies PluginInstance<T>;
-						}),
-
-					initializePlugin: <T extends AnyPlugin>(
-						pluginInstance: PluginInstance<T>,
-						config: unknown,
-					) =>
-						Effect.gen(function* () {
-							const { plugin } = pluginInstance;
-
-							// Validate raw config using plugin's Zod schema
-							const validatedConfig = yield* validate(
-								plugin.configSchema,
-								config,
-								plugin.id,
-								"config",
-							).pipe(
-								Effect.mapError(
-									(validationError): PluginRuntimeError =>
-										new PluginRuntimeError({
-											pluginId: plugin.id,
-											operation: "validate-config",
-											cause: validationError.zodError,
-											retryable: false,
-										}),
-								),
-							);
-
-							// Hydrate secrets
-							const hydratedConfig = yield* secretsService.hydrateSecrets(
-								validatedConfig,
-								secrets,
-							);
-
-							// Validate hydrated config
-							const finalConfig = yield* validate(
-								plugin.configSchema,
-								hydratedConfig,
-								plugin.id,
-								"config",
-							).pipe(
-								Effect.mapError(
-									(validationError): PluginRuntimeError =>
-										new PluginRuntimeError({
-											pluginId: plugin.id,
-											operation: "validate-hydrated-config",
-											cause: validationError.zodError,
-											retryable: false,
-										}),
-								),
-							);
-
-							// Initialize plugin with retry logic
-							const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
-							yield* plugin.initialize(finalConfig).pipe(
-								Effect.mapError(
-									(error): PluginRuntimeError =>
-										new PluginRuntimeError({
-											pluginId: plugin.id,
-											operation: "initialize-plugin",
-											cause: error,
-											retryable: error.retryable ?? false,
-										}),
-								),
-								Effect.retry(
-									retrySchedule.pipe(
-										Schedule.whileInput(
-											(error: PluginRuntimeError) => error.retryable,
-										),
+						// Initialize plugin with retry logic
+						const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
+						yield* plugin.initialize(finalConfig).pipe(
+							Effect.mapError(
+								(error): PluginRuntimeError =>
+									new PluginRuntimeError({
+										pluginId: plugin.id,
+										operation: "initialize-plugin",
+										cause: error,
+										retryable: error.retryable ?? false,
+									}),
+							),
+							Effect.retry(
+								retrySchedule.pipe(
+									Schedule.whileInput(
+										(error: PluginRuntimeError) => error.retryable,
 									),
 								),
-								Effect.provide(pluginLayer),
-							);
+							),
+							Effect.provide(pluginLayer),
+						);
 
-							return {
-								plugin,
-								metadata: pluginInstance.metadata,
-								config: finalConfig as any, // TODO: config type
-							} satisfies InitializedPlugin<T>;
-						}),
+						const initializedPlugin = {
+							plugin,
+							metadata: pluginInstance.metadata,
+							config: finalConfig as any, // TODO: config type
+						} satisfies InitializedPlugin<T>;
 
+						activePlugins.add(initializedPlugin as InitializedPlugin<AnyPlugin>);
+
+						return initializedPlugin;
+					});
+
+				// Cache functionality
+				const generateConfigHash = (config: unknown): string => {
+					return Hash.structure(config as object).toString();
+				};
+
+				// Store original config by hash for cache lookup
+				const configByHash = new Map<string, unknown>();
+
+				const cache = yield* Cache.make<
+					string, // Key format: "pluginId:configHash"
+					InitializedPlugin<AnyPlugin>,
+					PluginRuntimeError
+				>({
+					capacity: 1024,
+					timeToLive: Duration.minutes(60),
+					lookup: (cacheKey: string) => {
+						const [pluginId, configHash] = cacheKey.split(':');
+						
+						if (!pluginId || !configHash) {
+							return Effect.fail(new PluginRuntimeError({
+								operation: "cache-lookup",
+								cause: new Error(`Invalid cache key format: ${cacheKey}`),
+								retryable: false,
+							}));
+						}
+						
+						const config = configByHash.get(configHash);
+						
+						if (!config) {
+							return Effect.fail(new PluginRuntimeError({
+								operation: "cache-lookup",
+								cause: new Error(`No config found for hash: ${configHash}`),
+								retryable: false,
+							}));
+						}
+
+						return Effect.gen(function* () {
+							const ctor = yield* loadPluginImpl(pluginId);
+							const instance = yield* instantiatePluginImpl(ctor);
+							return yield* initializePluginImpl(instance, config);
+						});
+					},
+				});
+
+
+				return {
+					loadPlugin: loadPluginImpl,
+					instantiatePlugin: instantiatePluginImpl,
+					initializePlugin: initializePluginImpl,
 					executePlugin: <T extends AnyPlugin>(
 						initializedPlugin: InitializedPlugin<T>,
 						input: unknown,
@@ -264,6 +345,79 @@ export class PluginService extends Effect.Tag("PluginService")<
 							);
 
 							return validatedOutput;
+						}),
+					usePlugin: <T extends AnyPlugin>(
+						pluginId: string,
+						config: unknown,
+					): Effect.Effect<InitializedPlugin<T>, PluginRuntimeError> => {
+						const configHash = generateConfigHash(config);
+						const cacheKey = `${pluginId}:${configHash}`;
+						
+						// Store config for cache lookup
+						configByHash.set(configHash, config);
+
+						return cache.get(cacheKey).pipe(
+							Effect.map(plugin => plugin as InitializedPlugin<T>)
+						);
+					},
+					shutdownPlugin: (plugin: InitializedPlugin<AnyPlugin>) =>
+						Effect.gen(function* () {
+							const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
+							
+							// Remove from active plugins
+							activePlugins.delete(plugin);
+							
+							// Try to invalidate from cache if it exists there
+							const configHash = generateConfigHash(plugin.config);
+							const cacheKey = `${plugin.plugin.id}:${configHash}`;
+							
+							yield* cache.invalidate(cacheKey).pipe(
+								Effect.catchAll(() => Effect.void) // Ignore if not in cache
+							);
+							
+							// Clean up config hash
+							configByHash.delete(configHash);
+							
+							// Shutdown the plugin
+							yield* plugin.plugin.shutdown().pipe(
+								Effect.mapError((error): PluginRuntimeError =>
+									new PluginRuntimeError({
+										pluginId: plugin.plugin.id,
+										operation: "shutdown-plugin",
+										cause: error,
+										retryable: false,
+									})
+								),
+								Effect.provide(pluginLayer)
+							);
+						}),
+					clearCache: () =>
+						Effect.sync(() => {
+							configByHash.clear();
+						}),
+					cleanup: () =>
+						Effect.gen(function* () {
+							const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
+
+							// Call shutdown on all active plugins
+							for (const initializedPlugin of activePlugins) {
+								yield* initializedPlugin.plugin.shutdown().pipe(
+									Effect.catchAll((error) => {
+										// Log shutdown errors but don't fail the cleanup
+										return logger.logError(
+											`Failed to shutdown plugin ${initializedPlugin.plugin.id}`,
+											error,
+											{ pluginId: initializedPlugin.plugin.id }
+										);
+									}),
+									Effect.provide(pluginLayer)
+								);
+							}
+
+							// Clear the active plugins set
+							activePlugins.clear();
+							// Clear cache
+							configByHash.clear();
 						}),
 				};
 			}),

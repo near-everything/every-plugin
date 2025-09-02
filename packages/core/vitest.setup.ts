@@ -1,5 +1,5 @@
-import { type ChildProcess, spawn } from "child_process";
-import { setTimeout } from "timers/promises";
+import { type ChildProcess, spawn } from "node:child_process";
+import { setTimeout } from "node:timers/promises";
 
 let pluginServer: ChildProcess | null = null;
 
