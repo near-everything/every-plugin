@@ -26,11 +26,13 @@
 		"@module-federation/runtime-core": ">=0.18.0"
 	},
 	"devDependencies": {
-		"effect": "^3.17.7",
-		"zod": "^4.0.8",
-		"typescript": "^5.0.0",
+		"@effect/vitest": "^0.25.1",
 		"@module-federation/enhanced": "^0.18.3",
-		"@module-federation/runtime-core": "^0.18.3"
+		"@module-federation/runtime-core": "^0.18.3",
+		"effect": "^3.17.7",
+		"typescript": "^5.0.0",
+		"vitest": "^3.2.4",
+		"zod": "^4.0.8"
 	},
 	"dependencies": {
 		"@better-fetch/fetch": "^1.1.18",

@@ -1,5 +1,9 @@
 # registry
 
+Small framework for registering a remote entry with a registry
+
+// nearfs, create car and drive it wherever you want
+
 To install dependencies:
 
 ```bash
@@ -11,5 +15,3 @@ To run:
 ```bash
 bun run index.ts
 ```
-
-This project was created using `bun init` in bun v1.2.14. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
