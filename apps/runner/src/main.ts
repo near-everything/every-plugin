@@ -2,14 +2,14 @@ import { Effect, Schedule } from "effect";
 import { AppConfig } from "./config";
 import { HttpServerService } from "./http/server";
 import { discoverAndScheduleWorkflows } from "./jobs";
-import { PluginRuntimeLive } from "./plugin-runtime";
 import { AppRuntime } from "./runtime/app";
+import { WorkersRuntime } from "./runtime/worker";
 import { createPipelineWorker } from "./workers/pipeline.worker";
 import { createSourceWorker } from "./workers/source.worker";
 import { createWorkflowWorker } from "./workers/workflow.worker";
 
-// Single process: HTTP server + scheduler + workers
-const program = Effect.scoped(
+// HTTP server + scheduler
+const httpAndSchedulerProgram = Effect.scoped(
 	Effect.gen(function* () {
 		const config = yield* AppConfig;
 		const httpServer = yield* HttpServerService;
@@ -34,27 +34,38 @@ const program = Effect.scoped(
 		// Fork scheduler
 		yield* Effect.fork(scheduledDiscovery);
 
-		// Fork workers in the same process
-		yield* Effect.log("🔄 Starting background workers...");
-		yield* Effect.fork(createWorkflowWorker);
-		yield* Effect.fork(
-			createSourceWorker.pipe(Effect.provide(PluginRuntimeLive)),
-		);
-		yield* Effect.fork(
-			createPipelineWorker.pipe(Effect.provide(PluginRuntimeLive)),
-		);
-
-		yield* Effect.log(
-			"✅ Application fully started (HTTP server + scheduler + workers)",
-		);
+		yield* Effect.log("✅ HTTP server and scheduler started");
 		yield* Effect.never;
 	}),
 ).pipe(
 	Effect.catchAll((error) =>
 		Effect.gen(function* () {
-			yield* Effect.logError("❌ Application startup failed", error);
+			yield* Effect.logError("❌ HTTP server startup failed", error);
 		}),
 	),
 );
 
-AppRuntime.runPromise(program).catch(console.error);
+// Workers program
+const workersProgram = Effect.scoped(
+	Effect.gen(function* () {
+		yield* Effect.log("🔄 Starting background workers...");
+		yield* Effect.fork(createWorkflowWorker);
+		yield* Effect.fork(createSourceWorker);
+		yield* Effect.fork(createPipelineWorker);
+
+		yield* Effect.log("✅ All workers started");
+		yield* Effect.never;
+	}),
+).pipe(
+	Effect.catchAll((error) =>
+		Effect.gen(function* () {
+			yield* Effect.logError("❌ Workers startup failed", error);
+		}),
+	),
+);
+
+// Run both programs concurrently
+Promise.all([
+	AppRuntime.runPromise(httpAndSchedulerProgram),
+	WorkersRuntime.runPromise(workersProgram),
+]).catch(console.error);

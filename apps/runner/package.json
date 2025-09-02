@@ -23,7 +23,7 @@
 		"drizzle-orm": "^0.44.5",
 		"effect": "^3.17.1",
 		"effect-errors": "^1.10.14",
-		"every-plugin": "0.0.2",
+		"every-plugin": "0.0.7",
 		"hono": "^4.9.4",
 		"hono-rate-limiter": "^0.4.2",
 		"ioredis": "^5.6.1",

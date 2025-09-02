@@ -1,14 +1,9 @@
 import type { Job } from "bullmq";
 import { Effect } from "effect";
-import { createOutputSchema } from "every-plugin";
-import { z } from "zod";
+import { PluginRuntime } from "every-plugin/runtime";
 import { WorkflowService } from "../db";
 import type { ExecutePipelineJobData, PluginRun } from "../interfaces";
-import { PluginServiceTag } from "../plugin-runtime/plugin.service";
 import { QUEUE_NAMES, QueueService } from "../queue";
-
-// TODO: replace with just referencing outputZSchema in plugin
-const GenericPluginOutputSchema = createOutputSchema(z.unknown());
 
 const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 	Effect.gen(function* () {
@@ -21,7 +16,7 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 
 		const { sourceItemId, input, startAtStepId } = data;
 		const workflowService = yield* WorkflowService;
-		const pluginService = yield* PluginServiceTag;
+		const pluginRuntime = yield* PluginRuntime;
 
 		yield* workflowService.getWorkflowRunById(workflowRunId);
 		const workflow = yield* workflowService.getWorkflowById(workflowId);
@@ -91,42 +86,20 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 			}
 
 			const pluginEffect = Effect.gen(function* () {
-				const execute = Effect.acquireUseRelease(
-					pluginService.initializePlugin(
-						stepDefinition,
-						`Run ${workflowRunId}, Item ${sourceItemId}, Step "${stepDefinition.stepId}"`,
-					),
-					(plugin) =>
-						pluginService.executePlugin(
-							plugin,
-							currentInput,
-							`Run ${workflowRunId}, Item ${sourceItemId}, Step "${stepDefinition.stepId}"`,
-						),
-					() => Effect.void,
-				);
 
-				const rawOutput = yield* execute;
-				const parseResult = GenericPluginOutputSchema.safeParse(rawOutput);
+				const pluginConstructor = yield* pluginRuntime.loadPlugin(stepDefinition.pluginId);
+				const pluginInstance = yield* pluginRuntime.instantiatePlugin(pluginConstructor);
+				const initializedPlugin = yield* pluginRuntime.initializePlugin(pluginInstance, stepDefinition.config);
 
-				if (!parseResult.success) {
+				const output = yield* pluginRuntime.executePlugin(initializedPlugin, currentInput);
+
+				// TODO: proper typing
+				const pluginOutput = output as { success: boolean; data?: any; errors?: any[] };
+
+				if (!pluginOutput.success) {
 					const error = new Error(
-						`Plugin output validation failed: ${parseResult.error.message}`,
-					);
-					yield* workflowService.updatePluginRun(pluginRun.id, {
-						status: "FAILED",
-						error: { message: error.message },
-						completedAt: new Date(),
-					});
-					return yield* Effect.fail(error);
-				}
-
-				const output = parseResult.data;
-
-				if (!output.success) {
-					const error = new Error(
-						`Plugin ${
-							stepDefinition.pluginId
-						} execution failed: ${JSON.stringify(output.errors)}`,
+						`Plugin ${stepDefinition.pluginId
+						} execution failed: ${JSON.stringify(pluginOutput.errors)}`,
 					);
 					yield* workflowService.updatePluginRun(pluginRun.id, {
 						status: "FAILED",
@@ -138,23 +111,28 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 
 				yield* workflowService.updatePluginRun(pluginRun.id, {
 					status: "COMPLETED",
-					output,
+					output: pluginOutput,
 					completedAt: new Date(),
 				});
 
-				return output.data;
+				return pluginOutput.data;
 			}).pipe(
 				Effect.catchAll((error) =>
 					Effect.gen(function* () {
+						// TODO
+						const errorMessage = error && typeof error === 'object' && 'message' in error
+							? String((error as any).message)
+							: 'Unknown error';
+
 						yield* workflowService.updatePluginRun(pluginRun.id, {
 							status: "FAILED",
 							error: {
-								message: "Failed to execute pipeline step",
+								message: `Plugin execution failed: ${errorMessage}`,
 								cause: error,
 							},
 							completedAt: new Date(),
 						});
-						return yield* Effect.fail(error);
+						return yield* Effect.fail(new Error(errorMessage));
 					}),
 				),
 			);

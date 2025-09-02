@@ -1,21 +1,9 @@
 import type { Job } from "bullmq";
 import { Effect } from "effect";
-import {
-	createSourceOutputSchema,
-	PlatformStateSchema,
-	type SourcePlugin,
-} from "every-plugin";
-import { z } from "zod";
+import { PluginRuntime } from "every-plugin/runtime";
 import { WorkflowService } from "../db";
 import type { ExecutePipelineJobData, SourceQueryJobData } from "../interfaces";
-import { PluginServiceTag } from "../plugin-runtime/plugin.service";
 import { QUEUE_NAMES, QueueService } from "../queue";
-
-// Create a specific schema for parsing source plugin output
-const GenericPluginSourceOutputSchema = createSourceOutputSchema(
-	z.unknown(),
-	PlatformStateSchema,
-); // TODO: replace with just referencing outputZSchema in plugin
 
 const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 	Effect.gen(function* () {
@@ -40,7 +28,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 		}
 		const { lastProcessedState } = data;
 		const queueService = yield* QueueService;
-		const pluginService = yield* PluginServiceTag;
+		const pluginRuntime = yield* PluginRuntime;
 
 		yield* Effect.log(
 			`Processing source query job for workflow: ${workflowId}, run: ${workflowRunId}`,
@@ -66,40 +54,16 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 		});
 
 		const pluginEffect = Effect.gen(function* () {
-			const execute = Effect.acquireUseRelease(
-				pluginService.initializePlugin<SourcePlugin>(
-					workflow.source,
-					`Source Query for Workflow "${workflow.name}" [${workflowRunId}]`,
-				),
-				(sourcePlugin) =>
-					pluginService.executePlugin(
-						sourcePlugin,
-						input,
-						`Source Query for Workflow "${workflow.name}" [${workflowRunId}]`,
-					),
-				() => Effect.void,
-			);
+			const pluginConstructor = yield* pluginRuntime.loadPlugin(workflow.source.pluginId);
+			const pluginInstance = yield* pluginRuntime.instantiatePlugin(pluginConstructor);
+			const initializedPlugin = yield* pluginRuntime.initializePlugin(pluginInstance, workflow.source.config);
+			
+			const output = yield* pluginRuntime.executePlugin(initializedPlugin, input);
 
-			const rawOutput = yield* execute;
+			// TODO: proper typing
+			const sourceOutput = output as { success: boolean; data?: { items: any[]; nextLastProcessedState?: any }; errors?: any[] };
 
-			const parseResult = GenericPluginSourceOutputSchema.safeParse(rawOutput);
-			if (!parseResult.success) {
-				const error = new Error(
-					`Source plugin output validation failed: ${parseResult.error.message}`,
-				);
-				yield* workflowService.updatePluginRun(
-					pluginRun.id,
-					{
-						status: "FAILED",
-						error: { message: error.message },
-						completedAt: new Date(),
-					},
-				);
-				return yield* Effect.fail(error);
-			}
-
-			const output = parseResult.data;
-			if (!output.success || !output.data) {
+			if (!sourceOutput.success || !sourceOutput.data) {
 				const error = new Error("Source plugin failed to return data");
 				yield* workflowService.updatePluginRun(
 					pluginRun.id,
@@ -107,7 +71,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 						status: "FAILED",
 						error: {
 							message: "Source plugin failed to return data",
-							cause: output.errors,
+							cause: sourceOutput.errors,
 						},
 						completedAt: new Date(),
 					},
@@ -117,11 +81,11 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 
 			yield* workflowService.updatePluginRun(pluginRun.id, {
 				status: "COMPLETED",
-				output,
+				output: sourceOutput,
 				completedAt: new Date(),
 			});
 
-			return output.data;
+			return sourceOutput.data;
 		}).pipe(
 			Effect.catchAll((error) =>
 				Effect.gen(function* () {

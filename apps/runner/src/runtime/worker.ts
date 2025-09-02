@@ -6,15 +6,17 @@ import {
 	LogLevel,
 	ManagedRuntime,
 } from "effect";
+import { PluginRuntime } from "every-plugin/runtime";
+import type { PluginRegistry } from "every-plugin";
 import { AppConfigLive } from "../config";
 import { DatabaseLive, WorkflowServiceLive } from "../db";
-import { PluginRuntimeLive } from "../plugin-runtime";
 import {
 	QueueClientLive,
 	QueueServiceLive,
 	QueueStatusServiceLive,
 	RedisClientLive,
 } from "../queue";
+import registryData from "../plugin-runtime/registry.json" with { type: "json" };
 
 // Logging for workers
 const LoggingLayer = Layer.mergeAll(
@@ -46,13 +48,25 @@ const InfraLayer = Layer.mergeAll(
 	QueueClientLayer,
 );
 
+// Create plugin runtime layer with registry and secrets
+const PluginRuntimeLayer = PluginRuntime.Live({
+	registry: registryData as PluginRegistry,
+	secrets: {
+		API_KEY: process.env.API_KEY || "",
+		DATABASE_URL: process.env.DATABASE_URL || "",
+		NOTION_TOKEN: process.env.NOTION_TOKEN || "",
+		TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
+		MASA_API_KEY: process.env.MASA_API_KEY || "",
+	},
+});
+
 // Workers runtime with plugin execution capabilities
 export const WorkersLayer = Layer.mergeAll(
 	LoggingLayer,
 	WorkflowLayer,
 	QueueLayer,
 	QueueStatusLayer,
-	PluginRuntimeLive,
+	PluginRuntimeLayer,
 ).pipe(
 	Layer.provide(InfraLayer),
 	Layer.orDie, // Convert any config errors to defects to get 'never' error type
