@@ -1,4 +1,3 @@
-import type { JSONSchemaType } from "ajv/dist/2020";
 import { Context, type Effect } from "effect";
 import { z } from "zod";
 import type { ConfigurationError, PluginExecutionError } from "./errors";
@@ -11,16 +10,6 @@ export const createOutputSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
 		errors: z.array(ErrorDetailsSchema).optional(),
 	});
 
-export function createConfigSchema(): z.ZodObject<{
-	variables: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
-	secrets: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
-}>;
-export function createConfigSchema<V extends z.ZodTypeAny>(
-	variablesSchema?: V,
-): z.ZodObject<{
-	variables: z.ZodOptional<V>;
-	secrets: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
-}>;
 export function createConfigSchema<
 	V extends z.ZodTypeAny,
 	S extends z.ZodTypeAny,
@@ -31,6 +20,7 @@ export function createConfigSchema<
 	variables: z.ZodOptional<V>;
 	secrets: z.ZodOptional<S>;
 }>;
+
 export function createConfigSchema<
 	V extends z.ZodTypeAny = z.ZodRecord<z.ZodString, z.ZodUnknown>,
 	S extends z.ZodTypeAny = z.ZodRecord<z.ZodString, z.ZodUnknown>,
@@ -77,6 +67,9 @@ export interface Plugin<
 > {
 	readonly id: string;
 	readonly type: PluginType;
+	readonly inputSchema: TInputSchema;
+	readonly outputSchema: TOutputSchema;
+	readonly configSchema: TConfigSchema;
 	initialize(
 		config?: z.infer<TConfigSchema>,
 	): Effect.Effect<void, ConfigurationError, PluginLoggerTag>;
@@ -94,10 +87,7 @@ export type PluginType = "transformer" | "distributor" | "source";
 
 export interface PluginMetadata {
 	remoteUrl: string;
-	type?: PluginType; // TODO: maybe this could determine the config input, output, config base types instead
-	configSchema: JSONSchemaType<any>;
-	inputSchema: JSONSchemaType<any>;
-	outputSchema: JSONSchemaType<any>;
+	type?: PluginType;
 	version?: string;
 	description?: string;
 }
