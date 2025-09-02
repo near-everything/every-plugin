@@ -19,7 +19,7 @@ interface IHttpServerService {
 export class HttpServerService extends Context.Tag("HttpServerService")<
 	HttpServerService,
 	IHttpServerService
->() { }
+>() {}
 
 export const HttpServerServiceLive = Layer.scoped(
 	HttpServerService,
@@ -57,7 +57,8 @@ export const HttpServerServiceLive = Layer.scoped(
 			rateLimiter({
 				windowMs: 15 * 60 * 1000, // 15 mins
 				limit: 100,
-				keyGenerator: (c: any) => { // TODO
+				keyGenerator: (c: any) => {
+					// TODO
 					const user = c.var.user;
 					return user?.id || c.req.header("x-forwarded-for") || "anonymous";
 				},

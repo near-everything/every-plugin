@@ -26,7 +26,6 @@ export * from "./workflows-to-source-items";
 
 export type DB = typeof schema;
 
-
 // Redis (execution state):
 // - workflow-run:{runId} -> hash of run details
 // - plugin-run:{pluginRunId} -> hash of plugin execution

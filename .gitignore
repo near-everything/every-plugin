@@ -3,9 +3,3 @@ node_modules
 .alchemy
 .env
 dist
-
-# START Ruler Generated Files
-*.bak
-.clinerules
-.clinerules.bak
-# END Ruler Generated Files

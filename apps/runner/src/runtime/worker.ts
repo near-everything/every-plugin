@@ -6,17 +6,19 @@ import {
 	LogLevel,
 	ManagedRuntime,
 } from "effect";
-import { PluginRuntime } from "every-plugin/runtime";
 import type { PluginRegistry } from "every-plugin";
+import { PluginRuntime } from "every-plugin/runtime";
 import { AppConfigLive } from "../config";
 import { DatabaseLive, WorkflowServiceLive } from "../db";
+import registryData from "../plugin-runtime/registry.json" with {
+	type: "json",
+};
 import {
 	QueueClientLive,
 	QueueServiceLive,
 	QueueStatusServiceLive,
 	RedisClientLive,
 } from "../queue";
-import registryData from "../plugin-runtime/registry.json" with { type: "json" };
 
 // Logging for workers
 const LoggingLayer = Layer.mergeAll(

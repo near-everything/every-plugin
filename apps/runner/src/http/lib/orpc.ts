@@ -25,7 +25,8 @@ const requireAuth = o.middleware(async ({ context, next }) => {
 		throw new ORPCError("FORBIDDEN");
 	}
 
-	return next({ // anything that uses this middleware should be certain that user and session are not null
+	return next({
+		// anything that uses this middleware should be certain that user and session are not null
 		context: {
 			...context,
 			session: context.session as typeof auth.$Infer.Session.session,
@@ -36,8 +37,10 @@ const requireAuth = o.middleware(async ({ context, next }) => {
 
 export const authenticatedProcedure = publicProcedure.use(requireAuth);
 
-const requireNonAnonymous = o.middleware(async ({ context, next }) => { // THis can use requireAuth
-	if (context.user!.isAnonymous) { // so this should be okay
+const requireNonAnonymous = o.middleware(async ({ context, next }) => {
+	// THis can use requireAuth
+	if (context.user!.isAnonymous) {
+		// so this should be okay
 		throw new ORPCError("FORBIDDEN");
 	}
 

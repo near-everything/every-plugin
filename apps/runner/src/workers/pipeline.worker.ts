@@ -86,19 +86,32 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 			}
 
 			const pluginEffect = Effect.gen(function* () {
+				const pluginConstructor = yield* pluginRuntime.loadPlugin(
+					stepDefinition.pluginId,
+				);
+				const pluginInstance =
+					yield* pluginRuntime.instantiatePlugin(pluginConstructor);
+				const initializedPlugin = yield* pluginRuntime.initializePlugin(
+					pluginInstance,
+					stepDefinition.config,
+				);
 
-				const pluginConstructor = yield* pluginRuntime.loadPlugin(stepDefinition.pluginId);
-				const pluginInstance = yield* pluginRuntime.instantiatePlugin(pluginConstructor);
-				const initializedPlugin = yield* pluginRuntime.initializePlugin(pluginInstance, stepDefinition.config);
-
-				const output = yield* pluginRuntime.executePlugin(initializedPlugin, currentInput);
+				const output = yield* pluginRuntime.executePlugin(
+					initializedPlugin,
+					currentInput,
+				);
 
 				// TODO: proper typing
-				const pluginOutput = output as { success: boolean; data?: any; errors?: any[] };
+				const pluginOutput = output as {
+					success: boolean;
+					data?: any;
+					errors?: any[];
+				};
 
 				if (!pluginOutput.success) {
 					const error = new Error(
-						`Plugin ${stepDefinition.pluginId
+						`Plugin ${
+							stepDefinition.pluginId
 						} execution failed: ${JSON.stringify(pluginOutput.errors)}`,
 					);
 					yield* workflowService.updatePluginRun(pluginRun.id, {
@@ -120,9 +133,10 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 				Effect.catchAll((error) =>
 					Effect.gen(function* () {
 						// TODO
-						const errorMessage = error && typeof error === 'object' && 'message' in error
-							? String((error as any).message)
-							: 'Unknown error';
+						const errorMessage =
+							error && typeof error === "object" && "message" in error
+								? String((error as any).message)
+								: "Unknown error";
 
 						yield* workflowService.updatePluginRun(pluginRun.id, {
 							status: "FAILED",

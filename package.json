@@ -9,7 +9,6 @@
 	"scripts": {
 		"check": "biome check --write .",
 		"prepare": "husky",
-		"ruler:apply": "bunx @intellectronica/ruler@latest apply --local-only",
 		"dev": "turbo dev",
 		"build": "turbo build",
 		"check-types": "turbo check-types",

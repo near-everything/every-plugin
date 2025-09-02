@@ -13,7 +13,7 @@ import type {
 	InitializedPlugin,
 	PluginConstructor,
 	PluginInstance,
-	PluginRuntimeConfig
+	PluginRuntimeConfig,
 } from "./types";
 
 // Default logger implementation
@@ -86,9 +86,10 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 							const instance = yield* pluginService.instantiatePlugin<T>(ctor);
 							return yield* pluginService.initializePlugin<T>(instance, config);
 						}),
-					shutdown: () => Effect.sync(() => {
-						// Cleanup handled by Layer disposal
-					}),
+					shutdown: () =>
+						Effect.sync(() => {
+							// Cleanup handled by Layer disposal
+						}),
 				};
 			}),
 		).pipe(
@@ -98,14 +99,14 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 						Layer.mergeAll(
 							ModuleFederationService.Live,
 							PluginCacheService.Live.pipe(
-								Layer.provide(ModuleFederationService.Live)
+								Layer.provide(ModuleFederationService.Live),
 							),
 							SecretsService.Live(secrets),
 							Layer.succeed(PluginLoggerTag, logger),
-						)
-					)
-				)
-			)
+						),
+					),
+				),
+			),
 		);
 	};
 }
