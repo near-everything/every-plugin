@@ -1,6 +1,6 @@
 # every-plugin
 
-A modular plugin runtime system built with Effect.TS for loading, initializing, and executing remote plugins via Module Federation.
+A modular plugin runtime & system built with [Effect.TS](https://effect.website/) for loading, initializing, and executing remote plugins via [Module Federation](https://module-federation.io/).
 
 ## Installation
 
@@ -40,8 +40,8 @@ const result = await runtime.runPromise(
   Effect.gen(function* () {
     const pluginRuntime = yield* PluginRuntime;
     
-    // Create and execute a plugin in one step
-    const plugin = yield* pluginRuntime.createPlugin("@my-org/data-processor", {
+    // Use and execute a plugin in one step
+    const plugin = yield* pluginRuntime.usePlugin("@my-org/data-processor", {
       apiKey: "{{API_KEY}}", // Will be hydrated from secrets
       batchSize: 100
     });
@@ -76,7 +76,7 @@ const runtime = createPluginRuntime({
 const result = await runtime.runPromise(
   Effect.gen(function* () {
     const pluginRuntime = yield* PluginRuntime;
-    return yield* pluginRuntime.createPlugin(pluginId, config);
+    return yield* pluginRuntime.usePlugin(pluginId, config);
   })
 );
 ```
@@ -124,7 +124,7 @@ const processJob = (job: Job) =>
       const pluginRuntime = yield* PluginRuntime;
       const { pluginId, config, input } = job.data;
       
-      const plugin = yield* pluginRuntime.createPlugin(pluginId, config);
+      const plugin = yield* pluginRuntime.usePlugin(pluginId, config);
       return yield* pluginRuntime.executePlugin(plugin, input);
     })
   );
@@ -156,7 +156,7 @@ export async function executePlugin(pluginId: string, config: any, input: any) {
   return pluginRuntime.runPromise(
     Effect.gen(function* () {
       const runtime = yield* PluginRuntime;
-      const plugin = yield* runtime.createPlugin(pluginId, config);
+      const plugin = yield* runtime.usePlugin(pluginId, config);
       return yield* runtime.executePlugin(plugin, input);
     })
   );
@@ -211,7 +211,7 @@ All operations return Effect types with proper error handling:
 const result = await runtime.runPromise(
   Effect.gen(function* () {
     const pluginRuntime = yield* PluginRuntime;
-    return yield* pluginRuntime.createPlugin(pluginId, config);
+    return yield* pluginRuntime.usePlugin(pluginId, config);
   }).pipe(
     Effect.catchAll((error) => {
       console.error("Plugin execution failed:", error);
@@ -228,6 +228,7 @@ const result = await runtime.runPromise(
 Creates a managed runtime for plugin execution.
 
 **Parameters:**
+
 - `config.registry`: Plugin registry mapping
 - `config.secrets`: Secret values for hydration (optional)
 - `config.logger`: Custom logger implementation (optional)
@@ -244,7 +245,7 @@ Effect service tag for accessing the plugin runtime within Effect workflows.
 - `instantiatePlugin(constructor)`: Create plugin instance
 - `initializePlugin(instance, config)`: Initialize with config and secrets
 - `executePlugin(plugin, input)`: Execute plugin with input
-- `createPlugin(pluginId, config)`: Load + instantiate + initialize in one step
+- `usePlugin(pluginId, config)`: Load + instantiate + initialize in one step
 
 ## Development
 

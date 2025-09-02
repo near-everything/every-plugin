@@ -1,0 +1,24 @@
+{
+  "name": "@curatedotfun/template-plugin",
+  "version": "0.0.1",
+  "description": "Template plugin for curate.fun - change name and port",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "peerDependencies": {
+    "effect": "^3.17.7",
+    "zod": "^4.0.8",
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "@curatedotfun/utils": "^0.0.2",
+    "@module-federation/node": "^2.7.14",
+    "@rspack/cli": "^1.5.2",
+    "@rspack/core": "^1.5.2",
+    "every-plugin": "workspace:*"
+  },
+  "scripts": {
+    "build": "rspack build && tsc -p tsconfig.build.json",
+    "dev": "rspack serve"
+  }
+}

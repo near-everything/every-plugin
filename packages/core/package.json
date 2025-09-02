@@ -17,7 +17,8 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "tsc -b"
+		"build": "tsc -b",
+		"test": "vitest"
 	},
 	"peerDependencies": {
 		"effect": ">=3.17.0 <4.0.0",
