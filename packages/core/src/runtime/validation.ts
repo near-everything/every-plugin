@@ -6,7 +6,7 @@ export const validate = <T>(
 	schema: z.ZodSchema<T>,
 	data: unknown,
 	pluginId: string,
-	stage: "config" | "input" | "output",
+	stage: "config" | "input" | "output" | "state",
 ): Effect.Effect<T, ValidationError> =>
 	Effect.gen(function* () {
 		const result = schema.safeParse(data);

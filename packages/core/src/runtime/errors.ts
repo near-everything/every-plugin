@@ -18,6 +18,6 @@ export class ModuleFederationError extends Data.TaggedError(
 
 export class ValidationError extends Data.TaggedError("ValidationError")<{
 	readonly pluginId: string;
-	readonly stage: "config" | "input" | "output";
+	readonly stage: "config" | "input" | "output" | "state";
 	readonly zodError: z.ZodError;
 }> {}

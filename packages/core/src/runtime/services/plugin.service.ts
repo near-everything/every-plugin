@@ -247,7 +247,7 @@ export class PluginService extends Effect.Tag("PluginService")<
 					timeToLive: Duration.minutes(60),
 					lookup: (cacheKey: string) => {
 						const [pluginId, configHash] = cacheKey.split(':');
-						
+
 						if (!pluginId || !configHash) {
 							return Effect.fail(new PluginRuntimeError({
 								operation: "cache-lookup",
@@ -255,9 +255,9 @@ export class PluginService extends Effect.Tag("PluginService")<
 								retryable: false,
 							}));
 						}
-						
+
 						const config = configByHash.get(configHash);
-						
+
 						if (!config) {
 							return Effect.fail(new PluginRuntimeError({
 								operation: "cache-lookup",
@@ -294,13 +294,15 @@ export class PluginService extends Effect.Tag("PluginService")<
 								"input",
 							).pipe(
 								Effect.mapError(
-									(validationError): PluginRuntimeError =>
-										new PluginRuntimeError({
+									(validationError): PluginRuntimeError => {
+										console.log("got input error", validationError.zodError);
+										return new PluginRuntimeError({
 											pluginId: plugin.id,
 											operation: "validate-input",
 											cause: validationError.zodError,
 											retryable: false,
-										}),
+										});
+									},
 								),
 							);
 
@@ -334,13 +336,15 @@ export class PluginService extends Effect.Tag("PluginService")<
 								"output",
 							).pipe(
 								Effect.mapError(
-									(validationError): PluginRuntimeError =>
-										new PluginRuntimeError({
+									(validationError): PluginRuntimeError => {
+										console.log("got output error", validationError.zodError);
+										return new PluginRuntimeError({
 											pluginId: plugin.id,
 											operation: "validate-output",
 											cause: validationError.zodError,
 											retryable: false,
-										}),
+										});
+									},
 								),
 							);
 
@@ -352,7 +356,7 @@ export class PluginService extends Effect.Tag("PluginService")<
 					): Effect.Effect<InitializedPlugin<T>, PluginRuntimeError> => {
 						const configHash = generateConfigHash(config);
 						const cacheKey = `${pluginId}:${configHash}`;
-						
+
 						// Store config for cache lookup
 						configByHash.set(configHash, config);
 
@@ -363,21 +367,21 @@ export class PluginService extends Effect.Tag("PluginService")<
 					shutdownPlugin: (plugin: InitializedPlugin<AnyPlugin>) =>
 						Effect.gen(function* () {
 							const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
-							
+
 							// Remove from active plugins
 							activePlugins.delete(plugin);
-							
+
 							// Try to invalidate from cache if it exists there
 							const configHash = generateConfigHash(plugin.config);
 							const cacheKey = `${plugin.plugin.id}:${configHash}`;
-							
+
 							yield* cache.invalidate(cacheKey).pipe(
 								Effect.catchAll(() => Effect.void) // Ignore if not in cache
 							);
-							
+
 							// Clean up config hash
 							configByHash.delete(configHash);
-							
+
 							// Shutdown the plugin
 							yield* plugin.plugin.shutdown().pipe(
 								Effect.mapError((error): PluginRuntimeError =>

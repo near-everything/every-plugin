@@ -1,0 +1,617 @@
+---
+title: Source Plugins
+description: Creating contract-first source plugins with oRPC for data streaming and collection
+---
+
+Source plugins are specialized plugins that fetch data from external sources using a contract-first approach with oRPC. They support streaming operations with built-in state management and procedure-based routing.
+
+## Overview
+
+Source plugins use a modern contract-first development approach:
+
+- **Contract-First**: Define API contracts using oRPC for type safety
+- **Procedure Routing**: Support multiple procedures (getById, getBulk, search) via discriminated unions
+- **State Management**: Support resumable operations with `lastProcessedState`
+- **Streaming**: Can be used with the `streamPlugin` method for continuous data collection
+- **Type Safety**: Full TypeScript support with automatic type inference
+
+## Creating a Source Plugin
+
+### Contract Definition
+
+First, define your API contract using oRPC:
+
+```typescript
+// src/contract.ts
+import { initORPC } from "@orpc/server";
+import { z } from "zod";
+
+// Define your schemas
+const StateSchema = z.object({
+  pageNumber: z.number().optional(),
+  cursor: z.string().optional(),
+  lastItemId: z.string().optional(),
+});
+
+const SourceItemSchema = z.object({
+  externalId: z.string(),
+  content: z.string(),
+  contentType: z.string(),
+  createdAt: z.string(),
+  url: z.string().optional(),
+  authors: z.array(z.object({
+    username: z.string(),
+    displayName: z.string().optional(),
+  })).optional(),
+  raw: z.any(),
+});
+
+// Initialize oRPC
+const orpc = initORPC();
+
+// Define your contract with procedures
+export const contract = orpc.contract({
+  getById: orpc.route({
+    method: "POST",
+    path: "/getById",
+    summary: "Get a single item by ID",
+    description: "Fetch a specific item using its unique identifier",
+  })
+    .input(z.object({
+      id: z.string().min(1, "ID is required"),
+    }))
+    .output(z.object({
+      item: SourceItemSchema.optional(),
+      nextCursor: z.string().optional(),
+    })),
+
+  getBulk: orpc.route({
+    method: "POST", 
+    path: "/getBulk",
+    summary: "Get multiple items by IDs",
+    description: "Fetch multiple items using their unique identifiers",
+  })
+    .input(z.object({
+      ids: z.array(z.string()).min(1, "At least one ID is required"),
+    }))
+    .output(z.object({
+      items: z.array(SourceItemSchema),
+      nextCursor: z.string().optional(),
+    })),
+
+  search: orpc.route({
+    method: "POST",
+    path: "/search", 
+    summary: "Search for items",
+    description: "Search for items using query parameters",
+  })
+    .input(z.object({
+      query: z.string().min(1, "Query is required"),
+      limit: z.number().optional(),
+    }))
+    .output(z.object({
+      items: z.array(SourceItemSchema),
+      nextCursor: z.string().optional(),
+    })),
+});
+
+export type Contract = typeof contract;
+```
+
+### Plugin Configuration
+
+Define your plugin configuration schema:
+
+```typescript
+// src/schemas/index.ts
+import { createConfigSchema } from "every-plugin";
+import { z } from "zod";
+
+export const StateSchema = z.object({
+  pageNumber: z.number().optional(),
+  cursor: z.string().optional(),
+  lastItemId: z.string().optional(),
+});
+
+export const SourceTemplateConfigSchema = createConfigSchema(
+  z.object({
+    baseUrl: z.string().url().optional(),
+    timeout: z.number().optional(),
+  }),
+  z.object({
+    apiKey: z.string().min(1, "API key is required"),
+  }),
+);
+
+export type SourceTemplateConfig = z.infer<typeof SourceTemplateConfigSchema>;
+export type State = z.infer<typeof StateSchema>;
+```
+
+### Plugin Implementation
+
+Implement your source plugin using the contract:
+
+```typescript
+// src/index.ts
+import { call } from "@orpc/server";
+import {
+  ConfigurationError,
+  Effect,
+  PluginExecutionError,
+  PluginLoggerTag,
+  type ContractSourcePlugin,
+} from "every-plugin";
+import type { Contract } from "./contract";
+import { SourceTemplateConfigSchema, type State } from "./schemas";
+
+export class MySourcePlugin implements ContractSourcePlugin<Contract, typeof SourceTemplateConfigSchema, typeof StateSchema> {
+  readonly id = "my-source" as const;
+  readonly type = "source" as const;
+  readonly contract = contract;
+  readonly configSchema = SourceTemplateConfigSchema;
+  readonly stateSchema = StateSchema;
+
+  private client: ApiClient | null = null;
+
+  initialize(config: SourceTemplateConfig): Effect.Effect<void, ConfigurationError> {
+    return Effect.gen(function* () {
+      const logger = yield* PluginLoggerTag;
+      
+      yield* Effect.tryPromise({
+        try: async () => {
+          this.client = new ApiClient({
+            baseUrl: config.variables?.baseUrl || "https://api.example.com",
+            apiKey: config.secrets.apiKey,
+            timeout: config.variables?.timeout || 30000,
+          });
+          
+          // Test connection
+          await this.client.ping();
+        },
+        catch: (error) => new ConfigurationError(
+          `Failed to initialize API client: ${error}`
+        ),
+      });
+
+      yield* logger.info("Plugin initialized successfully");
+    }).pipe(Effect.provide(this));
+  }
+
+  execute(input: ContractSourceInput<Contract, State>): Effect.Effect<any, PluginExecutionError> {
+    return Effect.gen(function* () {
+      const logger = yield* PluginLoggerTag;
+      
+      if (!this.client) {
+        return yield* Effect.fail(
+          new PluginExecutionError("Plugin not initialized", false)
+        );
+      }
+
+      // Route to appropriate procedure using discriminated union
+      switch (input.procedure) {
+        case "getById":
+          return yield* call(this.getById, input.input, { context: {} });
+          
+        case "getBulk":
+          return yield* call(this.getBulk, input.input, { context: {} });
+          
+        case "search":
+          return yield* call(this.search, input.input, { context: {} });
+          
+        default:
+          return yield* Effect.fail(
+            new PluginExecutionError(`Unknown procedure: ${(input as any).procedure}`, false)
+          );
+      }
+    }).pipe(Effect.provide(this));
+  }
+
+  // Procedure implementations
+  private getById = async (input: { id: string }) => {
+    const item = await this.client!.getById(input.id);
+    
+    return {
+      item: item ? this.transformToSourceItem(item) : undefined,
+      nextCursor: undefined,
+    };
+  };
+
+  private getBulk = async (input: { ids: string[] }) => {
+    const items = await this.client!.getBulk(input.ids);
+    
+    return {
+      items: items.map(item => this.transformToSourceItem(item)),
+      nextCursor: undefined,
+    };
+  };
+
+  private search = async (input: { query: string; limit?: number }) => {
+    const currentPage = this.getCurrentState()?.pageNumber ?? 1;
+    const limit = input.limit ?? 20;
+    
+    const results = await this.client!.search(input.query, {
+      page: currentPage,
+      limit,
+    });
+    
+    const items = results.items.map(item => this.transformToSourceItem(item));
+    const hasMore = results.items.length === limit;
+    
+    return {
+      items,
+      nextCursor: hasMore ? `page_${currentPage + 1}` : undefined,
+    };
+  };
+
+  private transformToSourceItem(apiItem: any) {
+    return {
+      externalId: apiItem.id,
+      content: apiItem.text || apiItem.content,
+      contentType: "post",
+      createdAt: apiItem.timestamp || new Date().toISOString(),
+      url: apiItem.url,
+      authors: apiItem.authors?.map((author: any) => ({
+        username: author.handle || author.username,
+        displayName: author.name || author.displayName,
+      })),
+      raw: apiItem,
+    };
+  }
+
+  shutdown(): Effect.Effect<void, never> {
+    return Effect.gen(function* () {
+      const logger = yield* PluginLoggerTag;
+      
+      if (this.client) {
+        yield* Effect.promise(() => this.client!.disconnect());
+        this.client = null;
+      }
+      
+      yield* logger.info("Plugin shutdown complete");
+    }).pipe(Effect.provide(this));
+  }
+}
+
+// Export the plugin instance
+export default new MySourcePlugin();
+```
+
+## Using Source Plugins
+
+### Basic Execution
+
+Execute specific procedures using discriminated union inputs:
+
+```typescript
+const runtime = createPluginRuntime({ registry, secrets });
+
+// Execute getById procedure
+const singleItem = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    const plugin = yield* pluginRuntime.usePlugin("my-source", config);
+    const output = yield* pluginRuntime.executePlugin(plugin, {
+      procedure: "getById",
+      input: { id: "item-123" },
+      state: null,
+    });
+    
+    return output;
+  })
+);
+
+// Execute search procedure
+const searchResults = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    const plugin = yield* pluginRuntime.usePlugin("my-source", config);
+    const output = yield* pluginRuntime.executePlugin(plugin, {
+      procedure: "search",
+      input: { query: "typescript", limit: 10 },
+      state: null,
+    });
+    
+    return output;
+  })
+);
+
+// Execute getBulk procedure
+const bulkItems = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    const plugin = yield* pluginRuntime.usePlugin("my-source", config);
+    const output = yield* pluginRuntime.executePlugin(plugin, {
+      procedure: "getBulk",
+      input: { ids: ["item-1", "item-2", "item-3"] },
+      state: null,
+    });
+    
+    return output;
+  })
+);
+```
+
+### Streaming
+
+Stream data continuously with built-in state management:
+
+```typescript
+// Stream search results
+const searchStream = yield* pluginRuntime.streamPlugin(
+  "my-source",
+  config,
+  {
+    procedure: "search",
+    input: { query: "typescript", limit: 20 },
+    state: null,
+  },
+  {
+    maxItems: 1000,
+    maxIterations: 10,
+    stopWhenEmpty: true,
+    
+    // Callbacks for handling data and state
+    onItems: (items, context, state) => Effect.gen(function* () {
+      yield* Effect.log(`Received ${items.length} items from ${context.pluginId}`);
+      // Process items...
+    }),
+    
+    onStateChange: (state, context) => Effect.gen(function* () {
+      // Persist state for resumption
+      yield* saveStateToDatabase(state.lastProcessedState);
+    }),
+    
+    onError: (error, context, state) => Effect.gen(function* () {
+      yield* Effect.logError("Streaming error", error);
+    }),
+  }
+);
+
+// Consume the stream
+yield* searchStream.pipe(
+  Stream.tap((item) => Effect.log(`Processing: ${item.externalId}`)),
+  Stream.runDrain
+);
+
+// Stream single items (useful for monitoring)
+const singleItemStream = yield* pluginRuntime.streamPlugin(
+  "my-source",
+  config,
+  {
+    procedure: "getById",
+    input: { id: "monitored-item" },
+    state: null,
+  },
+  {
+    maxIterations: 1, // Single execution
+  }
+);
+
+// Stream bulk items
+const bulkStream = yield* pluginRuntime.streamPlugin(
+  "my-source",
+  config,
+  {
+    procedure: "getBulk", 
+    input: { ids: ["item-1", "item-2", "item-3"] },
+    state: null,
+  },
+  {
+    maxIterations: 1, // Single execution for bulk
+  }
+);
+```
+
+## Streaming Options
+
+### Control Options
+
+- **`maxItems`**: Maximum total items to collect across all iterations
+- **`maxIterations`**: Maximum plugin executions
+- **`pollInterval`**: Time between plugin executions (for continuous streaming)
+- **`stopWhenEmpty`**: Stop when no items are returned
+- **`continueOnError`**: Continue streaming on errors
+
+### Stop Conditions
+
+```typescript
+{
+  stopCondition: (item, context, state) => {
+    // Stop when we find a specific item
+    return item.externalId === "target-id";
+  }
+}
+```
+
+### Callbacks
+
+All callbacks receive proper context and state separation:
+
+- **`onItems`**: Called when items are received from any procedure
+- **`onStateChange`**: Called when state changes between iterations
+- **`onError`**: Called on errors (with full context)
+- **`onIterationComplete`**: Called after each plugin execution
+
+## State Management
+
+### Contract-Based State Flow
+
+State flows through the discriminated union input:
+
+```typescript
+// Initial execution
+const input = {
+  procedure: "search",
+  input: { query: "typescript" },
+  state: null, // No previous state
+};
+
+// Subsequent execution with state
+const nextInput = {
+  procedure: "search", 
+  input: { query: "typescript" },
+  state: {
+    lastProcessedState: {
+      pageNumber: 2,
+      cursor: "page_2",
+      lastItemId: "item-xyz",
+    },
+  },
+};
+```
+
+### State Persistence
+
+```typescript
+{
+  onStateChange: (state, context) => Effect.gen(function* () {
+    // Save to database with procedure context
+    yield* db.saveWorkflowState(workflowId, {
+      procedure: context.currentInput.procedure,
+      lastProcessedState: state.lastProcessedState,
+      updatedAt: context.iteration.lastExecutionAt,
+    });
+  })
+}
+```
+
+## Error Handling
+
+### Procedure-Level Error Handling
+
+Each procedure can handle errors independently:
+
+```typescript
+private search = async (input: { query: string; limit?: number }) => {
+  try {
+    const results = await this.client!.search(input.query);
+    return { items: results.map(this.transformToSourceItem), nextCursor: null };
+  } catch (error) {
+    throw new PluginExecutionError(
+      `Search failed for query "${input.query}": ${error}`,
+      true // Mark as retryable
+    );
+  }
+};
+```
+
+### Streaming Error Recovery
+
+```typescript
+{
+  continueOnError: true,
+  onError: (error, context, state) => Effect.gen(function* () {
+    yield* Effect.log(`Error in procedure ${context.currentInput.procedure}: ${error.message}`);
+    
+    if (error.retryable) {
+      yield* Effect.log("Retryable error, continuing...");
+    } else {
+      yield* Effect.log("Fatal error, but continuing due to continueOnError");
+    }
+  })
+}
+```
+
+## Testing
+
+### Unit Testing Procedures
+
+Test individual procedures with contract-based inputs:
+
+```typescript
+describe("Contract-based Procedures", () => {
+  it("should execute getById procedure", async () => {
+    const result = await runtime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
+        const plugin = yield* pluginRuntime.usePlugin("my-source", config);
+        
+        const output = yield* pluginRuntime.executePlugin(plugin, {
+          procedure: "getById",
+          input: { id: "test-id-123" },
+          state: null,
+        });
+        
+        return output;
+      })
+    );
+
+    expect(result.item).toBeDefined();
+    expect(result.item.externalId).toBe("test-id-123");
+  });
+
+  it("should execute search procedure", async () => {
+    const result = await runtime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
+        const plugin = yield* pluginRuntime.usePlugin("my-source", config);
+        
+        const output = yield* pluginRuntime.executePlugin(plugin, {
+          procedure: "search",
+          input: { query: "test query", limit: 10 },
+          state: null,
+        });
+        
+        return output;
+      })
+    );
+
+    expect(result.items).toBeDefined();
+    expect(Array.isArray(result.items)).toBe(true);
+    expect(result.items.length).toBeGreaterThan(0);
+  });
+});
+```
+
+### Streaming Tests
+
+Test streaming with different procedures:
+
+```typescript
+it("should stream search procedure", async () => {
+  const result = await runtime.runPromise(
+    Effect.gen(function* () {
+      const pluginRuntime = yield* PluginRuntime;
+
+      const stream = yield* pluginRuntime.streamPlugin(
+        "my-source",
+        config,
+        {
+          procedure: "search",
+          input: { query: "test query", limit: 10 },
+          state: null,
+        },
+        {
+          maxItems: 20,
+          maxIterations: 2,
+        }
+      );
+
+      const items = yield* stream.pipe(Stream.runCollect);
+      return Array.from(items);
+    })
+  );
+
+  expect(result.length).toBeGreaterThan(0);
+  expect(result.length).toBeLessThanOrEqual(20);
+});
+```
+
+## Best Practices
+
+1. **Contract Design**: Define clear, focused procedures with proper input/output schemas
+2. **State Management**: Keep state minimal and serializable across procedure calls
+3. **Error Handling**: Mark appropriate errors as retryable at the procedure level
+4. **Type Safety**: Leverage oRPC's automatic type inference for full type safety
+5. **Procedure Separation**: Keep procedures focused on single responsibilities
+6. **Resource Cleanup**: Implement proper `shutdown()` method for connection cleanup
+7. **Testing**: Test both individual procedures and streaming scenarios
+
+## Related
+
+- [Plugin Basics](./plugin) - Core plugin concepts
+- [Runtime API](./api) - Runtime methods and configuration
+- [oRPC Documentation](https://orpc.io) - Contract-first API development
