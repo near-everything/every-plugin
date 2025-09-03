@@ -16,14 +16,22 @@ export function createSourceInputSchema<
 	const contractEntries = Object.entries(contract as Record<string, any>);
 
 	const procedureSchemas = contractEntries.map(([procedureName, procedureSpec]) => {
-		// Extract input schema from oRPC contract procedure
+		// Extract input and output schemas from oRPC contract procedure
 		const inputSchema = procedureSpec['~orpc']?.inputSchema || z.object({});
-
-		return z.object({
+		const outputSchema = procedureSpec['~orpc']?.outputSchema || z.object({});
+		
+		// Check if this procedure is streamable (has nextState in output, state in input)
+		const isStreamable = outputSchema._def?.shape?.nextState !== undefined && inputSchema._def?.shape?.state !== undefined;
+		
+		const baseSchema = z.object({
 			procedure: z.literal(procedureName),
 			input: inputSchema,
-			state: stateSchema,
 		});
+		
+		// Only add state field for streamable procedures
+		return isStreamable 
+			? baseSchema.extend({ state: stateSchema })
+			: baseSchema;
 	});
 
 	return z.discriminatedUnion("procedure", procedureSchemas as [z.ZodObject<any>, ...z.ZodObject<any>[]]);
@@ -43,12 +51,7 @@ export function createSourceOutputSchema<
 
 	const procedureOutputSchemas = contractEntries.map(([_, procedureSpec]) => {
 		// Extract output schema from oRPC contract procedure
-		const baseOutputSchema = procedureSpec['~orpc']?.outputSchema || z.object({});
-
-		// Extend the base output schema with optional state for streaming
-		return baseOutputSchema.extend({
-			nextState: stateSchema,
-		});
+		return procedureSpec['~orpc']?.outputSchema || z.object({});
 	});
 
 	// Return union of all procedure output schemas
@@ -69,7 +72,7 @@ export interface SourcePlugin<
 	readonly configSchema: TConfigSchema;
 	readonly stateSchema: TStateSchema;
 	readonly inputSchema: ReturnType<typeof createSourceInputSchema<TContract, TStateSchema>>;
-	readonly outputSchema: z.ZodTypeAny; // Contract-derived output schema
+	readonly outputSchema: ReturnType<typeof createSourceOutputSchema<TContract, TStateSchema>>;
 
 	initialize(
 		config?: z.infer<TConfigSchema>,
@@ -77,7 +80,7 @@ export interface SourcePlugin<
 
 	execute(
 		input: z.infer<this['inputSchema']>,
-	): Effect.Effect<any, PluginExecutionError, PluginLoggerTag>;
+	): Effect.Effect<z.infer<this['outputSchema']>, PluginExecutionError, PluginLoggerTag>;
 
 	shutdown(): Effect.Effect<void, never, PluginLoggerTag>;
 

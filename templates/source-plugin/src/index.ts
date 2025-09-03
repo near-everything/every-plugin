@@ -9,15 +9,14 @@ import {
 	type z
 } from "every-plugin";
 import { SourceTemplateClient } from "./client";
-import { sourceContract } from "./contract";
 import {
 	type SourceTemplateConfig,
 	SourceTemplateConfigSchema,
 	type SourceTemplateInput,
 	SourceTemplateInputSchema,
-	type SourceTemplateOutput,
 	SourceTemplateOutputSchema,
-	StateSchema
+	StateSchema, 
+	sourceContract
 } from "./schemas";
 
 type ContractInputs = InferContractRouterInputs<typeof sourceContract>;
@@ -41,6 +40,17 @@ export class SourceTemplatePlugin implements SourcePlugin<
 
 	private config: SourceTemplateConfig | null = null;
 	private client: SourceTemplateClient | null = null;
+	
+	// State injection middleware for streaming procedures
+	private stateMiddleware = implement(sourceContract).$context<{ state?: z.infer<typeof StateSchema> }>().middleware(async ({ context, next }) => {
+		return next({
+			context: {	
+
+				state: context.state
+			}
+		});
+	});
+	
 	private os = implement(sourceContract);
 
 	initialize(
@@ -130,13 +140,13 @@ export class SourceTemplatePlugin implements SourcePlugin<
 		};
 	});
 
-	private search = this.os.search.handler(async ({ input }) => {
+	private search = this.os.use(this.stateMiddleware).search.handler(async ({ input, context }) => {
 		if (!this.client) {
 			throw new Error("Plugin not initialized");
 		}
 
-		// Get page number from state, default to 1
-		const currentPage = input.state?.page ?? 1;
+		// Get page number from state passed through context, default to 1
+		const currentPage = context.state?.page ?? 1;
 		const limit = input.limit || 10;
 
 		// Mock API call with pagination
@@ -197,7 +207,7 @@ export class SourceTemplatePlugin implements SourcePlugin<
 	});
 
 	// Main execute method that routes procedures based on discriminated union input
-	execute(input: SourceTemplateInput): Effect.Effect<ContractOutputs[keyof ContractOutputs], PluginExecutionError, PluginLoggerTag> {
+	execute(input: SourceTemplateInput): Effect.Effect<z.infer<this['outputSchema']>, PluginExecutionError, PluginLoggerTag> {
 		const self = this;
 		return Effect.gen(function* () {
 			if (!self.config) {
@@ -209,22 +219,28 @@ export class SourceTemplatePlugin implements SourcePlugin<
 			// Route based on procedure field
 			switch (input.procedure) {
 				case "getById": {
-					return yield* Effect.tryPromise({
+					const result = yield* Effect.tryPromise({
 						try: () => call(self.getById, input.input as ContractInputs["getById"], { context: {} }),
 						catch: (error) => new PluginExecutionError(`getById failed: ${error}`, true)
 					});
+					return result as z.infer<typeof self['outputSchema']>;
 				}
 				case "search": {
-					return yield* Effect.tryPromise({
-						try: () => call(self.search, input.input as ContractInputs["search"], { context: {} }),
+					// For search, pass state through context
+					const result = yield* Effect.tryPromise({
+						try: () => call(self.search, input.input as ContractInputs["search"], { 
+							context: { state: ('state' in input ? input.state : null) as z.infer<typeof StateSchema> } 
+						}),
 						catch: (error) => new PluginExecutionError(`search failed: ${error}`, true)
 					});
+					return result as z.infer<typeof self['outputSchema']>;
 				}
 				case "getBulk": {
-					return yield* Effect.tryPromise({
+					const result = yield* Effect.tryPromise({
 						try: () => call(self.getBulk, input.input as ContractInputs["getBulk"], { context: {} }),
 						catch: (error) => new PluginExecutionError(`getBulk failed: ${error}`, true)
 					});
+					return result as z.infer<typeof self['outputSchema']>;
 				}
 				default:
 					return yield* Effect.fail(
