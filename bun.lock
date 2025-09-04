@@ -13,13 +13,16 @@
     "apps/docs": {
       "name": "@every-plugin/docs",
       "dependencies": {
+        "@radix-ui/react-collapsible": "^1.1.12",
         "@tanstack/react-router": "^1.131.30",
         "@tanstack/react-router-devtools": "^1.131.30",
         "@tanstack/react-start": "^1.131.30",
         "@types/mdx": "^2.0.13",
+        "class-variance-authority": "^0.7.1",
         "fumadocs-core": "^15.7.8",
         "fumadocs-mdx": "^11.8.3",
         "fumadocs-ui": "15.7.8",
+        "lucide-react": "^0.542.0",
         "lucide-static": "^0.542.0",
         "mermaid": "^11.10.1",
         "next-themes": "^0.4.6",
@@ -105,6 +108,7 @@
         "@ai-sdk/react": "^2.0.9",
         "@orpc/client": "^1.8.4",
         "@orpc/tanstack-query": "^1.8.4",
+        "@radix-ui/react-slot": "^1.2.3",
         "@tailwindcss/vite": "^4.1.8",
         "@tanstack/react-form": "^1.0.5",
         "@tanstack/react-query": "^5.85.5",
@@ -2372,7 +2376,7 @@
 
     "lru-cache": ["lru-cache@11.1.0", "", {}, "sha512-QIXZUBJUx+2zHUdQujWejBkcD9+cs94tLn0+YL8UrCh+D5sCXZ4c7LaEH48pNwRY3MLDgqUFyhlCyjJPf1WP0A=="],
 
-    "lucide-react": ["lucide-react@0.525.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-Tm1txJ2OkymCGkvwoHt33Y2JpN5xucVq1slHcgE6Lk0WjDfjgKWor5CdVER8U6DvcfMwh4M8XxmpTiyzfmfDYQ=="],
+    "lucide-react": ["lucide-react@0.542.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-w3hD8/SQB7+lzU2r4VdFyzzOzKnUjTZIF/MQJGSSvni7Llewni4vuViRppfRAa2guOsY5k4jZyxw/i9DQHv+dw=="],
 
     "lucide-static": ["lucide-static@0.542.0", "", {}, "sha512-jnXxFQYH0F24Nj5Zjje5jmMbGjClohnuSEYwTjAGuAa7UYDQiUjl0H7t4Ha19lkKryhCQA3VfeAJMjarrhzNZQ=="],
 
@@ -3698,6 +3702,10 @@
 
     "vitest/tinyexec": ["tinyexec@0.3.2", "", {}, "sha512-KQQR9yN7R5+OSwaK0XQoj22pwHoTlgYqmUscPYoknOoWCWfj/5/ABTMRi69FrKU5ffPVh5QcFikpWJI/P1ocHA=="],
 
+    "web/@orpc/client": ["@orpc/client@1.8.6", "", { "dependencies": { "@orpc/shared": "1.8.6", "@orpc/standard-server": "1.8.6", "@orpc/standard-server-fetch": "1.8.6", "@orpc/standard-server-peer": "1.8.6" } }, "sha512-DsQnmyh1tARlIdQfotasZYFnuYiOkohA3sZo3EpEYifAC4d0w7W/ctE1yDqX9U0Pb5zfTci+Y1B/6PURQvefXQ=="],
+
+    "web/lucide-react": ["lucide-react@0.525.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-Tm1txJ2OkymCGkvwoHt33Y2JpN5xucVq1slHcgE6Lk0WjDfjgKWor5CdVER8U6DvcfMwh4M8XxmpTiyzfmfDYQ=="],
+
     "web/react": ["react@19.0.0", "", {}, "sha512-V8AVnmPIICiWpGfm6GLzCR/W5FXLchHop40W4nXBmdlEceh16rCN8O8LNWm5bh5XUX91fh7KpA+W0TgMKmgTpQ=="],
 
     "web/react-dom": ["react-dom@19.0.0", "", { "dependencies": { "scheduler": "^0.25.0" }, "peerDependencies": { "react": "^19.0.0" } }, "sha512-4GV5sHFG0e/0AD4X+ySy6UJd3jVl1iNsNHdpad0qhABJ11twS3TTBnseqsKurKcsNqCEFeGL3uLpVChpIO3QfQ=="],
@@ -3993,6 +4001,14 @@
     "test-source-plugin/@orpc/server/@orpc/standard-server-peer": ["@orpc/standard-server-peer@1.8.6", "", { "dependencies": { "@orpc/shared": "1.8.6", "@orpc/standard-server": "1.8.6" } }, "sha512-71K+DhksuJOI/pYzpYYfUyvDTIYx86i5ooBkG5bUlYmr+zFANiUnvBEGhndB/+Kt9ZloOtrY2gk4UaoJFuKx6w=="],
 
     "type-is/mime-types/mime-db": ["mime-db@1.54.0", "", {}, "sha512-aU5EJuIN2WDemCcAp2vFBfp/m4EAhWJnUNSSw0ixs7/kXbd6Pg64EmwJkNdFhB8aWt1sH2CTXrLxo/iAGV3oPQ=="],
+
+    "web/@orpc/client/@orpc/shared": ["@orpc/shared@1.8.6", "", { "dependencies": { "radash": "^12.1.1", "type-fest": "^4.39.1" }, "peerDependencies": { "@opentelemetry/api": ">=1.9.0" }, "optionalPeers": ["@opentelemetry/api"] }, "sha512-laRl5tvBZTFQVvdS7tWN83xlY7w7xVcn/U7GFVsy2a/lTBg4o0sK+bdN8EUGm0ijwxH1gOhUvbwinnSuXVRL8A=="],
+
+    "web/@orpc/client/@orpc/standard-server": ["@orpc/standard-server@1.8.6", "", { "dependencies": { "@orpc/shared": "1.8.6" } }, "sha512-py33OG4Mpu2LIA9Oo8lNH0THo7dcDwFPewiTYVXJ1zQN7SDHtIp+bWmtWgK81fUy5k/s5nM36hoGLojVw/1GZQ=="],
+
+    "web/@orpc/client/@orpc/standard-server-fetch": ["@orpc/standard-server-fetch@1.8.6", "", { "dependencies": { "@orpc/shared": "1.8.6", "@orpc/standard-server": "1.8.6" } }, "sha512-nwGfOFju9E5n8n3b7KdSvrewY9Sxr9Je9Pb6QvRiKn6BGispenqYApi9wkfnmLcwhxzjxeZwY3cNf8HNxcz0+g=="],
+
+    "web/@orpc/client/@orpc/standard-server-peer": ["@orpc/standard-server-peer@1.8.6", "", { "dependencies": { "@orpc/shared": "1.8.6", "@orpc/standard-server": "1.8.6" } }, "sha512-71K+DhksuJOI/pYzpYYfUyvDTIYx86i5ooBkG5bUlYmr+zFANiUnvBEGhndB/+Kt9ZloOtrY2gk4UaoJFuKx6w=="],
 
     "web/react-dom/scheduler": ["scheduler@0.25.0", "", {}, "sha512-xFVuu11jh+xcO7JOAGJNOXld8/TcEHK/4CituBUeUb5hqxJLj9YuemAEuvm9gQ/+pgXYfbQuqAkiYu+u7YEsNA=="],
 

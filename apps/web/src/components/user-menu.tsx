@@ -21,7 +21,7 @@ export default function UserMenu() {
 
 	if (!session) {
 		return (
-			<Button variant="outline" asChild>
+			<Button variant="outline" asChild className="glass border-white/20 text-white hover:bg-white/10">
 				<Link to="/login">Sign In</Link>
 			</Button>
 		);
@@ -30,16 +30,20 @@ export default function UserMenu() {
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant="outline">{session.user.name}</Button>
+				<Button variant="outline" className="glass border-white/20 text-white hover:bg-white/10">
+					{session.user.name}
+				</Button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent className="bg-card">
-				<DropdownMenuLabel>My Account</DropdownMenuLabel>
-				<DropdownMenuSeparator />
-				<DropdownMenuItem>{session.user.email}</DropdownMenuItem>
+			<DropdownMenuContent className="glass-card border-white/20 min-w-[200px]">
+				<DropdownMenuLabel className="text-white">My Account</DropdownMenuLabel>
+				<DropdownMenuSeparator className="bg-white/20" />
+				<DropdownMenuItem className="text-white hover:bg-white/10 focus:bg-white/10">
+					{session.user.email}
+				</DropdownMenuItem>
 				<DropdownMenuItem asChild>
 					<Button
 						variant="destructive"
-						className="w-full"
+						className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white"
 						onClick={() => {
 							authClient.signOut({
 								fetchOptions: {

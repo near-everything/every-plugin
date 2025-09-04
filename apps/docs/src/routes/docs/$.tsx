@@ -20,9 +20,82 @@ import { File, Folder, Files } from 'fumadocs-ui/components/files';
 export const Route = createFileRoute("/docs/$")({
   component: Page,
   loader: async ({ params }) => {
-    const data = await loader({ data: params._splat?.split("/") ?? [] });
+    const slugs = params._splat?.split("/") ?? [];
+    const data = await loader({ data: slugs });
     await clientLoader.preload(data.path);
-    return data;
+    return { ...data, slugs };
+  },
+  head: ({ loaderData }) => {
+    const slugs = loaderData?.slugs ?? [];
+    const page = source.getPage(slugs);
+    const frontmatter = page?.data._exports?.frontmatter as { title?: string; description?: string } | undefined;
+    
+    const title = frontmatter?.title 
+      ? `${frontmatter.title} | every plugin docs`
+      : "every plugin docs";
+    
+    const description = frontmatter?.description || 
+      "Documentation for every plugin - a composable remote plugin runtime built with Effect.TS and Module Federation.";
+    
+    const url = `https://plugin.everything.dev/docs/${slugs.join("/")}`;
+    
+    return {
+      title,
+      meta: [
+        {
+          name: "description",
+          content: description,
+        },
+        // Open Graph
+        {
+          property: "og:title",
+          content: title,
+        },
+        {
+          property: "og:description",
+          content: description,
+        },
+        {
+          property: "og:url",
+          content: url,
+        },
+        {
+          property: "og:type",
+          content: "article",
+        },
+        {
+          property: "og:image",
+          content: "https://plugin.everything.dev/metadata.png",
+        },
+        // Twitter
+        {
+          property: "twitter:card",
+          content: "summary_large_image",
+        },
+        {
+          property: "twitter:title",
+          content: title,
+        },
+        {
+          property: "twitter:description",
+          content: description,
+        },
+        {
+          property: "twitter:url",
+          content: url,
+        },
+        {
+          property: "twitter:image",
+          content: "https://plugin.everything.dev/metadata.png",
+        },
+      ],
+      links: [
+        {
+          rel: "canonical",
+          href: url,
+        },
+      ],
+    };
   },
 });
 

@@ -22,10 +22,77 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "every-plugin",
+        title: "every plugin | composable remote plugin runtime",
+      },
+      {
+        name: "title",
+        content: "every plugin | composable remote plugin runtime",
+      },
+      {
+        name: "description",
+        content: "An open source, modular plugin runtime & system built with Effect.TS for loading, initializing, and executing remote plugins via Module Federation. Create and connect remote plugins together to build powerful workflows.",
+      },
+      // Open Graph / Facebook
+      {
+        property: "og:type",
+        content: "website",
+      },
+      {
+        property: "og:url",
+        content: "https://plugin.everything.dev/",
+      },
+      {
+        property: "og:title",
+        content: "every plugin | composable remote plugin runtime",
+      },
+      {
+        property: "og:description",
+        content: "An open source, modular plugin runtime & system built with Effect.TS for loading, initializing, and executing remote plugins via Module Federation. Create and connect remote plugins together to build powerful workflows.",
+      },
+      {
+        property: "og:image",
+        content: "https://plugin.everything.dev/metadata.png",
+      },
+      // X (Twitter)
+      {
+        property: "twitter:card",
+        content: "summary_large_image",
+      },
+      {
+        property: "twitter:url",
+        content: "https://plugin.everything.dev/",
+      },
+      {
+        property: "twitter:title",
+        content: "every plugin | composable remote plugin runtime",
+      },
+      {
+        property: "twitter:description",
+        content: "An open source, modular plugin runtime & system built with Effect.TS for loading, initializing, and executing remote plugins via Module Federation. Create and connect remote plugins together to build powerful workflows.",
+      },
+      {
+        property: "twitter:image",
+        content: "https://plugin.everything.dev/metadata.png",
+      },
+      // Additional SEO
+      {
+        name: "robots",
+        content: "index, follow",
+      },
+      {
+        name: "author",
+        content: "every plugin",
+      },
+      {
+        name: "keywords",
+        content: "plugin runtime, module federation, effect.ts, remote plugins, composable plugins, typescript, orpc",
       },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "canonical", href: "https://plugin.everything.dev/" },
+      { rel: "icon", href: "/favicon.ico" },
+    ],
   }),
   component: RootComponent,
 });
