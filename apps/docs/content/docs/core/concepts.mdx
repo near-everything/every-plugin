@@ -9,13 +9,13 @@ description: Effect, Module Federation, oRPC, and Zod foundations
 
 ### Why Effect?
 
-**Composability**: Chain operations with `yield*` syntax for readable async code.
+- **Composability**: Chain operations with `yield*` syntax for readable async code.
 
-**Error Handling**: Built-in error types and recovery patterns.
+- **Error Handling**: Built-in error types and recovery patterns.
 
-**Resource Management**: Automatic cleanup prevents memory leaks.
+- **Resource Management**: Automatic cleanup prevents memory leaks.
 
-**Type Safety**: Full TypeScript integration with inference.
+- **Type Safety**: Full TypeScript integration with inference.
 
 ```typescript
 const workflow = Effect.gen(function* () {
@@ -35,13 +35,13 @@ const workflow = Effect.gen(function* () {
 
 ### Why Module Federation?
 
-**Dynamic Loading**: Load plugins at runtime without bundling.
+- **Dynamic Loading**: Load plugins at runtime without bundling.
 
-**Version Management**: Different plugin versions can coexist.
+- **Version Management**: Different plugin versions can coexist.
 
-**Code Splitting**: Reduce bundle size by loading plugins on demand.
+- **Code Splitting**: Reduce bundle size by loading plugins on demand.
 
-**Isolation**: Plugins run in isolated contexts.
+- **Isolation**: Plugins run in isolated contexts.
 
 ```typescript
 // Plugin loaded from remote URL
@@ -61,13 +61,13 @@ const registry = {
 
 ### Why oRPC?
 
-**Type Safety**: Compile-time validation of inputs and outputs.
+- **Type Safety**: Compile-time validation of inputs and outputs.
 
-**Contract-First**: Define API contracts before implementation.
+- **Contract-First**: Define API contracts before implementation.
 
-**Multiple Procedures**: Single plugin can expose multiple operations.
+- **Multiple Procedures**: Single plugin can expose multiple operations.
 
-**Validation**: Runtime validation with Zod schemas.
+- **Validation**: Runtime validation with Zod schemas.
 
 ```typescript
 // Define contract
@@ -99,13 +99,13 @@ private search = implement(this.contract).search.handler(async ({ input }) => {
 
 ### Why Zod?
 
-**Runtime Validation**: Validate data at plugin boundaries.
+- **Runtime Validation**: Validate data at plugin boundaries.
 
-**Type Inference**: Generate TypeScript types from schemas.
+- **Type Inference**: Generate TypeScript types from schemas.
 
-**Composability**: Build complex schemas from simple ones.
+- **Composability**: Build complex schemas from simple ones.
 
-**Error Messages**: Clear validation error messages.
+- **Error Messages**: Clear validation error messages.
 
 ```typescript
 // Schema definition
