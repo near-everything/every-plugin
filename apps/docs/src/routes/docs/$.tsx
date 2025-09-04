@@ -15,6 +15,7 @@ import { Mermaid } from "@/components/mermaid";
 import { baseOptions } from "@/lib/layout.shared";
 import { source } from "@/lib/source";
 import { docs } from "../../../source.generated";
+import { File, Folder, Files } from 'fumadocs-ui/components/files';
 
 export const Route = createFileRoute("/docs/$")({
   component: Page,
@@ -51,6 +52,9 @@ const clientLoader = createClientLoader(docs.doc, {
             components={{
               ...defaultMdxComponents,
               Mermaid,
+              File,
+              Folder,
+              Files
             }}
           />
         </DocsBody>

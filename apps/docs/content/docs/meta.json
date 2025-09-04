@@ -1,0 +1,10 @@
+{
+  "title": "Plugins",
+  "description": "Creating plugins",
+  "pages": [
+    "core",
+    "plugins",
+    "runtime",
+    "examples"
+  ]
+}

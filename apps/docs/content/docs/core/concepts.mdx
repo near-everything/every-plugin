@@ -47,6 +47,7 @@ const workflow = Effect.gen(function* () {
 // Plugin loaded from remote URL
 const registry = {
   "my-plugin": {
+    description: "A remote plugin that can do whatever you want",
     remoteUrl: "https://cdn.example.com/plugins/my-plugin/remoteEntry.js",
     type: "transformer",
     version: "1.0.0"

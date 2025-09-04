@@ -1,9 +1,8 @@
 ---
-title: Every Plugin
-description: A composable plugin runtime using Effect and Module Federation
+title: Introduction
 ---
 
-every-plugin is a framework for building composable, type-safe plugin systems. It combines [Effect](https://effect.website/) for async composition, [Module Federation](https://module-federation.io/) for remote loading, and [oRPC](https://orpc.io/) for type-safe contracts.
+**every-plugin** is a framework for building composable, type-safe plugin systems. It combines [Effect](https://effect.website/) for async composition, [Module Federation](https://module-federation.io/) for remote loading, and [oRPC](https://orpc.io/) for type-safe contracts.
 
 ## Architecture
 
@@ -35,13 +34,13 @@ graph TD
 
 ## Core Concepts
 
-**Effect Composition**: Chain plugin operations with automatic error handling and resource cleanup.
+- **Effect Composition**: Chain plugin operations with automatic error handling and resource cleanup.
 
-**Remote Loading**: Load plugins dynamically from CDN URLs without bundling.
+- **Remote Loading**: Load plugins dynamically from CDN URLs without bundling.
 
-**Type Safety**: oRPC contracts ensure compile-time safety between runtime and plugins.
+- **Type Safety**: oRPC contracts ensure compile-time safety between runtime and plugins.
 
-**State Management**: Resumable operations with Zod-validated state schemas.
+- **State Management**: Resumable operations with Zod-validated state schemas.
 
 ## Quick Example
 
