@@ -62,44 +62,6 @@ function Home() {
             </div>
           </div>
         </div>
-
-        {/* Floating Feature Cards */}
-        <div className="relative z-10 max-w-7xl mx-auto px-8 pb-20">
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl">
-            {/* Effect Composition Card */}
-            <div className="bg-black/40 backdrop-blur-sm border border-white/10 rounded-2xl p-6 shadow-2xl hover:bg-black/50 transition-all duration-300">
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center mb-4">
-                <span className="text-white font-bold text-lg">E</span>
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3 gt-standard">Effect Composition</h3>
-              <p className="text-gray-400 leading-relaxed">
-                Chain plugin operations with automatic error handling and resource cleanup.
-              </p>
-            </div>
-
-            {/* Remote Loading Card */}
-            <div className="bg-black/40 backdrop-blur-sm border border-white/10 rounded-2xl p-6 shadow-2xl hover:bg-black/50 transition-all duration-300">
-              <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center mb-4">
-                <span className="text-white font-bold text-lg">MF</span>
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3 gt-standard">Remote Loading</h3>
-              <p className="text-gray-400 leading-relaxed">
-                Load plugins dynamically from CDN URLs using Module Federation.
-              </p>
-            </div>
-
-            {/* Type Safety Card */}
-            <div className="bg-black/40 backdrop-blur-sm border border-white/10 rounded-2xl p-6 shadow-2xl hover:bg-black/50 transition-all duration-300 md:col-span-2 lg:col-span-1">
-              <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl flex items-center justify-center mb-4">
-                <span className="text-white font-bold text-lg">TS</span>
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3 gt-standard">Type Safety</h3>
-              <p className="text-gray-400 leading-relaxed">
-                Full TypeScript integration with oRPC contracts for compile-time safety.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     </HomeLayout>
   );
