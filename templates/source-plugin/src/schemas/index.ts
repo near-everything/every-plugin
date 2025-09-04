@@ -4,7 +4,11 @@ import { z } from "zod";
 
 // State schema for pagination (used in contract-based input generation)
 export const StateSchema = z.object({
-	page: z.number(),
+	phase: z.string(),
+	status: z.string().optional(),
+	jobId: z.string().optional(),
+	lastId: z.string().optional(),
+	nextPollMs: z.number().optional()
 }).nullable();
 
 // Source item schema that plugins return

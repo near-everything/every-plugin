@@ -20,8 +20,8 @@ export function createSourceInputSchema<
 		const inputSchema = procedureSpec['~orpc']?.inputSchema || z.object({});
 		const outputSchema = procedureSpec['~orpc']?.outputSchema || z.object({});
 		
-		// Check if this procedure is streamable (has nextState in output, state in input)
-		const isStreamable = outputSchema._def?.shape?.nextState !== undefined && inputSchema._def?.shape?.state !== undefined;
+		// Check if this procedure is streamable (has nextState in output)
+		const isStreamable = outputSchema._def?.shape?.nextState !== undefined;
 		
 		const baseSchema = z.object({
 			procedure: z.literal(procedureName),
@@ -85,4 +85,6 @@ export interface SourcePlugin<
 	shutdown(): Effect.Effect<void, never, PluginLoggerTag>;
 
 	createRouter(): any; // Returns oRPC router
+	
+	isStreamable(procedureName: string): boolean;
 }

@@ -1,17 +1,376 @@
 ---
-title: Plugin
-description: 
+title: Creating Plugins
+description: Build your own plugins by forking templates and defining contracts
 ---
 
-## Code Block
+## Plugin Creation Process
 
-```js
-console.log('Hello World');
+Creating a plugin involves forking a GitHub template repository and defining your plugin's contract and implementation. The template provides the build system, [Module Federation](https://module-federation.io/) configuration, and basic structure.
+
+## Fork Template Repository
+
+Start by forking the appropriate template repository:
+
+```bash
+# For source plugins (data fetching)
+git clone https://github.com/your-org/source-plugin-template my-plugin
+cd my-plugin
+
+# For most other plugins
+git clone https://github.com/your-org/transformer-plugin-template my-plugin
+cd my-plugin
+
+# Install dependencies
+npm install
 ```
 
-## Cards
+## Plugin Structure
 
-<Cards>
-  <Card title="Learn more about Next.js" href="https://nextjs.org/docs" />
-  <Card title="Learn more about Fumadocs" href="https://fumadocs.vercel.app" />
-</Cards>
+The template provides this structure:
+
+```
+my-plugin/
+├── src/
+│   ├── index.ts          # Main plugin implementation
+│   ├── client.ts         # API client (if needed)
+│   └── schemas/
+│       └── index.ts      # Zod schemas for validation
+├── package.json          # Plugin metadata
+├── rspack.config.cjs     # Module Federation build config
+└── tsconfig.json         # TypeScript configuration
+```
+
+## Define Plugin Contract
+
+Plugins use [oRPC](https://orpc.io/) for type-safe contracts. Define your API contract in `src/schemas/index.ts`:
+
+```typescript
+import { initORPC } from "@orpc/server";
+import { z } from "zod";
+import { createConfigSchema } from "every-plugin";
+
+// Initialize oRPC
+const orpc = initORPC();
+
+// Define your data schemas
+export const ItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  content: z.string(),
+  createdAt: z.string(),
+  tags: z.array(z.string()).optional(),
+});
+
+// State schema for resumable operations
+export const StateSchema = z.object({
+  cursor: z.string().optional(),
+  pageNumber: z.number().optional(),
+  lastProcessedId: z.string().optional(),
+});
+
+// Plugin configuration schema
+export const MyPluginConfigSchema = createConfigSchema(
+  z.object({
+    baseUrl: z.string().url().optional(),
+    timeout: z.number().optional(),
+  }),
+  z.object({
+    apiKey: z.string().min(1, "API key is required"),
+  })
+);
+
+// Define oRPC contract
+export const contract = orpc.contract({
+  search: orpc.route({
+    method: "POST",
+    path: "/search",
+    summary: "Search for items",
+  })
+    .input(z.object({
+      query: z.string().min(1),
+      limit: z.number().optional(),
+    }))
+    .output(z.object({
+      items: z.array(ItemSchema),
+      nextCursor: z.string().optional(),
+    })),
+
+  getById: orpc.route({
+    method: "POST",
+    path: "/getById",
+    summary: "Get item by ID",
+  })
+    .input(z.object({
+      id: z.string().min(1),
+    }))
+    .output(z.object({
+      item: ItemSchema.optional(),
+    })),
+});
+
+export type Contract = typeof contract;
+export type MyPluginConfig = z.infer<typeof MyPluginConfigSchema>;
+export type State = z.infer<typeof StateSchema>;
+```
+
+## Implement Plugin Class
+
+Implement your plugin in `src/index.ts`:
+
+```typescript
+import { call, implement } from "@orpc/server";
+import {
+  ConfigurationError,
+  Effect,
+  PluginExecutionError,
+  PluginLoggerTag,
+  type SourcePlugin,
+} from "every-plugin";
+import type { Contract } from "./schemas";
+import { MyPluginConfigSchema, StateSchema, type State } from "./schemas";
+
+export class MyPlugin implements SourcePlugin<Contract, typeof MyPluginConfigSchema, typeof StateSchema> {
+  readonly id = "my-plugin" as const;
+  readonly type = "source" as const;
+  readonly contract = contract;
+  readonly configSchema = MyPluginConfigSchema;
+  readonly stateSchema = StateSchema;
+
+  private client: ApiClient | null = null;
+
+  initialize(config: MyPluginConfig): Effect.Effect<void, ConfigurationError> {
+    return Effect.gen(function* () {
+      const logger = yield* PluginLoggerTag;
+      
+      yield* Effect.tryPromise({
+        try: async () => {
+          this.client = new ApiClient({
+            baseUrl: config.variables?.baseUrl || "https://api.example.com",
+            apiKey: config.secrets.apiKey,
+            timeout: config.variables?.timeout || 30000,
+          });
+          
+          // Test connection
+          await this.client.ping();
+        },
+        catch: (error) => new ConfigurationError(
+          `Failed to initialize API client: ${error}`
+        ),
+      });
+
+      yield* logger.logInfo("Plugin initialized successfully");
+    }).pipe(Effect.provide(this));
+  }
+
+  // Implement oRPC procedures
+  private search = implement(this.contract).search.handler(async ({ input, context }) => {
+    if (!this.client) {
+      throw new Error("Plugin not initialized");
+    }
+
+    const results = await this.client.search(input.query, {
+      limit: input.limit || 20,
+      cursor: context.state?.cursor,
+    });
+
+    return {
+      items: results.items.map(this.transformItem),
+      nextCursor: results.nextCursor,
+    };
+  });
+
+  private getById = implement(this.contract).getById.handler(async ({ input }) => {
+    if (!this.client) {
+      throw new Error("Plugin not initialized");
+    }
+
+    const item = await this.client.getById(input.id);
+    
+    return {
+      item: item ? this.transformItem(item) : undefined,
+    };
+  });
+
+  private transformItem(apiItem: any) {
+    return {
+      id: apiItem.id,
+      title: apiItem.title || apiItem.name,
+      content: apiItem.description || apiItem.content,
+      createdAt: apiItem.timestamp || new Date().toISOString(),
+      tags: apiItem.tags || [],
+    };
+  }
+
+  execute(input: any): Effect.Effect<any, PluginExecutionError> {
+    return Effect.gen(function* () {
+      if (!this.client) {
+        return yield* Effect.fail(
+          new PluginExecutionError("Plugin not initialized", false)
+        );
+      }
+
+      // Route to appropriate procedure
+      switch (input.procedure) {
+        case "search":
+          return yield* Effect.tryPromise({
+            try: () => call(this.search, input.input, { context: { state: input.state } }),
+            catch: (error) => new PluginExecutionError(`Search failed: ${error}`, true)
+          });
+          
+        case "getById":
+          return yield* Effect.tryPromise({
+            try: () => call(this.getById, input.input, { context: {} }),
+            catch: (error) => new PluginExecutionError(`GetById failed: ${error}`, true)
+          });
+          
+        default:
+          return yield* Effect.fail(
+            new PluginExecutionError(`Unknown procedure: ${input.procedure}`, false)
+          );
+      }
+    });
+  }
+
+  // Define which procedures support streaming
+  isStreamable(procedureName: string): boolean {
+    return procedureName === "search";
+  }
+
+  shutdown(): Effect.Effect<void, never> {
+    return Effect.gen(function* () {
+      const logger = yield* PluginLoggerTag;
+      
+      if (this.client) {
+        yield* Effect.promise(() => this.client!.disconnect());
+        this.client = null;
+      }
+      
+      yield* logger.logInfo("Plugin shutdown complete");
+    }).pipe(Effect.provide(this));
+  }
+}
+
+// Export plugin instance
+export default new MyPlugin();
+```
+
+## Build Configuration
+
+The template includes Module Federation configuration in `rspack.config.cjs`:
+
+```javascript
+const { ModuleFederationPlugin } = require("@module-federation/enhanced/rspack");
+
+module.exports = {
+  plugins: [
+    new ModuleFederationPlugin({
+      name: "my-plugin",
+      filename: "remoteEntry.js",
+      exposes: {
+        "./plugin": "./src/index.ts",
+      },
+      shared: {
+        "every-plugin": { singleton: true },
+        "effect": { singleton: true },
+        "zod": { singleton: true },
+      },
+    }),
+  ],
+};
+```
+
+## Package Metadata
+
+Update `package.json` with your plugin details:
+
+```json
+{
+  "name": "@my-org/my-plugin",
+  "version": "1.0.0",
+  "description": "My custom plugin for data processing",
+  "main": "dist/remoteEntry.js",
+  "scripts": {
+    "build": "rspack build",
+    "dev": "rspack serve --port 3001"
+  }
+}
+```
+
+## Development Workflow
+
+Develop and test your plugin locally:
+
+```bash
+# Start development server
+npm run dev
+
+# Plugin available at http://localhost:3001/remoteEntry.js
+
+# Build for production
+npm run build
+
+# Deploy dist/remoteEntry.js to your CDN
+```
+
+## Testing Your Plugin
+
+Test your plugin with the runtime:
+
+```typescript
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      remoteUrl: "http://localhost:3001/remoteEntry.js",
+      type: "source",
+      version: "1.0.0",
+    },
+  },
+  secrets: {
+    API_KEY: "test-key",
+  },
+});
+
+const result = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    const plugin = yield* pluginRuntime.usePlugin("my-plugin", {
+      secrets: {
+        apiKey: "{{API_KEY}}",
+      },
+      variables: {
+        timeout: 30000,
+      },
+    });
+    
+    return yield* pluginRuntime.executePlugin(plugin, {
+      procedure: "search",
+      input: { query: "test" },
+      state: null,
+    });
+  })
+);
+```
+
+## Deployment
+
+Deploy your built plugin to a CDN and update your registry:
+
+```typescript
+const registry = {
+  "@my-org/my-plugin": {
+    remoteUrl: "https://cdn.example.com/plugins/my-plugin@1.0.0/remoteEntry.js",
+    type: "source",
+    version: "1.0.0",
+    description: "My custom data processing plugin",
+  },
+};
+```
+
+## Next Steps
+
+- [Source Plugins](./source) - Specialized data fetching plugins
+- [Streaming](./stream) - Enable continuous data processing
+- [Runtime API](./runtime) - Complete runtime reference

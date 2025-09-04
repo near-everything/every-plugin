@@ -1,0 +1,260 @@
+---
+title: Runtime API
+description: Complete reference for the plugin runtime service and methods
+---
+
+## Runtime Creation
+
+The runtime manages plugin loading, caching, and execution through [Effect](https://effect.website/)'s service system. Create one runtime instance per application or worker process.
+
+```typescript
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "plugin-id": {
+      remoteUrl: "https://cdn.example.com/plugin/remoteEntry.js",
+      type: "source", // or "transformer", "pipeline"
+      version: "1.0.0",
+      description: "Plugin description",
+    },
+  },
+  secrets: {
+    API_KEY: "secret-value",
+    DATABASE_URL: "postgresql://...",
+  },
+  logger: customLogger, // optional
+});
+```
+
+## PluginRuntime Service
+
+Access the runtime service within Effect workflows using the `PluginRuntime` tag:
+
+```typescript
+import { Effect } from "effect";
+import { PluginRuntime } from "every-plugin/runtime";
+
+const workflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+
+  // Use runtime methods here
+  const plugin = yield* pluginRuntime.usePlugin("plugin-id", config);
+  return yield* pluginRuntime.executePlugin(plugin, input);
+});
+
+const result = await runtime.runPromise(workflow);
+```
+
+## Core Methods
+
+### `usePlugin(pluginId, config)`
+
+Loads, instantiates, and initializes a plugin in one operation. This is the recommended method for most use cases.
+
+```typescript
+const plugin =
+  yield *
+  pluginRuntime.usePlugin("my-plugin", {
+    secrets: {
+      apiKey: "{{API_KEY}}", // Secrets are hydrated automatically
+    },
+    variables: {
+      timeout: 30000,
+      batchSize: 100,
+    },
+  });
+
+// Plugin is ready to execute
+const result = yield * pluginRuntime.executePlugin(plugin, input);
+```
+
+**Parameters:**
+
+- `pluginId: string` - Plugin identifier from registry
+- `config: object` - Plugin configuration with secret templating
+
+**Returns:** `Effect<InitializedPlugin, PluginRuntimeError>`
+
+### `executePlugin(plugin, input)`
+
+Executes an initialized plugin with validated input and returns validated output:
+
+```typescript
+const output =
+  yield *
+  pluginRuntime.executePlugin(plugin, {
+    query: "search term",
+    limit: 100,
+    filters: { category: "tech" },
+  });
+
+// Output is validated against plugin's output schema
+console.log(output.items.length);
+```
+
+**Parameters:**
+
+- `plugin: InitializedPlugin` - Plugin from `usePlugin()` or manual initialization
+- `input: object` - Input data matching plugin's input schema
+
+**Returns:** `Effect<PluginOutput, PluginRuntimeError>`
+
+### `streamPlugin(pluginId, config, input, options?)`
+
+Creates a stream from a source plugin for continuous data processing. Only works with source plugins that implement streamable procedures.
+
+```typescript
+const stream =
+  yield *
+  pluginRuntime.streamPlugin(
+    "data-source",
+    config,
+    {
+      procedure: "search",
+      input: { query: "typescript" },
+      state: null,
+    },
+    {
+      maxItems: 1000,
+      maxInvocations: 10,
+      stopWhenEmpty: true,
+    }
+  );
+
+// Process stream with Effect Stream operations
+const items = yield * stream.pipe(Stream.take(100), Stream.runCollect);
+```
+
+**Parameters:**
+
+- `pluginId: string` - Source plugin identifier
+- `config: object` - Plugin configuration
+- `input: object` - Procedure input with state
+- `options?: SourceStreamOptions` - Stream control options
+
+**Returns:** `Effect<Stream<Item, PluginRuntimeError>, PluginRuntimeError>`
+
+## Manual Lifecycle Methods
+
+For advanced use cases requiring granular control:
+
+### `loadPlugin(pluginId)`
+
+Downloads and caches the plugin module from its [Module Federation](https://module-federation.io/) URL:
+
+```typescript
+const constructor = yield * pluginRuntime.loadPlugin("my-plugin");
+// Plugin constructor is now available for instantiation
+```
+
+### `instantiatePlugin(constructor)`
+
+Creates a new instance of the plugin class:
+
+```typescript
+const instance = yield * pluginRuntime.instantiatePlugin(constructor);
+// Plugin instance created but not yet initialized
+```
+
+### `initializePlugin(instance, config)`
+
+Initializes the plugin with configuration and hydrated secrets:
+
+```typescript
+const initialized =
+  yield *
+  pluginRuntime.initializePlugin(instance, {
+    apiKey: "{{API_KEY}}", // Will be hydrated
+    timeout: 30000,
+  });
+// Plugin is ready for execution
+```
+
+## Stream Options
+
+Control streaming behavior with these options:
+
+```typescript
+interface SourceStreamOptions {
+  maxItems?: number; // Stop after N total items
+  maxInvocations?: number; // Stop after N plugin calls
+  stopWhenEmpty?: boolean; // Stop when plugin returns no items
+}
+```
+
+## Error Types
+
+The runtime uses typed errors for better error handling:
+
+```typescript
+// Handle specific error types
+const safeExecution = Effect.gen(function* () {
+  return yield* pluginRuntime.usePlugin("unreliable-plugin", config);
+}).pipe(
+  Effect.catchTag("PluginRuntimeError", (error) => {
+    console.log("Plugin ID:", error.pluginId);
+    console.log("Operation:", error.operation);
+    console.log("Retryable:", error.retryable);
+    console.log("Cause:", error.cause);
+
+    return Effect.succeed(null); // Fallback
+  })
+);
+```
+
+## Worker Integration
+
+Perfect for job processing systems like BullMQ:
+
+```typescript
+import { Job } from "bullmq";
+
+// Initialize once per worker
+const runtime = createPluginRuntime({
+  registry: await loadRegistry(),
+  secrets: await loadSecrets(),
+});
+
+// Job processor
+const processJob = (job: Job) =>
+  runtime.runPromise(
+    Effect.gen(function* () {
+      const pluginRuntime = yield* PluginRuntime;
+      const { pluginId, config, input } = job.data;
+
+      const plugin = yield* pluginRuntime.usePlugin(pluginId, config);
+      return yield* pluginRuntime.executePlugin(plugin, input);
+    }).pipe(
+      Effect.catchAll((error) => {
+        console.error(`Job ${job.id} failed:`, error);
+        throw error; // Re-throw for BullMQ retry logic
+      })
+    )
+  );
+
+// Cleanup on shutdown
+process.on("SIGTERM", async () => {
+  await runtime.dispose();
+});
+```
+
+## Resource Management
+
+The runtime automatically manages plugin lifecycles and cleanup:
+
+```typescript
+// Runtime handles:
+// - Plugin module caching
+// - Instance reuse where appropriate
+// - Automatic cleanup on dispose()
+// - Resource leak prevention
+
+await runtime.dispose(); // Clean shutdown
+```
+
+## Next Steps
+
+- [Creating Plugins](./plugin) - Build your own plugins
+- [Source Plugins](./source) - Data fetching plugins
+- [Streaming](./stream) - Continuous data processing patterns

@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect";
+import { Duration, Effect, Stream } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PluginRegistry } from "../plugin";
 import { createPluginRuntime, PluginRuntime } from "./index";
@@ -19,11 +19,6 @@ type SourceItem = {
   raw: unknown;
 };
 
-type SourceState = {
-  pageNumber?: number;
-  cursor?: string;
-  lastItemId?: string;
-};
 
 // Test registry with our example source plugin
 const TEST_REGISTRY: PluginRegistry = {
@@ -99,23 +94,28 @@ describe("Plugin Streaming", () => {
     }
   });
 
-  it("should create a stream from source plugin", async () => {
+
+  it("should respect maxItems limit", async () => {
     const result = await runtime.runPromise(
       Effect.gen(function* () {
         const pluginRuntime = yield* PluginRuntime;
 
-        // Create stream
+        // Start from Phase 3 state that immediately produces items
+        const inputWithProductiveState = {
+          ...TEST_SEARCH_INPUT,
+          state: { phase: "historical", status: "processing", nextPollMs: 10 }
+        };
+
         const stream = yield* pluginRuntime.streamPlugin(
           "test-source-plugin",
           TEST_CONFIG,
-          TEST_SEARCH_INPUT,
+          inputWithProductiveState,
           {
-            maxItems: 4, // Limit to 4 items total
-            maxIterations: 2, // Limit to 2 plugin executions
+            maxItems: 3, // Strict limit
+            maxInvocations: 3
           }
         );
 
-        // Collect all items from the stream
         const items = yield* stream.pipe(
           Stream.runCollect
         );
@@ -124,159 +124,88 @@ describe("Plugin Streaming", () => {
       })
     );
 
-    // Verify we got items
-    expect(result).toBeDefined();
-    expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBeGreaterThan(0);
-    expect(result.length).toBeLessThanOrEqual(4);
-
-    // Verify item structure
-    expect(result.length).toBeGreaterThan(0);
-    const firstItem = result[0] as SourceItem;
-    expect(firstItem).toHaveProperty("externalId");
-    expect(firstItem).toHaveProperty("content");
-    expect(firstItem).toHaveProperty("raw");
-    expect(firstItem.content).toContain("test query");
-  });
-
-  it("should handle streaming with state callbacks", async () => {
-    const collectedItems: SourceItem[] = [];
-    const stateChanges: Array<{ state: SourceState; iterationCount: number }> = [];
-    const iterationContexts: Array<{ iteration: { count: number; itemsProcessed: number; lastExecutionAt: Date }; pluginId: string }> = [];
-
-    const result = await runtime.runPromise(
-      Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-
-        const stream = yield* pluginRuntime.streamPlugin(
-          "test-source-plugin",
-          TEST_CONFIG,
-          TEST_SEARCH_INPUT,
-          {
-            maxIterations: 2,
-            onItems: (items, context, state) => Effect.sync(() => {
-              collectedItems.push(...(items as SourceItem[]));
-              iterationContexts.push({
-                iteration: context.iteration,
-                pluginId: context.pluginId,
-              });
-            }),
-            onStateChange: (state, context) => Effect.sync(() => {
-              stateChanges.push({
-                state: (state as SourceState) || { pageNumber: 1 },
-                iterationCount: context.iteration.count,
-              });
-            }),
-          }
-        );
-
-        // Run the stream
-        yield* stream.pipe(Stream.runDrain);
-
-        return {
-          itemsCollected: collectedItems.length,
-          stateChanges: stateChanges.length,
-          iterations: iterationContexts.length,
-        };
-      })
-    );
-
-    // Verify callbacks were called
-    expect(result.itemsCollected).toBeGreaterThan(0);
-    expect(result.stateChanges).toBeGreaterThan(0);
-    expect(result.iterations).toBeGreaterThan(0);
-
-    // Verify state progression
-    expect(stateChanges.length).toBeGreaterThan(0);
-    const firstStateChange = stateChanges[0];
-    expect(firstStateChange).toBeDefined();
-    expect(firstStateChange?.state).toHaveProperty("pageNumber");
-    expect(firstStateChange?.state.pageNumber).toBe(2); // Should be page 2 after first execution
-
-    // Verify iteration context
-    expect(iterationContexts.length).toBeGreaterThan(0);
-    const firstIteration = iterationContexts[0];
-    expect(firstIteration).toBeDefined();
-    expect(firstIteration?.pluginId).toBe("test-source-plugin");
-    expect(firstIteration?.iteration.count).toBe(1);
-  });
-
-  it("should respect maxItems limit", async () => {
-    const result = await runtime.runPromise(
-      Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-
-        const stream = yield* pluginRuntime.streamPlugin(
-          "test-source-plugin",
-          TEST_CONFIG,
-          TEST_SEARCH_INPUT,
-          {
-            maxItems: 3, // Strict limit
-          }
-        );
-
-        const items = yield* stream.pipe(
-          Stream.runCollect
-        );
-
-        return items;
-      })
-    );
-
     expect(result.length).toBeLessThanOrEqual(3);
-  });
+    expect(result.length).toBeGreaterThan(0);
+  }, 4000);
 
-  it("should respect maxIterations limit", async () => {
-    let iterationCount = 0;
-
+  it("should validate invalid state and fail with proper error", async () => {
     const result = await runtime.runPromise(
       Effect.gen(function* () {
         const pluginRuntime = yield* PluginRuntime;
 
-        const stream = yield* pluginRuntime.streamPlugin(
+        // Use invalid state that doesn't match plugin's stateSchema
+        const inputWithInvalidState = {
+          ...TEST_SEARCH_INPUT,
+          state: {
+            pageNumber: 10, // Invalid - plugin expects { phase, status?, jobId?, lastId?, nextPollMs? }
+            invalidField: "should not be here",
+          },
+        };
+
+        // The error should occur when creating the stream, not when running it
+        return yield* pluginRuntime.streamPlugin(
           "test-source-plugin",
           TEST_CONFIG,
-          TEST_SEARCH_INPUT,
+          inputWithInvalidState,
           {
-            maxIterations: 1, // Only one plugin execution
-            onIterationComplete: (context, state) => Effect.sync(() => {
-              iterationCount = context.iteration.count;
-            }),
+            stopWhenEmpty: true,
           }
-        );
+        ).pipe(
+          Effect.flatMap(() => 
+            // If we get here, validation didn't work
+            Effect.succeed("validation-should-have-failed")
+          ),
+          Effect.catchTag("PluginRuntimeError", (error) => {
+            // Should catch state validation error
+            expect(error.operation).toBe("validate-state");
+            expect(error.retryable).toBe(false);
+            expect(error.pluginId).toBe("test-source-plugin");
+            expect(error.cause).toBeDefined();
 
-        const items = yield* stream.pipe(
-          Stream.runCollect
-        );
+            console.debug("Caught expected state validation error:", {
+              operation: error.operation,
+              pluginId: error.pluginId,
+              retryable: error.retryable,
+              cause: error.cause?.message,
+            });
 
-        return items;
+            return Effect.succeed("state-validation-error-handled");
+          }),
+          Effect.catchAll((unexpectedError: unknown) => {
+            console.error("Unexpected error type:", unexpectedError);
+            expect.fail(
+              `Expected PluginRuntimeError but got: ${(unexpectedError as { _tag: string })._tag || typeof unexpectedError}`,
+            );
+            return Effect.succeed("should-not-reach-here");
+          }),
+        );
       })
     );
 
-    expect(iterationCount).toBe(1);
-    expect(result.length).toBeGreaterThan(0); // Should have items from the one execution
-  });
+    expect(result).toBe("state-validation-error-handled");
+  }, 4000);
 
   it("should handle stopWhenEmpty option", async () => {
     const result = await runtime.runPromise(
       Effect.gen(function* () {
         const pluginRuntime = yield* PluginRuntime;
 
-        // Start from a state that will produce no results (page 10)
-        const inputWithHighPage = {
+        // Use the deterministic "empty" phase that always returns 0 items
+        const inputWithEmptyState = {
           ...TEST_SEARCH_INPUT,
           state: {
-            pageNumber: 10, // Beyond our mock data range
+            phase: "empty",
+            nextPollMs: 10,
           },
         };
 
         const stream = yield* pluginRuntime.streamPlugin(
           "test-source-plugin",
           TEST_CONFIG,
-          inputWithHighPage,
+          inputWithEmptyState,
           {
             stopWhenEmpty: true,
-            maxIterations: 5, // Would normally allow more iterations
+            maxInvocations: 3, // Allow a few iterations to verify it stops
           }
         );
 
@@ -284,45 +213,14 @@ describe("Plugin Streaming", () => {
           Stream.runCollect
         );
 
-        return items;
+        return Array.from(items);
       })
     );
 
-    // Should stop immediately when no items are returned
-    expect(result.length).toBe(0);
-  });
-
-  it("should handle custom stop condition", async () => {
-    const result = await runtime.runPromise(
-      Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-
-        const stream = yield* pluginRuntime.streamPlugin(
-          "test-source-plugin",
-          TEST_CONFIG,
-          TEST_SEARCH_INPUT,
-          {
-            stopCondition: (item, context, state) => {
-              // Stop when we see an item from page 2
-              return (item as SourceItem).externalId.includes("_2_");
-            },
-          }
-        );
-
-        const items = yield* stream.pipe(
-          Stream.runCollect
-        );
-
-        return items;
-      })
-    );
-
-    // Should stop when it encounters an item from page 2
-    expect(result.length).toBeGreaterThan(0);
-    const resultArray = Array.from(result);
-    const lastItem = resultArray[resultArray.length - 1] as SourceItem;
-    expect(lastItem.externalId).toContain("_2_");
-  });
+    // Should stop immediately when no items are returned from empty phase
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBe(0); // Empty phase always returns 0 items
+  }, 4000);
 
   it("should validate plugin type", async () => {
     const result = await runtime.runPromise(
@@ -346,39 +244,55 @@ describe("Plugin Streaming", () => {
     expect(result).toBe("validation-error-handled");
   });
 
-  it("should handle error recovery with continueOnError", async () => {
-    let errorCount = 0;
+  it("should handle workflow phases correctly", async () => {
+    const pluginRuntime = await runtime.runPromise(PluginRuntime);
+    const plugin = await runtime.runPromise(pluginRuntime.usePlugin("test-source-plugin", TEST_CONFIG));
 
-    const result = await runtime.runPromise(
-      Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-
-        const stream = yield* pluginRuntime.streamPlugin(
-          "test-source-plugin",
-          TEST_CONFIG,
-          TEST_SEARCH_INPUT,
-          {
-            maxIterations: 3,
-            continueOnError: true,
-            onError: (error, context, state) => Effect.sync(() => {
-              errorCount++;
-            }),
-          }
-        );
-
-        const items = yield* stream.pipe(
-          Stream.runCollect
-        );
-
-        return items;
-      })
+    // Phase 1: null state -> historical job (empty items)
+    const phase1 = await runtime.runPromise(
+      pluginRuntime.executePlugin(plugin, TEST_SEARCH_INPUT)
     );
+    const phase1Result = phase1 as { items: SourceItem[]; nextState: any };
+    expect(phase1Result.items).toHaveLength(0);
+    expect(phase1Result.nextState.phase).toBe("historical");
+    expect(phase1Result.nextState.jobId).toMatch(/^hist_\d+$/);
+    expect(phase1Result.nextState.nextPollMs).toBe(10);
 
-    // Should continue streaming even if errors occur
-    expect(result).toBeDefined();
-    // Note: This test assumes the mock plugin doesn't actually error,
-    // but demonstrates the error handling structure
-  });
+    // Phase 2: historical job -> processing (empty items)
+    const phase2Input = { ...TEST_SEARCH_INPUT, state: phase1Result.nextState };
+    const phase2 = await runtime.runPromise(
+      pluginRuntime.executePlugin(plugin, phase2Input)
+    );
+    const phase2Result = phase2 as { items: SourceItem[]; nextState: any };
+    expect(phase2Result.items).toHaveLength(0);
+    expect(phase2Result.nextState.phase).toBe("historical");
+    expect(phase2Result.nextState.status).toBe("processing");
+    expect(phase2Result.nextState.nextPollMs).toBe(10);
+
+    // Phase 3: processing -> historical items + realtime transition
+    const phase3Input = { ...TEST_SEARCH_INPUT, state: phase2Result.nextState };
+    const phase3 = await runtime.runPromise(
+      pluginRuntime.executePlugin(plugin, phase3Input)
+    );
+    const phase3Result = phase3 as { items: SourceItem[]; nextState: any };
+    expect(phase3Result.items.length).toBeGreaterThan(0);
+    expect(phase3Result.items[0]?.content).toContain("Historical");
+    expect(phase3Result.nextState.phase).toBe("realtime");
+    expect(phase3Result.nextState.lastId).toMatch(/^hist_end_\d+$/);
+    expect(phase3Result.nextState.nextPollMs).toBe(10);
+
+    // Phase 4: realtime polling (may have items)
+    const phase4Input = { ...TEST_SEARCH_INPUT, state: phase3Result.nextState };
+    const phase4 = await runtime.runPromise(
+      pluginRuntime.executePlugin(plugin, phase4Input)
+    );
+    const phase4Result = phase4 as { items: SourceItem[]; nextState: any };
+    expect(phase4Result.nextState.phase).toBe("realtime");
+    // Items may be empty or contain real-time items (random)
+    if (phase4Result.items.length > 0) {
+      expect(phase4Result.items[0]?.content).toContain("Real-time");
+    }
+  }, 4000);
 
   describe("Contract-based Procedures", () => {
     it("should execute getById procedure", async () => {
@@ -428,7 +342,13 @@ describe("Plugin Streaming", () => {
           const pluginRuntime = yield* PluginRuntime;
           const plugin = yield* pluginRuntime.usePlugin("test-source-plugin", TEST_CONFIG);
           
-          const output = yield* pluginRuntime.executePlugin(plugin, TEST_SEARCH_INPUT);
+          // Use Phase 3 state to get historical items
+          const searchInputWithState = {
+            ...TEST_SEARCH_INPUT,
+            state: { phase: "historical", status: "processing" }
+          };
+          
+          const output = yield* pluginRuntime.executePlugin(plugin, searchInputWithState);
           
           return output;
         })
@@ -453,7 +373,7 @@ describe("Plugin Streaming", () => {
             TEST_CONFIG,
             TEST_GETBYID_INPUT,
             {
-              maxIterations: 1, // Single execution for getById
+              maxItems: 5, // Safety limit
             }
           );
 
@@ -480,7 +400,7 @@ describe("Plugin Streaming", () => {
             TEST_CONFIG,
             TEST_GETBULK_INPUT,
             {
-              maxIterations: 1, // Single execution for getBulk
+              maxItems: 5, // Safety limit
             }
           );
 

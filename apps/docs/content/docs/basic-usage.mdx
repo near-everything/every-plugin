@@ -1,0 +1,178 @@
+---
+title: Basic Usage
+description: Core Effect patterns and plugin lifecycle management
+---
+
+## Effect Patterns
+
+The runtime uses [Effect](https://effect.website/) for composable async operations. Use `Effect.gen()` with `yield*` to compose plugin operations in a readable, sequential style.
+
+```typescript
+import { Effect } from "effect";
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+
+const runtime = createPluginRuntime({
+  registry: { /* ... */ },
+  secrets: { API_KEY: "secret-value" }
+});
+
+const result = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    // Each yield* unwraps an Effect and handles errors automatically
+    const plugin = yield* pluginRuntime.usePlugin("my-plugin", config);
+    const output = yield* pluginRuntime.executePlugin(plugin, input);
+    
+    return output;
+  })
+);
+```
+
+## Plugin Lifecycle
+
+Plugins follow a four-stage lifecycle: load → instantiate → initialize → execute. The `usePlugin()` method handles the first three stages automatically.
+
+```typescript
+// Automatic lifecycle (recommended)
+const plugin = yield* pluginRuntime.usePlugin("my-plugin", {
+  secrets: {
+    apiKey: "{{API_KEY}}", // Secrets are hydrated automatically
+  },
+  variables: {
+    timeout: 30000,
+  },
+});
+
+const result = yield* pluginRuntime.executePlugin(plugin, {
+  query: "search term",
+  limit: 100
+});
+```
+
+## Manual Lifecycle Control
+
+For advanced use cases, you can control each lifecycle stage manually:
+
+```typescript
+const processManually = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // 1. Load plugin constructor from Module Federation URL
+  const constructor = yield* pluginRuntime.loadPlugin("my-plugin");
+  
+  // 2. Create plugin instance
+  const instance = yield* pluginRuntime.instantiatePlugin(constructor);
+  
+  // 3. Initialize with config and secrets
+  const initialized = yield* pluginRuntime.initializePlugin(instance, config);
+  
+  // 4. Execute with validated input
+  const output = yield* pluginRuntime.executePlugin(initialized, input);
+  
+  return output;
+});
+```
+
+## Error Handling
+
+Effect provides built-in error handling with `catchAll()` and `catchTag()` for specific error types:
+
+```typescript
+const safeExecution = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.usePlugin("unreliable-plugin", config);
+}).pipe(
+  Effect.catchAll((error) => {
+    console.error("Plugin failed:", error);
+    return Effect.succeed(null); // Fallback value
+  })
+);
+
+// Handle specific error types
+const specificErrorHandling = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.executePlugin(plugin, input);
+}).pipe(
+  Effect.catchTag("PluginRuntimeError", (error) => {
+    if (error.retryable) {
+      console.log("Retryable error, could retry:", error.cause);
+    }
+    return Effect.succeed({ items: [] }); // Empty result
+  })
+);
+```
+
+## Secret Hydration
+
+Secrets use templating and are replaced at initialization time:
+
+```typescript
+const config = {
+  secrets: {
+    apiKey: "{{API_KEY}}", // Replaced with actual secret
+    dbPassword: "{{DB_PASSWORD}}", // Can hydrate any secret field
+  },
+  variables: {
+    baseUrl: "https://api.example.com",
+    timeout: 30000, // Regular values pass through
+  },
+};
+
+// Runtime replaces {{API_KEY}} with the actual secret value
+const plugin = yield* pluginRuntime.usePlugin("my-plugin", config);
+```
+
+## Multiple Plugin Composition
+
+Compose multiple plugins in a single Effect workflow:
+
+```typescript
+const composedWorkflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // Load multiple plugins
+  const sourcePlugin = yield* pluginRuntime.usePlugin("data-source", sourceConfig);
+  const transformPlugin = yield* pluginRuntime.usePlugin("transformer", transformConfig);
+  
+  // Execute in sequence
+  const rawData = yield* pluginRuntime.executePlugin(sourcePlugin, {
+    query: "fetch data"
+  });
+  
+  const processedData = yield* pluginRuntime.executePlugin(transformPlugin, {
+    items: rawData.items
+  });
+  
+  return processedData;
+});
+
+const result = await runtime.runPromise(composedWorkflow);
+```
+
+## Resource Cleanup
+
+The runtime automatically handles cleanup when disposed. Always call `dispose()` when shutting down:
+
+```typescript
+// In application shutdown
+process.on("SIGTERM", async () => {
+  console.log("Shutting down...");
+  await runtime.dispose(); // Cleans up all plugins and resources
+  process.exit(0);
+});
+
+// In tests
+afterEach(async () => {
+  await runtime.dispose();
+});
+```
+
+## Next Steps
+
+- [Runtime API](./runtime) - Complete runtime method reference
+- [Creating Plugins](./plugin) - Build your own plugins
+- [Source Plugins](./source) - Data fetching plugins
+- [Streaming](./stream) - Continuous data processing

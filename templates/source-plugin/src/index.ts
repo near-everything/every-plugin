@@ -15,12 +15,39 @@ import {
 	type SourceTemplateInput,
 	SourceTemplateInputSchema,
 	SourceTemplateOutputSchema,
-	StateSchema, 
+	StateSchema,
 	sourceContract
 } from "./schemas";
 
 type ContractInputs = InferContractRouterInputs<typeof sourceContract>;
 type ContractOutputs = InferContractRouterOutputs<typeof sourceContract>;
+
+// Add missing helper functions
+function generateHistoricalItems(query: string) {
+	return Array.from({ length: 3 }, (_, i) => ({
+		externalId: `hist_${query}_${i}`,
+		content: `Historical ${query} item ${i}`,
+		contentType: "post",
+		createdAt: new Date().toISOString(),
+		url: `https://example.com/hist/${i}`,
+		authors: [{ username: "hist_user", displayName: "Historical User" }],
+		raw: { type: "historical", index: i, query }
+	}));
+}
+
+function generateRealtimeItems(query: string, lastId: string) {
+	// Return 0-2 random items to simulate real-time activity
+	const count = Math.floor(Math.random() * 3);
+	return Array.from({ length: count }, (_, i) => ({
+		externalId: `rt_${query}_${Date.now()}_${i}`,
+		content: `Real-time ${query} item ${i}`,
+		contentType: "post",
+		createdAt: new Date().toISOString(),
+		url: `https://example.com/realtime/${i}`,
+		authors: [{ username: "rt_user", displayName: "Real-time User" }],
+		raw: { type: "realtime", index: i, query, lastId }
+	}));
+}
 
 export class SourceTemplatePlugin implements SourcePlugin<
 	typeof sourceContract,
@@ -40,17 +67,17 @@ export class SourceTemplatePlugin implements SourcePlugin<
 
 	private config: SourceTemplateConfig | null = null;
 	private client: SourceTemplateClient | null = null;
-	
+
 	// State injection middleware for streaming procedures
 	private stateMiddleware = implement(sourceContract).$context<{ state?: z.infer<typeof StateSchema> }>().middleware(async ({ context, next }) => {
 		return next({
-			context: {	
+			context: {
 
 				state: context.state
 			}
 		});
 	});
-	
+
 	private os = implement(sourceContract);
 
 	initialize(
@@ -141,40 +168,72 @@ export class SourceTemplatePlugin implements SourcePlugin<
 	});
 
 	private search = this.os.use(this.stateMiddleware).search.handler(async ({ input, context }) => {
-		if (!this.client) {
-			throw new Error("Plugin not initialized");
+		const state = context.state;
+
+		// Phase 1: Initialize historical job
+		if (!state) {
+			return {
+				items: [],
+				nextState: {
+					phase: "historical",
+					jobId: `hist_${Date.now()}`,
+					nextPollMs: 10
+				}
+			};
 		}
 
-		// Get page number from state passed through context, default to 1
-		const currentPage = context.state?.page ?? 1;
-		const limit = input.limit || 10;
+		// Phase 2-5: Handle state transitions
+		switch (`${state.phase}-${state.status || 'none'}`) {
+			case "historical-none":
+				return {
+					items: [],
+					nextState: { ...state, status: "processing", nextPollMs: 10 }
+				};
 
-		// Mock API call with pagination
-		const mockApiResults = Array.from({ length: Math.min(limit, 2) }, (_, i) => ({
-			apiId: `${input.query}_${currentPage}_${i + 1}`,
-			title: `Result ${currentPage}.${i + 1} for "${input.query}"`,
-			content: `This is mock content for page ${currentPage}, item ${i + 1}, query: ${input.query}`,
-			timestamp: new Date().toISOString(),
-		}));
+			case "historical-processing":
+				return {
+					items: generateHistoricalItems(input.query),
+					nextState: {
+						phase: "realtime",
+						lastId: `hist_end_${Date.now()}`,
+						nextPollMs: 10
+					}
+				};
 
-		// Simulate pagination - stop after page 3
-		const hasMorePages = currentPage < 3;
+			case "empty-none":
+				// Deterministic empty phase - always returns 0 items
+				return {
+					items: [],
+					nextState: {
+						phase: "empty",
+						status: "complete",
+						nextPollMs: 10
+					}
+				};
 
-		return {
-			items: mockApiResults.map(item => ({
-				externalId: item.apiId,
-				content: item.content,
-				contentType: "post",
-				createdAt: item.timestamp,
-				url: `https://example.com/posts/${item.apiId}`,
-				authors: [{
-					username: "mock_user",
-					displayName: "Mock User",
-				}],
-				raw: item,
-			})),
-			nextState: hasMorePages ? { page: currentPage + 1 } : null,
-		};
+			case "empty-complete":
+				// Stay in empty phase, always return 0 items
+				return {
+					items: [],
+					nextState: {
+						phase: "empty",
+						status: "complete",
+						nextPollMs: 10
+					}
+				};
+
+			default: {// realtime phase
+				const newItems = generateRealtimeItems(input.query, state.lastId || "");
+				return {
+					items: newItems,
+					nextState: {
+						phase: "realtime",
+						lastId: newItems.length > 0 ? `new_${Date.now()}` : (state.lastId || ""),
+						nextPollMs: newItems.length > 0 ? 10 : 10
+					}
+				};
+			}
+		}
 	});
 
 	private getBulk = this.os.getBulk.handler(async ({ input }) => {
@@ -228,8 +287,8 @@ export class SourceTemplatePlugin implements SourcePlugin<
 				case "search": {
 					// For search, pass state through context
 					const result = yield* Effect.tryPromise({
-						try: () => call(self.search, input.input as ContractInputs["search"], { 
-							context: { state: ('state' in input ? input.state : null) as z.infer<typeof StateSchema> } 
+						try: () => call(self.search, input.input as ContractInputs["search"], {
+							context: { state: ('state' in input ? input.state : null) as z.infer<typeof StateSchema> }
 						}),
 						catch: (error) => new PluginExecutionError(`search failed: ${error}`, true)
 					});
@@ -260,6 +319,12 @@ export class SourceTemplatePlugin implements SourcePlugin<
 			search: this.search,
 			getBulk: this.getBulk,
 		});
+	}
+
+	private static streamableProcedures = new Set(['search']);
+
+	isStreamable(procedureName: string): boolean {
+		return SourceTemplatePlugin.streamableProcedures.has(procedureName);
 	}
 
 	shutdown(): Effect.Effect<void, never, PluginLoggerTag> {

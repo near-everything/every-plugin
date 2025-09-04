@@ -21,3 +21,14 @@ export class ValidationError extends Data.TaggedError("ValidationError")<{
 	readonly stage: "config" | "input" | "output" | "state";
 	readonly zodError: z.ZodError;
 }> {}
+
+export class StreamError extends Data.TaggedError("StreamError")<{
+	readonly pluginId: string;
+	readonly operation: "callback" | "state-extraction" | "item-extraction" | "stream-termination";
+	readonly cause?: Error;
+	readonly context?: {
+		readonly iteration?: number;
+		readonly itemsProcessed?: number;
+		readonly procedureName?: string;
+	};
+}> {}

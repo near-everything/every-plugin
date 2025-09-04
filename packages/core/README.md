@@ -141,6 +141,68 @@ process.on("SIGTERM", async () => {
 });
 ```
 
+```typescript
+import { Effect } from "effect";
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+
+// Create a managed runtime (do this once per application/worker)
+const runtime = createPluginRuntime({
+  registry: {
+    "@my-org/data-processor": {
+      version: "1.0.0",
+      remoteUrl: "https://cdn.example.com/plugins/data-processor@latest/remoteEntry.js",
+      description: "Processes data items",
+      type: "pipeline"
+    }
+  },
+  secrets: {
+    API_KEY: "your-secret-key",
+    DATABASE_URL: "postgresql://..."
+  },
+  logger: customLogger // optional
+});
+
+// Use the runtime to execute plugins
+const result = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+
+    return yield* pluginRuntime.streamPlugin(
+          "test-source-plugin",
+          TEST_CONFIG,
+          TEST_SEARCH_INPUT,
+        ).pipe(
+          Effect.flatMap(stream => stream.pipe(Stream.runCollect)),
+          Effect.catchAll((error: unknown) => {
+            // Should handle callback errors
+            expect(error).toBeDefined();
+            return Effect.succeed("callback-error-handled");
+          }),
+        );
+    
+    // Load, instantiate and initialize a plugin
+    const plugin = yield* pluginRuntime.usePlugin("@my-org/data-processor", {
+      apiKey: "{{API_KEY}}", // Will be hydrated from secrets
+      batchSize: 100
+    });
+    
+    // I want to do this in the source stream
+    const output = yield* pluginRuntime.executePlugin(plugin, {
+      items: ["item1", "item2", "item3"]
+    });
+
+    
+    
+    return output;
+  })
+);
+
+console.log(result);
+
+// Clean up when done
+await runtime.dispose();
+```
+
 ### React/Next.js Integration
 
 ```typescript
