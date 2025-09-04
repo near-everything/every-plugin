@@ -51,7 +51,7 @@ export const Route = createRootRoute({
       },
       {
         property: "og:image",
-        content: "https://plugin.everything.dev/metadata.png",
+        content: "/metadata.png",
       },
       // X (Twitter)
       {
@@ -72,7 +72,7 @@ export const Route = createRootRoute({
       },
       {
         property: "twitter:image",
-        content: "https://plugin.everything.dev/metadata.png",
+        content: "/metadata.png",
       },
       // Additional SEO
       {

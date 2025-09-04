@@ -65,7 +65,7 @@ export const Route = createFileRoute("/docs/$")({
         },
         {
           property: "og:image",
-          content: "https://plugin.everything.dev/metadata.png",
+          content: "/metadata.png",
         },
         // Twitter
         {
@@ -86,7 +86,7 @@ export const Route = createFileRoute("/docs/$")({
         },
         {
           property: "twitter:image",
-          content: "https://plugin.everything.dev/metadata.png",
+          content: "/metadata.png",
         },
       ],
       links: [
