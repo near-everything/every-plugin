@@ -4,9 +4,7 @@ import {
 	getInstance,
 } from "@module-federation/enhanced/runtime";
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
-import * as EffectModule from "effect";
 import { Effect, Layer } from "effect";
-import * as ZodModule from "zod";
 import { ModuleFederationError } from "../errors";
 
 export interface IModuleFederationService {
@@ -33,18 +31,18 @@ const createModuleFederationInstance = Effect.cached(
 						effect: {
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^3.17.6",
+								requiredVersion: "^3.17.0",
 								eager: true,
+								strictVersion: false,
 							},
-							lib: () => EffectModule,
 						},
 						zod: {
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^4.0.8",
+								requiredVersion: "^4.0.0", 
 								eager: true,
+								strictVersion: false,
 							},
-							lib: () => ZodModule,
 						},
 					},
 				});

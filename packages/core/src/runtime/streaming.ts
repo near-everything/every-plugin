@@ -1,9 +1,8 @@
 import { Duration, Effect, Option, Stream } from "effect";
+import z from "zod";
 import type { SourcePlugin } from "../source";
 import { PluginRuntimeError } from "./errors";
 import type { InitializedPlugin } from "./types";
-import { validate } from "./validation";
-import z from "zod";
 
 
 export interface SourceStreamOptions<TItem = unknown> {
@@ -13,7 +12,7 @@ export interface SourceStreamOptions<TItem = unknown> {
 }
 
 const extractDelayFromState = (state: any): Duration.Duration | null => {
-  return state?.nextPollMs ? Duration.millis(state.nextPollMs) : null;
+	return state?.nextPollMs ? Duration.millis(state.nextPollMs) : null;
 };
 
 /**
@@ -51,7 +50,7 @@ export const createSourceStream = <
 	}
 
 	const initialState = (input as z.infer<T["inputSchema"]>).state;
-	
+
 	const stream = Stream.unfoldEffect({ state: initialState, invocations: 0 }, ({ state: currentState, invocations }) =>
 		Effect.gen(function* () {
 			console.log(`[STREAM] Invocation ${invocations}:`);
@@ -65,13 +64,15 @@ export const createSourceStream = <
 			}
 
 			// Extract timing from plugin state (nextPollMs)
-			const nextDelay = extractDelayFromState(currentState) || Duration.minutes(1); // 1min default
-			yield* Effect.sleep(nextDelay);
+			const nextDelay = extractDelayFromState(currentState);
+			if (nextDelay) {
+				yield* Effect.sleep(nextDelay);
+			}
 
 			// Execute plugin
-			const pluginInput = { ...input as object, state: currentState } as TInput;
+			const pluginInput = { ...input as object, state: currentState ?? null } as TInput;
 			console.log(`[STREAM] - Plugin input:`, JSON.stringify(pluginInput, null, 2));
-			
+
 			const result = yield* executePlugin(initializedPlugin, pluginInput);
 			const resultObj = result as Record<string, unknown>;
 			const items: TItem[] = Array.isArray(resultObj.items)
