@@ -1,0 +1,107 @@
+---
+title: Runtime Overview
+description: Plugin runtime installation and core concepts
+---
+
+The every-plugin runtime loads and executes plugins using Effect composition and Module Federation.
+
+## Installation
+
+```bash
+npm install every-plugin
+```
+
+## Basic Setup
+
+Create a runtime with your plugin registry and secrets:
+
+```typescript
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "data-processor": {
+      remoteUrl: "https://cdn.example.com/plugins/processor/remoteEntry.js",
+      type: "transformer",
+      version: "1.0.0"
+    }
+  },
+  secrets: {
+    API_KEY: "your-secret-key"
+  }
+});
+```
+
+## Effect Composition
+
+Use `Effect.gen()` with `yield*` to compose plugin operations:
+
+```typescript
+const result = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    const plugin = yield* pluginRuntime.usePlugin("data-processor", {
+      secrets: { apiKey: "{{API_KEY}}" },
+      variables: { batchSize: 100 }
+    });
+    
+    return yield* pluginRuntime.executePlugin(plugin, {
+      items: ["data1", "data2", "data3"]
+    });
+  })
+);
+```
+
+## Plugin Lifecycle
+
+The runtime handles four stages automatically with `usePlugin()`:
+
+1. **Load**: Download plugin from Module Federation URL
+2. **Instantiate**: Create plugin instance
+3. **Initialize**: Configure with secrets and variables
+4. **Execute**: Run with validated input
+
+## Secret Hydration
+
+Secrets use template syntax and are replaced at initialization:
+
+```typescript
+const config = {
+  secrets: {
+    apiKey: "{{API_KEY}}", // Replaced with actual secret
+    dbUrl: "{{DATABASE_URL}}"
+  },
+  variables: {
+    timeout: 30000 // Regular values pass through
+  }
+};
+```
+
+## Resource Cleanup
+
+Always dispose the runtime when shutting down:
+
+```typescript
+process.on("SIGTERM", async () => {
+  await runtime.dispose();
+  process.exit(0);
+});
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Getting Started" href="/docs/runtime/getting-started">
+    Your first plugin execution
+  </Card>
+  <Card title="Basic Usage" href="/docs/runtime/basic-usage">
+    Effect patterns and composition
+  </Card>
+  <Card title="Streaming" href="/docs/runtime/streaming">
+    Continuous data processing
+  </Card>
+  <Card title="API Reference" href="/docs/runtime/api-reference">
+    Complete runtime methods
+  </Card>
+</Cards>

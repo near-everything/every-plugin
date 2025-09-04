@@ -1,0 +1,200 @@
+---
+title: Source Plugins
+description: Create data fetching plugins with oRPC contracts and state management
+---
+
+Source plugins fetch data from external APIs using [oRPC](https://orpc.io/) contracts for type safety. They support multiple procedures and can be used with streaming for continuous data collection.
+
+## oRPC Contract Overview
+
+Source plugins use oRPC contracts to define type-safe APIs. For detailed information on creating and implementing oRPC contracts, see the [official oRPC documentation](https://orpc.unnoq.com/docs/contract-first/).
+
+Here's a conceptual example of a source plugin contract:
+
+```typescript title="src/schemas/index.ts"
+import { initORPC } from "@orpc/server";
+import { z } from "zod";
+import { createConfigSchema } from "every-plugin";
+
+const orpc = initORPC();
+
+// Define your data structure
+export const SourceItemSchema = z.object({
+  externalId: z.string(),
+  content: z.string(),
+  createdAt: z.string().optional(),
+  // ... other fields
+});
+
+// State for resumable operations
+export const StateSchema = z.object({
+  cursor: z.string().optional(),
+  pageNumber: z.number().optional(),
+  // ... pagination state
+});
+
+// Plugin configuration
+export const ConfigSchema = createConfigSchema(
+  z.object({
+    baseUrl: z.string().url().optional(),
+    timeout: z.number().optional(),
+  }),
+  z.object({
+    apiKey: z.string().min(1),
+  })
+);
+
+// Contract with common source procedures
+export const contract = orpc.contract({
+  getById: orpc.route({
+    method: "POST",
+    path: "/getById",
+  })
+    .input(z.object({ id: z.string() }))
+    .output(z.object({ item: SourceItemSchema.optional() })),
+
+  search: orpc.route({
+    method: "POST",
+    path: "/search",
+  })
+    .input(z.object({ 
+      query: z.string(),
+      limit: z.number().optional(),
+    }))
+    .output(z.object({
+      items: z.array(SourceItemSchema),
+      nextState: StateSchema.optional(),
+    })),
+});
+```
+
+## Plugin Implementation
+
+Source plugins implement the `SourcePlugin` interface and use oRPC handlers for each procedure. The key aspects are:
+
+- **Contract Implementation**: Use `implement(contract).procedureName.handler()` for each procedure
+- **State Management**: Handle resumable operations through state parameters
+- **Streaming Support**: Mark procedures as streamable via `isStreamable()`
+
+```typescript title="src/index.ts"
+import { implement } from "@orpc/server";
+import { Effect } from "every-plugin";
+import type { SourcePlugin } from "every-plugin";
+
+export class MySourcePlugin implements SourcePlugin<Contract, typeof ConfigSchema, typeof StateSchema> {
+  readonly id = "my-source-plugin" as const;
+  readonly type = "source" as const;
+  readonly contract = contract;
+  readonly configSchema = ConfigSchema;
+  readonly stateSchema = StateSchema;
+
+  private client: ApiClient | null = null;
+
+  initialize(config: Config): Effect.Effect<void, ConfigurationError> {
+    // Initialize API client and test connection
+  }
+
+  isStreamable(procedureName: string): boolean {
+    return procedureName === "search";
+  }
+
+  // Implement oRPC procedures
+  private getById = implement(this.contract).getById.handler(async ({ input }) => {
+    const apiItem = await this.client.getById(input.id);
+    return { item: apiItem ? this.transformItem(apiItem) : undefined };
+  });
+
+  private search = implement(this.contract).search.handler(async ({ input, context }) => {
+    const state = context?.state;
+    const results = await this.client.search(input.query, { 
+      cursor: state?.cursor,
+      limit: input.limit 
+    });
+    
+    return {
+      items: results.items.map(this.transformItem),
+      nextState: results.hasMore ? { cursor: results.nextCursor } : undefined,
+    };
+  });
+
+  execute(input: any): Effect.Effect<any, PluginExecutionError> {
+    // Route procedure calls to appropriate handlers
+  }
+
+  shutdown(): Effect.Effect<void, never> {
+    // Cleanup resources
+  }
+}
+```
+
+For complete implementation details, see the [Plugin Interface guide](/docs/core/plugin-interface).
+
+## Using Source Plugins
+
+Execute specific procedures with discriminated union inputs:
+
+```typescript
+// Execute getById procedure
+const singleItem = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    const plugin = yield* pluginRuntime.usePlugin("my-source", {
+      secrets: { apiKey: "{{API_KEY}}" },
+      variables: { timeout: 30000 },
+    });
+    
+    return yield* pluginRuntime.executePlugin(plugin, {
+      procedure: "getById",
+      input: { id: "item-123" },
+      state: null,
+    });
+  })
+);
+
+// Execute search procedure with streaming
+const stream = yield* pluginRuntime.streamPlugin(
+  "my-source",
+  config,
+  {
+    procedure: "search",
+    input: { query: "typescript", limit: 10 },
+    state: null,
+  },
+  { maxItems: 100 }
+);
+```
+
+## State Management
+
+State enables resumable operations and controls streaming timing. The runtime automatically passes state between procedure calls:
+
+```typescript
+private search = implement(this.contract).search.handler(async ({ input, context }) => {
+  const state = context?.state;
+  const cursor = state?.cursor;
+  
+  const results = await this.client.search(input.query, { cursor });
+  
+  return {
+    items: results.items,
+    nextState: results.hasMore ? { cursor: results.nextCursor } : undefined,
+  };
+});
+```
+
+State flows automatically through streaming operations, enabling pagination and resumable data collection.
+
+## Next Steps
+
+<Cards>
+  <Card title="Deployment" href="/docs/plugins/deployment">
+    Build and deploy plugins to production
+  </Card>
+  <Card title="Streaming Guide" href="/docs/runtime/streaming">
+    Learn more about streaming patterns
+  </Card>
+  <Card title="Examples" href="/docs/examples">
+    See source plugins in real-world scenarios
+  </Card>
+</Cards>

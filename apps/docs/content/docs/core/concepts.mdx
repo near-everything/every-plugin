@@ -1,0 +1,238 @@
+---
+title: Core Concepts
+description: Effect, Module Federation, oRPC, and Zod foundations
+---
+
+## Effect
+
+[Effect](https://effect.website/) provides composable async operations with automatic resource management and error handling.
+
+### Why Effect?
+
+**Composability**: Chain operations with `yield*` syntax for readable async code.
+
+**Error Handling**: Built-in error types and recovery patterns.
+
+**Resource Management**: Automatic cleanup prevents memory leaks.
+
+**Type Safety**: Full TypeScript integration with inference.
+
+```typescript
+const workflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // Each yield* unwraps an Effect and handles errors
+  const plugin = yield* pluginRuntime.usePlugin("my-plugin", config);
+  const result = yield* pluginRuntime.executePlugin(plugin, input);
+  
+  return result; // Automatically typed
+});
+```
+
+## Module Federation
+
+[Module Federation](https://module-federation.io/) enables dynamic loading of JavaScript modules from remote URLs.
+
+### Why Module Federation?
+
+**Dynamic Loading**: Load plugins at runtime without bundling.
+
+**Version Management**: Different plugin versions can coexist.
+
+**Code Splitting**: Reduce bundle size by loading plugins on demand.
+
+**Isolation**: Plugins run in isolated contexts.
+
+```typescript
+// Plugin loaded from remote URL
+const registry = {
+  "my-plugin": {
+    remoteUrl: "https://cdn.example.com/plugins/my-plugin/remoteEntry.js",
+    type: "transformer",
+    version: "1.0.0"
+  }
+};
+```
+
+## oRPC
+
+[oRPC](https://orpc.io/) provides type-safe RPC contracts between runtime and plugins.
+
+### Why oRPC?
+
+**Type Safety**: Compile-time validation of inputs and outputs.
+
+**Contract-First**: Define API contracts before implementation.
+
+**Multiple Procedures**: Single plugin can expose multiple operations.
+
+**Validation**: Runtime validation with Zod schemas.
+
+```typescript
+// Define contract
+export const contract = orpc.contract({
+  search: orpc.route({
+    method: "POST",
+    path: "/search",
+  })
+    .input(z.object({
+      query: z.string().min(1),
+      limit: z.number().optional(),
+    }))
+    .output(z.object({
+      items: z.array(ItemSchema),
+      nextCursor: z.string().optional(),
+    })),
+});
+
+// Implement procedures
+private search = implement(this.contract).search.handler(async ({ input }) => {
+  const results = await this.client.search(input.query, input.limit);
+  return { items: results, nextCursor: results.nextCursor };
+});
+```
+
+## Zod
+
+[Zod](https://zod.dev/) provides runtime type validation and TypeScript inference.
+
+### Why Zod?
+
+**Runtime Validation**: Validate data at plugin boundaries.
+
+**Type Inference**: Generate TypeScript types from schemas.
+
+**Composability**: Build complex schemas from simple ones.
+
+**Error Messages**: Clear validation error messages.
+
+```typescript
+// Schema definition
+const ItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  content: z.string(),
+  createdAt: z.string().datetime(),
+  tags: z.array(z.string()).optional(),
+});
+
+// Type inference
+type Item = z.infer<typeof ItemSchema>; // Fully typed
+
+// Runtime validation
+const validatedItem = ItemSchema.parse(rawData); // Throws if invalid
+```
+
+## Plugin Architecture
+
+These technologies work together to create a robust plugin system:
+
+<Mermaid
+  chart="
+graph TB
+  subgraph Runtime
+    EF[Effect Runtime]
+    MF[Module Federation]
+    VS[Validation Service]
+  end
+  
+  subgraph Plugin
+    OR[oRPC Contract]
+    ZS[Zod Schemas]
+    PI[Plugin Implementation]
+  end
+  
+  EF --> MF
+  MF --> OR
+  OR --> ZS
+  ZS --> VS
+  VS --> PI
+  PI --> EF"
+/>
+
+## Type Flow
+
+Data flows through the system with validation at each boundary:
+
+```typescript
+// 1. Input validation (Zod)
+const validatedInput = inputSchema.parse(rawInput);
+
+// 2. Plugin execution (Effect)
+const result = yield* pluginRuntime.executePlugin(plugin, validatedInput);
+
+// 3. Output validation (Zod)
+const validatedOutput = outputSchema.parse(result);
+
+// 4. Type-safe result (TypeScript)
+return validatedOutput; // Fully typed
+```
+
+## Configuration System
+
+Plugins use a standardized configuration system:
+
+```typescript
+const configSchema = createConfigSchema(
+  // Variables (non-sensitive configuration)
+  z.object({
+    timeout: z.number().default(30000),
+    batchSize: z.number().default(100),
+    baseUrl: z.string().url().optional(),
+  }),
+  // Secrets (sensitive configuration)
+  z.object({
+    apiKey: z.string().min(1),
+    dbPassword: z.string().min(1),
+  })
+);
+
+// Runtime hydrates secrets using template syntax
+const config = {
+  secrets: {
+    apiKey: "{{API_KEY}}", // Replaced with actual secret
+    dbPassword: "{{DB_PASSWORD}}"
+  },
+  variables: {
+    timeout: 60000,
+    batchSize: 50
+  }
+};
+```
+
+## State Management
+
+Source plugins use state for resumable operations:
+
+```typescript
+const StateSchema = z.object({
+  cursor: z.string().optional(),
+  pageNumber: z.number().optional(),
+  lastProcessedId: z.string().optional(),
+  nextPollMs: z.number().optional(), // Controls streaming timing
+});
+
+// State flows through plugin executions
+const output = {
+  items: [...],
+  nextState: {
+    cursor: "page_2",
+    lastProcessedId: "item_123",
+    nextPollMs: 10000 // Poll again in 10 seconds
+  }
+};
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Plugin Interface" href="/docs/core/plugin-interface">
+    Detailed interface specification
+  </Card>
+  <Card title="Type System" href="/docs/core/types">
+    Input, Output, Config, and State schemas
+  </Card>
+  <Card title="Lifecycle" href="/docs/core/lifecycle">
+    Plugin lifecycle stages
+  </Card>
+</Cards>

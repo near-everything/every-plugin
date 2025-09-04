@@ -1,0 +1,9 @@
+{
+  "title": "Plugins",
+  "description": "Creating plugins",
+  "pages": [
+    "getting-started",
+    "source-plugins",
+    "deployment"
+  ]
+}

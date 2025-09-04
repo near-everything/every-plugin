@@ -1,0 +1,11 @@
+{
+  "title": "Runtime",
+  "description": "Using the plugin runtime",
+  "pages": [
+    "getting-started",
+    "basic-usage",
+    "streaming",
+    "error-handling",
+    "api-reference"
+  ]
+}

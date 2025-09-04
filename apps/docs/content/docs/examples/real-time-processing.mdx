@@ -1,0 +1,660 @@
+---
+title: Real-time Processing
+description: Build streaming data pipelines for continuous real-time processing
+---
+
+## Overview
+
+This example demonstrates building real-time data processing pipelines using streaming plugins. We'll create a system that continuously monitors multiple data sources, processes items as they arrive, and triggers actions based on real-time analysis.
+
+<Mermaid
+  chart="
+graph TD
+    A[Twitter Stream] --> D[Real-time Processor]
+    B[News RSS Feeds] --> D
+    C[Reddit Stream] --> D
+    
+    D --> E[Content Filter]
+    E --> F[Sentiment Analysis]
+    F --> G[Alert System]
+    F --> H[Data Store]
+    
+    G --> I[Slack Notifications]
+    G --> J[Email Alerts]
+    G --> K[Webhook Triggers]
+    
+    classDef sources fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff
+    classDef processor fill:#7c3aed,stroke:#6d28d9,stroke-width:2px,color:#fff
+    classDef analysis fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
+    classDef alerts fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+    classDef storage fill:#ea580c,stroke:#c2410c,stroke-width:2px,color:#fff
+    classDef outputs fill:#0891b2,stroke:#0e7490,stroke-width:2px,color:#fff
+    
+    class A,B,C sources
+    class D processor
+    class E,F analysis
+    class G alerts
+    class H storage
+    class I,J,K outputs"
+/>
+
+## Setup
+
+Configure the runtime for streaming operations:
+
+```typescript
+import { Effect, Stream, Schedule } from "effect";
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "@sources/twitter-stream": {
+      remoteUrl: "https://cdn.example.com/plugins/twitter-stream/remoteEntry.js",
+      type: "source",
+      version: "2.0.0",
+    },
+    "@sources/rss-monitor": {
+      remoteUrl: "https://cdn.example.com/plugins/rss-monitor/remoteEntry.js",
+      type: "source",
+      version: "1.5.0",
+    },
+    "@sources/reddit-stream": {
+      remoteUrl: "https://cdn.example.com/plugins/reddit-stream/remoteEntry.js",
+      type: "source",
+      version: "1.3.0",
+    },
+    "@transformers/content-filter": {
+      remoteUrl: "https://cdn.example.com/plugins/content-filter/remoteEntry.js",
+      type: "transformer",
+      version: "1.2.0",
+    },
+    "@transformers/sentiment-analyzer": {
+      remoteUrl: "https://cdn.example.com/plugins/sentiment-analyzer/remoteEntry.js",
+      type: "transformer",
+      version: "1.4.0",
+    },
+    "@transformers/alert-processor": {
+      remoteUrl: "https://cdn.example.com/plugins/alert-processor/remoteEntry.js",
+      type: "transformer",
+      version: "1.1.0",
+    },
+  },
+  secrets: {
+    TWITTER_BEARER_TOKEN: process.env.TWITTER_BEARER_TOKEN!,
+    REDDIT_CLIENT_ID: process.env.REDDIT_CLIENT_ID!,
+    REDDIT_CLIENT_SECRET: process.env.REDDIT_CLIENT_SECRET!,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY!,
+    SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL!,
+    SMTP_PASSWORD: process.env.SMTP_PASSWORD!,
+  },
+});
+```
+
+## Streaming Data Sources
+
+Create continuous streams from multiple sources:
+
+```typescript
+const createTwitterStream = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.streamPlugin(
+    "@sources/twitter-stream",
+    {
+      secrets: {
+        bearerToken: "{{TWITTER_BEARER_TOKEN}}",
+      },
+      variables: {
+        timeout: 30000,
+        reconnectDelay: 5000,
+      },
+    },
+    {
+      procedure: "streamTweets",
+      input: {
+        keywords: ["breaking news", "urgent", "alert"],
+        languages: ["en"],
+        filterLevel: "low",
+      },
+      state: null,
+    },
+    {
+      maxItems: 1000, // Process up to 1000 items per stream session
+      stopWhenEmpty: false, // Keep streaming
+    }
+  );
+});
+
+const createRSSStream = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.streamPlugin(
+    "@sources/rss-monitor",
+    {
+      variables: {
+        pollInterval: 60000, // Check every minute
+        timeout: 15000,
+      },
+    },
+    {
+      procedure: "monitorFeeds",
+      input: {
+        feeds: [
+          "https://feeds.reuters.com/reuters/breakingviews",
+          "https://feeds.bbci.co.uk/news/world/rss.xml",
+          "https://rss.cnn.com/rss/edition.rss",
+        ],
+        includeContent: true,
+      },
+      state: null,
+    },
+    {
+      maxItems: 500,
+      stopWhenEmpty: false,
+    }
+  );
+});
+
+const createRedditStream = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.streamPlugin(
+    "@sources/reddit-stream",
+    {
+      secrets: {
+        clientId: "{{REDDIT_CLIENT_ID}}",
+        clientSecret: "{{REDDIT_CLIENT_SECRET}}",
+      },
+      variables: {
+        pollInterval: 30000, // Check every 30 seconds
+      },
+    },
+    {
+      procedure: "streamPosts",
+      input: {
+        subreddits: ["worldnews", "news", "breakingnews"],
+        sortBy: "new",
+        limit: 25,
+      },
+      state: null,
+    },
+    {
+      maxItems: 200,
+      stopWhenEmpty: false,
+    }
+  );
+});
+```
+
+## Real-time Processing Pipeline
+
+Process streaming data through multiple stages:
+
+```typescript
+const processStreamItem = (item: any) => Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // Stage 1: Content filtering
+  const contentFilter = yield* pluginRuntime.usePlugin("@transformers/content-filter", {
+    variables: {
+      minLength: 50,
+      maxLength: 5000,
+      blockedKeywords: ["spam", "advertisement"],
+      requiredKeywords: ["breaking", "urgent", "alert", "important"],
+      languageFilter: ["en"],
+    },
+  });
+  
+  const filterResult = yield* pluginRuntime.executePlugin(contentFilter, {
+    items: [item],
+  });
+  
+  // Skip if filtered out
+  if (filterResult.items.length === 0) {
+    return null;
+  }
+  
+  const filteredItem = filterResult.items[0];
+  
+  // Stage 2: Sentiment analysis
+  const sentimentAnalyzer = yield* pluginRuntime.usePlugin("@transformers/sentiment-analyzer", {
+    secrets: {
+      openaiApiKey: "{{OPENAI_API_KEY}}",
+    },
+    variables: {
+      model: "gpt-3.5-turbo",
+      includeEmotions: true,
+      confidenceThreshold: 0.7,
+    },
+  });
+  
+  const sentimentResult = yield* pluginRuntime.executePlugin(sentimentAnalyzer, {
+    items: [filteredItem],
+  });
+  
+  const analyzedItem = sentimentResult.items[0];
+  
+  // Stage 3: Alert processing
+  const alertProcessor = yield* pluginRuntime.usePlugin("@transformers/alert-processor", {
+    variables: {
+      urgencyThreshold: 0.8,
+      sentimentThreshold: -0.5, // Negative sentiment
+      keywordWeights: {
+        "breaking": 1.0,
+        "urgent": 0.9,
+        "alert": 0.8,
+        "emergency": 1.0,
+      },
+    },
+  });
+  
+  const alertResult = yield* pluginRuntime.executePlugin(alertProcessor, {
+    items: [analyzedItem],
+  });
+  
+  return alertResult.items[0];
+});
+```
+
+## Stream Composition and Merging
+
+Combine multiple streams into a unified processing pipeline:
+
+```typescript
+const createUnifiedStream = Effect.gen(function* () {
+  // Create individual streams
+  const twitterStream = yield* createTwitterStream;
+  const rssStream = yield* createRSSStream;
+  const redditStream = yield* createRedditStream;
+  
+  // Merge all streams with source tagging
+  const taggedTwitterStream = twitterStream.pipe(
+    Stream.map(item => ({ ...item, source: "twitter", priority: "high" }))
+  );
+  
+  const taggedRSSStream = rssStream.pipe(
+    Stream.map(item => ({ ...item, source: "rss", priority: "medium" }))
+  );
+  
+  const taggedRedditStream = redditStream.pipe(
+    Stream.map(item => ({ ...item, source: "reddit", priority: "low" }))
+  );
+  
+  // Merge streams with priority handling
+  const mergedStream = Stream.merge(
+    taggedTwitterStream,
+    Stream.merge(taggedRSSStream, taggedRedditStream)
+  );
+  
+  // Process each item through the pipeline
+  const processedStream = mergedStream.pipe(
+    Stream.mapEffect(
+      (item) => processStreamItem(item).pipe(
+        Effect.catchAll((error) => {
+          console.error(`Processing failed for item ${item.id}:`, error);
+          return Effect.succeed(null); // Skip failed items
+        })
+      ),
+      { concurrency: 5 } // Process up to 5 items concurrently
+    ),
+    Stream.filter((item): item is NonNullable<typeof item> => item !== null)
+  );
+  
+  return processedStream;
+});
+```
+
+## Alert System
+
+Handle different types of alerts based on processing results:
+
+```typescript
+interface AlertConfig {
+  slack: {
+    webhookUrl: string;
+    channel: string;
+    urgencyThreshold: number;
+  };
+  email: {
+    recipients: string[];
+    smtpConfig: {
+      host: string;
+      port: number;
+      username: string;
+      password: string;
+    };
+  };
+  webhook: {
+    urls: string[];
+    retryAttempts: number;
+  };
+}
+
+const handleAlert = (item: any, config: AlertConfig) => Effect.gen(function* () {
+  const urgencyScore = item.urgencyScore || 0;
+  const sentiment = item.sentiment || 0;
+  
+  // Determine alert level
+  const alertLevel = urgencyScore > 0.9 ? "critical" :
+                    urgencyScore > 0.7 ? "high" :
+                    urgencyScore > 0.5 ? "medium" : "low";
+  
+  const alertData = {
+    id: item.id,
+    title: item.title,
+    content: item.content.substring(0, 200) + "...",
+    source: item.source,
+    urgencyScore,
+    sentiment,
+    alertLevel,
+    timestamp: new Date().toISOString(),
+    url: item.url,
+  };
+  
+  // Send Slack notification for high priority alerts
+  if (urgencyScore >= config.slack.urgencyThreshold) {
+    yield* sendSlackAlert(alertData, config.slack);
+  }
+  
+  // Send email for critical alerts
+  if (alertLevel === "critical") {
+    yield* sendEmailAlert(alertData, config.email);
+  }
+  
+  // Send webhook for all alerts
+  yield* sendWebhookAlert(alertData, config.webhook);
+  
+  // Log alert
+  console.log(`Alert sent: ${alertLevel} - ${item.title}`);
+});
+
+const sendSlackAlert = (alert: any, config: AlertConfig["slack"]) =>
+  Effect.tryPromise({
+    try: async () => {
+      const response = await fetch(config.webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: config.channel,
+          text: `🚨 ${alert.alertLevel.toUpperCase()} Alert`,
+          attachments: [{
+            color: alert.alertLevel === "critical" ? "danger" : "warning",
+            title: alert.title,
+            text: alert.content,
+            fields: [
+              { title: "Source", value: alert.source, short: true },
+              { title: "Urgency", value: `${(alert.urgencyScore * 100).toFixed(1)}%`, short: true },
+              { title: "Sentiment", value: alert.sentiment > 0 ? "Positive" : "Negative", short: true },
+            ],
+            footer: "Real-time Alert System",
+            ts: Math.floor(Date.now() / 1000),
+          }],
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Slack API error: ${response.statusText}`);
+      }
+    },
+    catch: (error) => new Error(`Failed to send Slack alert: ${error}`),
+  });
+
+const sendEmailAlert = (alert: any, config: AlertConfig["email"]) =>
+  Effect.tryPromise({
+    try: async () => {
+      // Email sending implementation
+      console.log(`Sending email alert to ${config.recipients.join(", ")}`);
+      // Implementation would use nodemailer or similar
+    },
+    catch: (error) => new Error(`Failed to send email alert: ${error}`),
+  });
+
+const sendWebhookAlert = (alert: any, config: AlertConfig["webhook"]) =>
+  Effect.gen(function* () {
+    yield* Effect.all(
+      config.urls.map(url =>
+        Effect.tryPromise({
+          try: () => fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(alert),
+          }),
+          catch: (error) => new Error(`Webhook failed: ${error}`),
+        }).pipe(
+          Effect.retry({ times: config.retryAttempts })
+        )
+      ),
+      { concurrency: 3 }
+    );
+  });
+```
+
+## Complete Real-time System
+
+Combine all components into a complete real-time processing system:
+
+```typescript
+const runRealTimeSystem = Effect.gen(function* () {
+  console.log("Starting real-time processing system...");
+  
+  const alertConfig: AlertConfig = {
+    slack: {
+      webhookUrl: "{{SLACK_WEBHOOK_URL}}",
+      channel: "#alerts",
+      urgencyThreshold: 0.7,
+    },
+    email: {
+      recipients: ["admin@example.com", "alerts@example.com"],
+      smtpConfig: {
+        host: "smtp.gmail.com",
+        port: 587,
+        username: "alerts@example.com",
+        password: "{{SMTP_PASSWORD}}",
+      },
+    },
+    webhook: {
+      urls: ["https://api.example.com/alerts", "https://monitoring.example.com/webhook"],
+      retryAttempts: 3,
+    },
+  };
+  
+  // Create unified stream
+  const stream = yield* createUnifiedStream;
+  
+  // Process stream with metrics tracking
+  let processedCount = 0;
+  let alertCount = 0;
+  const startTime = Date.now();
+  
+  // Run the stream processing
+  yield* stream.pipe(
+    Stream.tap((item) => Effect.gen(function* () {
+      processedCount++;
+      
+      // Handle alerts
+      if (item.urgencyScore > 0.5) {
+        alertCount++;
+        yield* handleAlert(item, alertConfig);
+      }
+      
+      // Store processed item (database, cache, etc.)
+      yield* storeProcessedItem(item);
+      
+      // Log progress every 100 items
+      if (processedCount % 100 === 0) {
+        const elapsed = Date.now() - startTime;
+        const rate = (processedCount / elapsed) * 1000; // items per second
+        console.log(`Processed: ${processedCount}, Alerts: ${alertCount}, Rate: ${rate.toFixed(2)}/sec`);
+      }
+    })),
+    Stream.runDrain // Run the stream indefinitely
+  );
+});
+
+const storeProcessedItem = (item: any) =>
+  Effect.tryPromise({
+    try: async () => {
+      // Store in database, cache, or external service
+      console.log(`Storing item: ${item.id}`);
+      // Implementation would use database client
+    },
+    catch: (error) => new Error(`Failed to store item: ${error}`),
+  });
+```
+
+## Error Recovery and Resilience
+
+Add comprehensive error handling and recovery:
+
+```typescript
+const resilientRealTimeSystem = Effect.gen(function* () {
+  const maxRetries = 3;
+  const backoffSchedule = Schedule.exponential("1 second").pipe(
+    Schedule.compose(Schedule.recurs(maxRetries))
+  );
+  
+  return yield* runRealTimeSystem.pipe(
+    Effect.retry(backoffSchedule),
+    Effect.catchAll((error) => {
+      console.error("Real-time system failed after retries:", error);
+      
+      // Send system failure alert
+      return Effect.gen(function* () {
+        yield* sendSystemAlert({
+          type: "system_failure",
+          error: error.message,
+          timestamp: new Date().toISOString(),
+        });
+        
+        // Wait before attempting restart
+        yield* Effect.sleep("30 seconds");
+        
+        // Attempt to restart
+        return yield* resilientRealTimeSystem;
+      });
+    })
+  );
+});
+
+const sendSystemAlert = (alert: any) =>
+  Effect.tryPromise({
+    try: async () => {
+      console.log("System alert:", alert);
+      // Send critical system alerts via multiple channels
+    },
+    catch: () => new Error("Failed to send system alert"),
+  });
+```
+
+## Monitoring and Health Checks
+
+Add system monitoring and health checks:
+
+```typescript
+const monitoredRealTimeSystem = Effect.gen(function* () {
+  // Start health check monitoring
+  const healthCheck = Effect.gen(function* () {
+    while (true) {
+      yield* Effect.sleep("1 minute");
+      
+      // Check system health
+      const health = yield* checkSystemHealth();
+      
+      if (!health.healthy) {
+        console.warn("System health check failed:", health.issues);
+        yield* sendHealthAlert(health);
+      }
+    }
+  }).pipe(Effect.fork);
+  
+  // Start metrics collection
+  const metricsCollection = Effect.gen(function* () {
+    while (true) {
+      yield* Effect.sleep("5 minutes");
+      yield* collectAndReportMetrics();
+    }
+  }).pipe(Effect.fork);
+  
+  // Run main system
+  yield* resilientRealTimeSystem;
+});
+
+const checkSystemHealth = Effect.gen(function* () {
+  const checks = [
+    checkDatabaseConnection(),
+    checkExternalAPIs(),
+    checkMemoryUsage(),
+    checkStreamHealth(),
+  ];
+  
+  const results = yield* Effect.allSettled(checks);
+  const failures = results.filter(r => r._tag === "Left");
+  
+  return {
+    healthy: failures.length === 0,
+    issues: failures.map(f => f.left.message),
+    timestamp: new Date().toISOString(),
+  };
+});
+
+const collectAndReportMetrics = Effect.gen(function* () {
+  const metrics = {
+    itemsProcessed: processedCount,
+    alertsSent: alertCount,
+    systemUptime: Date.now() - startTime,
+    memoryUsage: process.memoryUsage(),
+    timestamp: new Date().toISOString(),
+  };
+  
+  console.log("System metrics:", metrics);
+  // Send to monitoring service
+});
+```
+
+## Usage Example
+
+Complete example with graceful shutdown:
+
+```typescript
+async function startRealTimeProcessing() {
+  console.log("Initializing real-time processing system...");
+  
+  try {
+    // Start the monitored system
+    const systemFiber = await runtime.runPromise(
+      monitoredRealTimeSystem.pipe(Effect.fork)
+    );
+    
+    // Handle graceful shutdown
+    const shutdown = async () => {
+      console.log("Shutting down real-time system...");
+      await Effect.runPromise(systemFiber.interrupt);
+      await runtime.dispose();
+      console.log("System shutdown complete");
+      process.exit(0);
+    };
+    
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+    
+    console.log("Real-time processing system started successfully");
+    console.log("Press Ctrl+C to stop");
+    
+    // Wait for system completion (runs indefinitely)
+    await Effect.runPromise(systemFiber.await);
+    
+  } catch (error) {
+    console.error("Failed to start real-time system:", error);
+    process.exit(1);
+  }
+}
+
+// Start the system
+startRealTimeProcessing();
+```
+
+## Next Steps
+
+- [Data Aggregation](./data-aggregation) - Build batch processing pipelines
+- [Multi-source Pipeline](./multi-source-pipeline) - Advanced pipeline patterns
+- [Streaming](../runtime/streaming) - Deep dive into streaming concepts

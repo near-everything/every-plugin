@@ -1,0 +1,496 @@
+---
+title: Type System
+description: Comprehensive guide to the every-plugin type system and schema validation
+---
+
+## Type System Overview
+
+The every-plugin system uses a robust type system built on [Zod](https://zod.dev/) for runtime validation and TypeScript for compile-time safety. This ensures data integrity throughout the plugin lifecycle and provides excellent developer experience.
+
+<Mermaid
+  chart="
+graph TD
+    A[Plugin Input] --> B[Zod Schema Validation]
+    B --> C[TypeScript Types]
+    C --> D[Plugin Execution]
+    D --> E[Output Validation]
+    E --> F[Typed Results]
+    
+    G[Configuration] --> H[Config Schema]
+    H --> I[Secret Hydration]
+    I --> J[Plugin Initialization]
+    
+"
+/>
+
+## Core Type Categories
+
+### Plugin Configuration Types
+
+Configuration types separate sensitive secrets from regular variables:
+
+```typescript
+import { createConfigSchema } from "every-plugin";
+import { z } from "zod";
+
+// Define configuration schema
+export const MyPluginConfigSchema = createConfigSchema(
+  // Variables (non-sensitive)
+  z.object({
+    timeout: z.number().min(1000).max(300000).default(30000),
+    retryAttempts: z.number().min(0).max(10).default(3),
+    baseUrl: z.string().url().optional(),
+    batchSize: z.number().min(1).max(1000).default(100),
+  }),
+  // Secrets (sensitive)
+  z.object({
+    apiKey: z.string().min(1, "API key is required"),
+    clientSecret: z.string().min(1).optional(),
+    webhookSecret: z.string().optional(),
+  })
+);
+
+// Infer TypeScript types
+export type MyPluginConfig = z.infer<typeof MyPluginConfigSchema>;
+
+// Usage in plugin
+class MyPlugin {
+  initialize(config: MyPluginConfig): Effect.Effect<void, ConfigurationError> {
+    // config.secrets.apiKey - string
+    // config.variables.timeout - number (default: 30000)
+    // config.variables.baseUrl - string | undefined
+  }
+}
+```
+
+### Input/Output Schemas
+
+Define strict contracts for plugin procedures:
+
+```typescript
+// Input schemas with validation
+export const SearchInputSchema = z.object({
+  query: z.string().min(1, "Query cannot be empty"),
+  limit: z.number().min(1).max(1000).default(20),
+  filters: z.object({
+    category: z.enum(["tech", "business", "science"]).optional(),
+    dateRange: z.object({
+      start: z.string().datetime(),
+      end: z.string().datetime(),
+    }).optional(),
+  }).optional(),
+});
+
+// Output schemas with structured data
+export const SearchOutputSchema = z.object({
+  items: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    content: z.string(),
+    score: z.number().min(0).max(1),
+    metadata: z.record(z.any()).optional(),
+  })),
+  totalCount: z.number().min(0),
+  nextCursor: z.string().optional(),
+});
+
+// Type inference
+export type SearchInput = z.infer<typeof SearchInputSchema>;
+export type SearchOutput = z.infer<typeof SearchOutputSchema>;
+```
+
+### State Management Types
+
+For plugins that maintain state between executions:
+
+```typescript
+export const StateSchema = z.object({
+  // Pagination state
+  cursor: z.string().optional(),
+  pageNumber: z.number().min(1).optional(),
+  
+  // Processing state
+  lastProcessedId: z.string().optional(),
+  lastProcessedTimestamp: z.string().datetime().optional(),
+  
+  // Workflow state
+  phase: z.enum(["initializing", "historical", "realtime", "complete"]).optional(),
+  jobId: z.string().optional(),
+  
+  // Timing control
+  nextPollMs: z.number().min(10).optional(),
+  
+  // Custom metadata
+  metadata: z.record(z.any()).optional(),
+});
+
+export type State = z.infer<typeof StateSchema>;
+
+// Usage in streaming
+const streamInput = {
+  procedure: "search",
+  input: { query: "typescript" },
+  state: {
+    phase: "historical" as const,
+    pageNumber: 1,
+    nextPollMs: 1000,
+  } satisfies State,
+};
+```
+
+## oRPC Contract Types
+
+Define type-safe API contracts using [oRPC](https://orpc.io/):
+
+```typescript
+import { initORPC } from "@orpc/server";
+import { z } from "zod";
+
+const orpc = initORPC();
+
+// Define contract with multiple procedures
+export const contract = orpc.contract({
+  // Single item retrieval
+  getById: orpc.route({
+    method: "POST",
+    path: "/getById",
+    summary: "Get item by ID",
+  })
+    .input(z.object({
+      id: z.string().min(1),
+    }))
+    .output(z.object({
+      item: z.object({
+        id: z.string(),
+        data: z.any(),
+      }).optional(),
+    })),
+
+  // Bulk operations
+  getBulk: orpc.route({
+    method: "POST",
+    path: "/getBulk",
+    summary: "Get multiple items",
+  })
+    .input(z.object({
+      ids: z.array(z.string()).min(1).max(100),
+    }))
+    .output(z.object({
+      items: z.array(z.object({
+        id: z.string(),
+        data: z.any(),
+      })),
+    })),
+
+  // Search with pagination
+  search: orpc.route({
+    method: "POST",
+    path: "/search",
+    summary: "Search items with pagination",
+  })
+    .input(SearchInputSchema)
+    .output(SearchOutputSchema.extend({
+      nextState: StateSchema.optional(),
+    })),
+});
+
+// Extract types from contract
+export type Contract = typeof contract;
+export type GetByIdInput = z.infer<typeof contract.getById.input>;
+export type GetByIdOutput = z.infer<typeof contract.getById.output>;
+```
+
+## Runtime Types
+
+Types used by the plugin runtime system:
+
+```typescript
+// Plugin registry entry
+export interface PluginRegistryEntry {
+  remoteUrl: string;
+  type: "source" | "transformer" | "pipeline";
+  version: string;
+  description?: string;
+  tags?: string[];
+}
+
+// Runtime configuration
+export interface RuntimeConfig {
+  registry: Record<string, PluginRegistryEntry>;
+  secrets: Record<string, string>;
+  logger?: Logger;
+}
+
+// Plugin execution input (discriminated union)
+export type PluginExecutionInput = 
+  | {
+      procedure: string;
+      input: unknown;
+      state: unknown;
+    }
+  | {
+      items: unknown[];
+      config?: unknown;
+    };
+
+// Stream options
+export interface SourceStreamOptions {
+  maxItems?: number;
+  maxInvocations?: number;
+  stopWhenEmpty?: boolean;
+}
+```
+
+## Error Types
+
+Structured error types for consistent error handling:
+
+```typescript
+// Base plugin error
+export abstract class PluginError extends Error {
+  abstract readonly code: string;
+  abstract readonly retryable: boolean;
+  
+  constructor(
+    message: string,
+    public readonly cause?: unknown
+  ) {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+// Configuration errors (initialization phase)
+export class ConfigurationError extends PluginError {
+  readonly code = "CONFIGURATION_ERROR";
+  readonly retryable = false;
+}
+
+// Execution errors (runtime phase)
+export class PluginExecutionError extends PluginError {
+  readonly code = "PLUGIN_EXECUTION_ERROR";
+  
+  constructor(
+    message: string,
+    public readonly retryable: boolean,
+    cause?: unknown
+  ) {
+    super(message, cause);
+  }
+}
+
+// Runtime errors (system level)
+export class PluginRuntimeError extends PluginError {
+  readonly code = "PLUGIN_RUNTIME_ERROR";
+  
+  constructor(
+    message: string,
+    public readonly retryable: boolean,
+    public readonly pluginId?: string,
+    public readonly operation?: string,
+    cause?: unknown
+  ) {
+    super(message, cause);
+  }
+}
+```
+
+## Validation Patterns
+
+Common validation patterns for plugin development:
+
+### Input Validation
+
+```typescript
+// Strict validation with custom messages
+const StrictInputSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  age: z.number().min(0, "Age must be positive").max(150, "Age too high"),
+  tags: z.array(z.string()).min(1, "At least one tag required"),
+  metadata: z.record(z.string(), z.any()).optional(),
+});
+
+// Flexible validation with transforms
+const FlexibleInputSchema = z.object({
+  query: z.string().trim().min(1),
+  limit: z.coerce.number().min(1).max(1000).default(20),
+  includeMetadata: z.coerce.boolean().default(false),
+});
+
+// Union types for multiple input formats
+const MultiFormatInputSchema = z.union([
+  z.object({ type: z.literal("text"), content: z.string() }),
+  z.object({ type: z.literal("file"), path: z.string() }),
+  z.object({ type: z.literal("url"), url: z.string().url() }),
+]);
+```
+
+### Output Validation
+
+```typescript
+// Standardized output format
+const StandardOutputSchema = z.object({
+  success: z.boolean(),
+  data: z.any().optional(),
+  error: z.string().optional(),
+  metadata: z.object({
+    processingTime: z.number(),
+    itemCount: z.number(),
+    version: z.string(),
+  }).optional(),
+});
+
+// Paginated results
+const PaginatedOutputSchema = z.object({
+  items: z.array(z.any()),
+  pagination: z.object({
+    total: z.number(),
+    page: z.number(),
+    pageSize: z.number(),
+    hasNext: z.boolean(),
+    nextCursor: z.string().optional(),
+  }),
+});
+```
+
+## Type Guards and Utilities
+
+Helper functions for type checking and validation:
+
+```typescript
+// Type guards
+export function isSourcePlugin(plugin: Plugin<any, any, any>): plugin is SourcePlugin<any, any, any> {
+  return plugin.type === "source";
+}
+
+export function isTransformerPlugin(plugin: Plugin<any, any, any>): plugin is TransformerPlugin<any, any> {
+  return plugin.type === "transformer";
+}
+
+// Validation utilities
+export function validateConfig<T>(
+  schema: z.ZodSchema<T>,
+  config: unknown
+): Effect.Effect<T, ConfigurationError> {
+  return Effect.try({
+    try: () => schema.parse(config),
+    catch: (error) => new ConfigurationError(
+      `Configuration validation failed: ${error}`
+    ),
+  });
+}
+
+export function validateInput<T>(
+  schema: z.ZodSchema<T>,
+  input: unknown
+): Effect.Effect<T, PluginExecutionError> {
+  return Effect.try({
+    try: () => schema.parse(input),
+    catch: (error) => new PluginExecutionError(
+      `Input validation failed: ${error}`,
+      false
+    ),
+  });
+}
+```
+
+## Advanced Type Patterns
+
+### Generic Plugin Types
+
+```typescript
+// Generic plugin interface
+interface GenericPlugin<
+  TContract extends Record<string, any>,
+  TConfig extends Record<string, any>,
+  TState extends Record<string, any> = never
+> {
+  readonly contract: TContract;
+  readonly configSchema: z.ZodSchema<TConfig>;
+  readonly stateSchema?: z.ZodSchema<TState>;
+}
+
+// Conditional types for state
+type PluginWithState<T> = T extends { stateSchema: z.ZodSchema<infer S> } 
+  ? T & { state: S }
+  : T;
+
+// Extract contract types
+type ExtractContractTypes<T> = T extends { contract: infer C }
+  ? C extends Record<string, { input: z.ZodSchema<infer I>; output: z.ZodSchema<infer O> }>
+    ? { [K in keyof C]: { input: I; output: O } }
+    : never
+  : never;
+```
+
+### Runtime Type Checking
+
+```typescript
+// Runtime type checking with Effect
+export function safeExecute<T>(
+  schema: z.ZodSchema<T>,
+  operation: () => Promise<unknown>
+): Effect.Effect<T, PluginExecutionError> {
+  return Effect.gen(function* () {
+    const result = yield* Effect.tryPromise({
+      try: operation,
+      catch: (error) => new PluginExecutionError(
+        `Operation failed: ${error}`,
+        true
+      ),
+    });
+    
+    return yield* Effect.try({
+      try: () => schema.parse(result),
+      catch: (error) => new PluginExecutionError(
+        `Output validation failed: ${error}`,
+        false
+      ),
+    });
+  });
+}
+```
+
+## Testing Types
+
+Type-safe testing patterns:
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { z } from "zod";
+
+describe("Type Validation", () => {
+  it("should validate plugin configuration", () => {
+    const config = {
+      secrets: { apiKey: "test-key" },
+      variables: { timeout: 30000 },
+    };
+    
+    const result = MyPluginConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+    
+    if (result.success) {
+      // TypeScript knows result.data is MyPluginConfig
+      expect(result.data.secrets.apiKey).toBe("test-key");
+      expect(result.data.variables.timeout).toBe(30000);
+    }
+  });
+  
+  it("should reject invalid input", () => {
+    const invalidInput = { query: "" }; // Empty query
+    
+    const result = SearchInputSchema.safeParse(invalidInput);
+    expect(result.success).toBe(false);
+    
+    if (!result.success) {
+      expect(result.error.issues[0].message).toContain("Query cannot be empty");
+    }
+  });
+});
+```
+
+## Next Steps
+
+- [Lifecycle](./lifecycle) - Understand plugin lifecycle stages
+- [Plugin Interface](./plugin-interface) - Detailed interface specification
+- [Plugin Creation](../plugins/getting-started) - Start building with types

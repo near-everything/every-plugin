@@ -1,5 +1,5 @@
 ---
-title: Runtime API
+title: API Reference
 description: Complete reference for the plugin runtime service and methods
 ---
 
@@ -14,7 +14,7 @@ const runtime = createPluginRuntime({
   registry: {
     "plugin-id": {
       remoteUrl: "https://cdn.example.com/plugin/remoteEntry.js",
-      type: "source", // or "transformer", "pipeline"
+      type: "source", // or "transformer", "distributor"
       version: "1.0.0",
       description: "Plugin description",
     },
@@ -53,24 +53,21 @@ const result = await runtime.runPromise(workflow);
 Loads, instantiates, and initializes a plugin in one operation. This is the recommended method for most use cases.
 
 ```typescript
-const plugin =
-  yield *
-  pluginRuntime.usePlugin("my-plugin", {
-    secrets: {
-      apiKey: "{{API_KEY}}", // Secrets are hydrated automatically
-    },
-    variables: {
-      timeout: 30000,
-      batchSize: 100,
-    },
-  });
+const plugin = yield* pluginRuntime.usePlugin("my-plugin", {
+  secrets: {
+    apiKey: "{{API_KEY}}", // Secrets are hydrated automatically
+  },
+  variables: {
+    timeout: 30000,
+    batchSize: 100,
+  },
+});
 
 // Plugin is ready to execute
-const result = yield * pluginRuntime.executePlugin(plugin, input);
+const result = yield* pluginRuntime.executePlugin(plugin, input);
 ```
 
 **Parameters:**
-
 - `pluginId: string` - Plugin identifier from registry
 - `config: object` - Plugin configuration with secret templating
 
@@ -81,20 +78,17 @@ const result = yield * pluginRuntime.executePlugin(plugin, input);
 Executes an initialized plugin with validated input and returns validated output:
 
 ```typescript
-const output =
-  yield *
-  pluginRuntime.executePlugin(plugin, {
-    query: "search term",
-    limit: 100,
-    filters: { category: "tech" },
-  });
+const output = yield* pluginRuntime.executePlugin(plugin, {
+  query: "search term",
+  limit: 100,
+  filters: { category: "tech" },
+});
 
 // Output is validated against plugin's output schema
 console.log(output.items.length);
 ```
 
 **Parameters:**
-
 - `plugin: InitializedPlugin` - Plugin from `usePlugin()` or manual initialization
 - `input: object` - Input data matching plugin's input schema
 
@@ -105,29 +99,26 @@ console.log(output.items.length);
 Creates a stream from a source plugin for continuous data processing. Only works with source plugins that implement streamable procedures.
 
 ```typescript
-const stream =
-  yield *
-  pluginRuntime.streamPlugin(
-    "data-source",
-    config,
-    {
-      procedure: "search",
-      input: { query: "typescript" },
-      state: null,
-    },
-    {
-      maxItems: 1000,
-      maxInvocations: 10,
-      stopWhenEmpty: true,
-    }
-  );
+const stream = yield* pluginRuntime.streamPlugin(
+  "data-source",
+  config,
+  {
+    procedure: "search",
+    input: { query: "typescript" },
+    state: null,
+  },
+  {
+    maxItems: 1000,
+    maxInvocations: 10,
+    stopWhenEmpty: true,
+  }
+);
 
 // Process stream with Effect Stream operations
-const items = yield * stream.pipe(Stream.take(100), Stream.runCollect);
+const items = yield* stream.pipe(Stream.take(100), Stream.runCollect);
 ```
 
 **Parameters:**
-
 - `pluginId: string` - Source plugin identifier
 - `config: object` - Plugin configuration
 - `input: object` - Procedure input with state
@@ -144,7 +135,7 @@ For advanced use cases requiring granular control:
 Downloads and caches the plugin module from its [Module Federation](https://module-federation.io/) URL:
 
 ```typescript
-const constructor = yield * pluginRuntime.loadPlugin("my-plugin");
+const constructor = yield* pluginRuntime.loadPlugin("my-plugin");
 // Plugin constructor is now available for instantiation
 ```
 
@@ -153,7 +144,7 @@ const constructor = yield * pluginRuntime.loadPlugin("my-plugin");
 Creates a new instance of the plugin class:
 
 ```typescript
-const instance = yield * pluginRuntime.instantiatePlugin(constructor);
+const instance = yield* pluginRuntime.instantiatePlugin(constructor);
 // Plugin instance created but not yet initialized
 ```
 
@@ -162,12 +153,10 @@ const instance = yield * pluginRuntime.instantiatePlugin(constructor);
 Initializes the plugin with configuration and hydrated secrets:
 
 ```typescript
-const initialized =
-  yield *
-  pluginRuntime.initializePlugin(instance, {
-    apiKey: "{{API_KEY}}", // Will be hydrated
-    timeout: 30000,
-  });
+const initialized = yield* pluginRuntime.initializePlugin(instance, {
+  apiKey: "{{API_KEY}}", // Will be hydrated
+  timeout: 30000,
+});
 // Plugin is ready for execution
 ```
 
@@ -255,6 +244,14 @@ await runtime.dispose(); // Clean shutdown
 
 ## Next Steps
 
-- [Creating Plugins](./plugin) - Build your own plugins
-- [Source Plugins](./source) - Data fetching plugins
-- [Streaming](./stream) - Continuous data processing patterns
+<Cards>
+  <Card title="Error Handling" href="/docs/runtime/error-handling">
+    Handle runtime errors gracefully
+  </Card>
+  <Card title="Creating Plugins" href="/docs/plugins">
+    Build your own plugins
+  </Card>
+  <Card title="Examples" href="/docs/examples">
+    Real-world implementation patterns
+  </Card>
+</Cards>

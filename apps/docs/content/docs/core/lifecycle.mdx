@@ -1,0 +1,552 @@
+---
+title: Plugin Lifecycle
+description: Understanding the four-stage plugin lifecycle and state transitions
+---
+
+## Lifecycle Overview
+
+Every plugin follows a four-stage lifecycle: **load** → **instantiate** → **initialize** → **execute**. The runtime manages these stages automatically through the `usePlugin()` method, but understanding each stage helps with debugging and advanced use cases.
+
+<Mermaid
+  chart="
+graph TD
+    A[Plugin Registry] --> B[Load Stage]
+    B --> C[Module Federation Download]
+    C --> D[Plugin Constructor]
+    
+    D --> E[Instantiate Stage]
+    E --> F[Create Plugin Instance]
+    
+    F --> G[Initialize Stage]
+    G --> H[Config Validation]
+    H --> I[Secret Hydration]
+    I --> J[Resource Setup]
+    J --> K[Ready Plugin]
+    
+    K --> L[Execute Stage]
+    L --> M[Input Validation]
+    M --> N[Procedure Execution]
+    N --> O[Output Validation]
+    O --> P[Results]
+    
+    Q[Shutdown] --> R[Resource Cleanup]
+    
+    classDef registry fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff
+    classDef load fill:#7c3aed,stroke:#6d28d9,stroke-width:2px,color:#fff
+    classDef instantiate fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
+    classDef initialize fill:#ea580c,stroke:#c2410c,stroke-width:2px,color:#fff
+    classDef execute fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+    classDef shutdown fill:#6b7280,stroke:#4b5563,stroke-width:2px,color:#fff
+    
+    class A registry
+    class B,C,D load
+    class E,F instantiate
+    class G,H,I,J,K initialize
+    class L,M,N,O,P execute
+    class Q,R shutdown"
+/>
+
+## Stage 1: Load
+
+The load stage downloads the plugin module from its [Module Federation](https://module-federation.io/) URL and extracts the plugin constructor.
+
+### What Happens
+
+```typescript
+// Runtime loads plugin from registry
+const pluginEntry = registry["my-plugin"];
+// { remoteUrl: "https://cdn.example.com/plugin/remoteEntry.js", ... }
+
+// Download and import the remote module
+const remoteModule = await import(pluginEntry.remoteUrl);
+const PluginConstructor = remoteModule.default;
+```
+
+### Manual Load
+
+```typescript
+const workflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // Manually load plugin constructor
+  const constructor = yield* pluginRuntime.loadPlugin("my-plugin");
+  
+  // Constructor is now available for instantiation
+  console.log(constructor.name); // "MyPlugin"
+});
+```
+
+### Load Errors
+
+Common issues during the load stage:
+
+```typescript
+// Network errors
+new PluginRuntimeError(
+  "Failed to load plugin: Network timeout",
+  true, // Retryable
+  "my-plugin",
+  "load"
+);
+
+// Invalid module format
+new PluginRuntimeError(
+  "Plugin module does not export default constructor",
+  false, // Not retryable
+  "my-plugin",
+  "load"
+);
+```
+
+## Stage 2: Instantiate
+
+The instantiate stage creates a new instance of the plugin class.
+
+### What Happens
+
+```typescript
+// Create new plugin instance
+const pluginInstance = new PluginConstructor();
+
+// Verify plugin implements required interface
+if (!pluginInstance.id || !pluginInstance.type) {
+  throw new Error("Invalid plugin interface");
+}
+```
+
+### Manual Instantiation
+
+```typescript
+const workflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  const constructor = yield* pluginRuntime.loadPlugin("my-plugin");
+  const instance = yield* pluginRuntime.instantiatePlugin(constructor);
+  
+  // Instance is created but not yet initialized
+  console.log(instance.id); // "my-plugin"
+  console.log(instance.type); // "source"
+});
+```
+
+### Instantiation Validation
+
+The runtime validates the plugin interface:
+
+```typescript
+interface PluginValidation {
+  id: string;           // Must be present and non-empty
+  type: PluginType;     // Must be valid plugin type
+  contract: object;     // Must define oRPC contract
+  configSchema: object; // Must define Zod schema
+  initialize: Function; // Must implement initialize method
+  execute: Function;    // Must implement execute method
+  shutdown: Function;   // Must implement shutdown method
+}
+```
+
+## Stage 3: Initialize
+
+The initialize stage configures the plugin with validated settings and prepares it for execution.
+
+### What Happens
+
+```typescript
+// 1. Validate configuration against plugin's schema
+const validatedConfig = pluginInstance.configSchema.parse(rawConfig);
+
+// 2. Hydrate secrets using template replacement
+const hydratedConfig = hydrateSecrets(validatedConfig, runtimeSecrets);
+
+// 3. Call plugin's initialize method
+await pluginInstance.initialize(hydratedConfig);
+
+// 4. Plugin is now ready for execution
+```
+
+### Configuration Processing
+
+```typescript
+// Raw configuration with secret templates
+const rawConfig = {
+  secrets: {
+    apiKey: "{{API_KEY}}", // Template
+    clientSecret: "{{CLIENT_SECRET}}",
+  },
+  variables: {
+    timeout: 30000,
+    baseUrl: "https://api.example.com",
+  },
+};
+
+// Runtime secrets
+const runtimeSecrets = {
+  API_KEY: "actual-api-key-value",
+  CLIENT_SECRET: "actual-client-secret",
+};
+
+// After hydration
+const hydratedConfig = {
+  secrets: {
+    apiKey: "actual-api-key-value", // Replaced
+    clientSecret: "actual-client-secret", // Replaced
+  },
+  variables: {
+    timeout: 30000, // Unchanged
+    baseUrl: "https://api.example.com", // Unchanged
+  },
+};
+```
+
+### Manual Initialization
+
+```typescript
+const workflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  const constructor = yield* pluginRuntime.loadPlugin("my-plugin");
+  const instance = yield* pluginRuntime.instantiatePlugin(constructor);
+  
+  const config = {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { timeout: 30000 },
+  };
+  
+  const initialized = yield* pluginRuntime.initializePlugin(instance, config);
+  
+  // Plugin is now ready for execution
+});
+```
+
+### Initialization Best Practices
+
+```typescript
+export class WellBehavedPlugin implements Plugin<Contract, ConfigSchema> {
+  private client: ApiClient | null = null;
+  private healthCheckTimer: NodeJS.Timeout | null = null;
+  
+  initialize(config: MyPluginConfig): Effect.Effect<void, ConfigurationError> {
+    return Effect.gen(function* () {
+      const logger = yield* PluginLoggerTag;
+      
+      // Validate required secrets
+      if (!config.secrets.apiKey) {
+        return yield* Effect.fail(
+          new ConfigurationError("API key is required")
+        );
+      }
+      
+      // Initialize client with timeout
+      this.client = new ApiClient({
+        apiKey: config.secrets.apiKey,
+        timeout: config.variables?.timeout || 30000,
+      });
+      
+      // Test connectivity
+      yield* Effect.tryPromise({
+        try: () => this.client.ping(),
+        catch: (error) => new ConfigurationError(
+          `Failed to connect: ${error}`
+        ),
+      });
+      
+      // Set up health monitoring
+      this.healthCheckTimer = setInterval(() => {
+        this.client?.healthCheck().catch(console.error);
+      }, 60000);
+      
+      yield* logger.logInfo("Plugin initialized successfully");
+    }).pipe(Effect.provide(this));
+  }
+  
+  shutdown(): Effect.Effect<void, never> {
+    return Effect.gen(function* () {
+      if (this.healthCheckTimer) {
+        clearInterval(this.healthCheckTimer);
+        this.healthCheckTimer = null;
+      }
+      
+      if (this.client) {
+        yield* Effect.promise(() => this.client!.disconnect());
+        this.client = null;
+      }
+    }).pipe(Effect.provide(this));
+  }
+}
+```
+
+## Stage 4: Execute
+
+The execute stage handles plugin invocation with input validation and procedure routing.
+
+### What Happens
+
+```typescript
+// 1. Validate input against procedure schema
+const validatedInput = validateProcedureInput(input);
+
+// 2. Route to appropriate procedure handler
+const result = await pluginInstance.execute(validatedInput);
+
+// 3. Validate output against procedure schema
+const validatedOutput = validateProcedureOutput(result);
+
+// 4. Return typed result
+return validatedOutput;
+```
+
+### Execution Flow
+
+```typescript
+export class MyPlugin implements Plugin<Contract, ConfigSchema> {
+  execute(input: any): Effect.Effect<any, PluginExecutionError> {
+    return Effect.gen(function* () {
+      // Check initialization state
+      if (!this.client) {
+        return yield* Effect.fail(
+          new PluginExecutionError("Plugin not initialized", false)
+        );
+      }
+      
+      // Route to procedure handler
+      switch (input.procedure) {
+        case "search":
+          return yield* this.handleSearch(input.input, input.state);
+        case "getById":
+          return yield* this.handleGetById(input.input);
+        default:
+          return yield* Effect.fail(
+            new PluginExecutionError(
+              `Unknown procedure: ${input.procedure}`,
+              false
+            )
+          );
+      }
+    });
+  }
+  
+  private handleSearch(
+    input: SearchInput,
+    state?: State
+  ): Effect.Effect<SearchOutput, PluginExecutionError> {
+    return Effect.gen(function* () {
+      return yield* Effect.tryPromise({
+        try: async () => {
+          const results = await this.client!.search(input.query, {
+            limit: input.limit,
+            cursor: state?.cursor,
+          });
+          
+          return {
+            items: results.items,
+            nextState: results.hasMore ? {
+              cursor: results.nextCursor,
+            } : undefined,
+          };
+        },
+        catch: (error) => new PluginExecutionError(
+          `Search failed: ${error}`,
+          true // Retryable
+        ),
+      });
+    });
+  }
+}
+```
+
+## Automatic Lifecycle Management
+
+The `usePlugin()` method handles all stages automatically:
+
+```typescript
+const workflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // All four stages happen automatically
+  const plugin = yield* pluginRuntime.usePlugin("my-plugin", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { timeout: 30000 },
+  });
+  
+  // Plugin is ready for execution
+  const result = yield* pluginRuntime.executePlugin(plugin, {
+    procedure: "search",
+    input: { query: "typescript" },
+  });
+  
+  return result;
+});
+```
+
+## State Transitions
+
+Plugins can be in different states throughout their lifecycle:
+
+```typescript
+enum PluginState {
+  UNLOADED = "unloaded",     // Before load stage
+  LOADED = "loaded",         // Constructor available
+  INSTANTIATED = "instantiated", // Instance created
+  INITIALIZED = "initialized",   // Ready for execution
+  EXECUTING = "executing",       // Currently processing
+  ERROR = "error",              // Failed state
+  SHUTDOWN = "shutdown",        // Cleaned up
+}
+```
+
+## Error Recovery
+
+Handle errors at each lifecycle stage:
+
+```typescript
+const resilientWorkflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.usePlugin("unreliable-plugin", config).pipe(
+    Effect.retry({ times: 3 }), // Retry load/instantiate/initialize
+    Effect.catchTag("PluginRuntimeError", (error) => {
+      console.log(`Stage: ${error.operation}`);
+      console.log(`Retryable: ${error.retryable}`);
+      
+      if (error.operation === "load" && error.retryable) {
+        // Could try alternative plugin or fallback
+        return pluginRuntime.usePlugin("fallback-plugin", config);
+      }
+      
+      return Effect.succeed(null); // Give up
+    })
+  );
+});
+```
+
+## Resource Management
+
+Proper resource cleanup across the lifecycle:
+
+```typescript
+export class ResourceManagedPlugin implements Plugin<Contract, ConfigSchema> {
+  private resources: Array<{ cleanup: () => Promise<void> }> = [];
+  
+  initialize(config: Config): Effect.Effect<void, ConfigurationError> {
+    return Effect.gen(function* () {
+      // Create managed resources
+      const connection = yield* Effect.acquireRelease(
+        Effect.promise(() => createConnection(config)),
+        (conn) => Effect.promise(() => {
+          this.resources = this.resources.filter(r => r !== conn);
+          return conn.close();
+        })
+      );
+      
+      this.resources.push(connection);
+      
+      const cache = yield* Effect.acquireRelease(
+        Effect.promise(() => createCache(config)),
+        (cache) => Effect.promise(() => {
+          this.resources = this.resources.filter(r => r !== cache);
+          return cache.clear();
+        })
+      );
+      
+      this.resources.push(cache);
+    });
+  }
+  
+  shutdown(): Effect.Effect<void, never> {
+    return Effect.gen(function* () {
+      // Clean up all resources
+      yield* Effect.all(
+        this.resources.map(resource =>
+          Effect.promise(() => resource.cleanup()).pipe(
+            Effect.catchAll(() => Effect.succeed(void 0))
+          )
+        )
+      );
+      
+      this.resources = [];
+    });
+  }
+}
+```
+
+## Testing Lifecycle
+
+Test each lifecycle stage:
+
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { Effect } from "effect";
+
+describe("Plugin Lifecycle", () => {
+  let runtime: PluginRuntime;
+  
+  beforeEach(() => {
+    runtime = createPluginRuntime({
+      registry: { "test-plugin": testPluginEntry },
+      secrets: { API_KEY: "test-key" },
+    });
+  });
+  
+  afterEach(async () => {
+    await runtime.dispose();
+  });
+  
+  it("should complete full lifecycle", async () => {
+    const result = await runtime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
+        
+        // Test automatic lifecycle
+        const plugin = yield* pluginRuntime.usePlugin("test-plugin", {
+          secrets: { apiKey: "{{API_KEY}}" },
+        });
+        
+        expect(plugin).toBeDefined();
+        
+        // Test execution
+        const output = yield* pluginRuntime.executePlugin(plugin, {
+          procedure: "test",
+          input: { data: "test" },
+        });
+        
+        expect(output).toBeDefined();
+        return output;
+      })
+    );
+    
+    expect(result).toBeDefined();
+  });
+  
+  it("should handle manual lifecycle", async () => {
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
+        
+        // Manual lifecycle control
+        const constructor = yield* pluginRuntime.loadPlugin("test-plugin");
+        expect(constructor).toBeDefined();
+        
+        const instance = yield* pluginRuntime.instantiatePlugin(constructor);
+        expect(instance.id).toBe("test-plugin");
+        
+        const initialized = yield* pluginRuntime.initializePlugin(instance, {
+          secrets: { apiKey: "{{API_KEY}}" },
+        });
+        expect(initialized).toBeDefined();
+        
+        const result = yield* pluginRuntime.executePlugin(initialized, {
+          procedure: "test",
+          input: { data: "test" },
+        });
+        expect(result).toBeDefined();
+      })
+    );
+  });
+});
+```
+
+## Next Steps
+
+- [Plugin Interface](./plugin-interface) - Detailed interface specification
+- [Types](./types) - Type system and validation
+- [Runtime](../runtime/) - Using the plugin runtime

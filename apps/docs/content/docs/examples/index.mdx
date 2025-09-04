@@ -1,0 +1,88 @@
+---
+title: Examples Overview
+description: Real-world implementation patterns and use cases
+---
+
+These examples demonstrate practical patterns for using every-plugin in real applications. Each example builds on core concepts and shows progressively more complex scenarios.
+
+## Example Categories
+
+### **Data Processing Pipelines**
+Learn how to combine multiple plugins to create sophisticated data processing workflows.
+
+### **Real-time Systems**
+Implement continuous data processing with state management and streaming.
+
+### **Integration Patterns**
+Connect different systems and APIs using plugin composition.
+
+## Available Examples
+
+<Cards>
+  <Card title="Multi-Source Pipeline" href="/docs/examples/multi-source-pipeline">
+    Combine multiple data sources and process through plugin workflows
+  </Card>
+  <Card title="Data Aggregation" href="/docs/examples/data-aggregation">
+    Collect and deduplicate data from multiple sources
+  </Card>
+  <Card title="Real-time Processing" href="/docs/examples/real-time-processing">
+    Continuous processing with state management and error recovery
+  </Card>
+</Cards>
+
+## Common Patterns
+
+### Plugin Composition
+All examples demonstrate how to compose multiple plugins using Effect patterns:
+
+```typescript
+const workflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // Load multiple plugins
+  const sourcePlugin = yield* pluginRuntime.usePlugin("data-source", config);
+  const processorPlugin = yield* pluginRuntime.usePlugin("processor", config);
+  
+  // Execute in sequence
+  const rawData = yield* pluginRuntime.executePlugin(sourcePlugin, input);
+  const processedData = yield* pluginRuntime.executePlugin(processorPlugin, rawData);
+  
+  return processedData;
+});
+```
+
+### Error Handling
+Production-ready error handling with fallbacks and retry logic:
+
+```typescript
+const resilientWorkflow = workflow.pipe(
+  Effect.retry({ times: 3 }),
+  Effect.catchAll((error) => {
+    console.error("Workflow failed:", error);
+    return Effect.succeed({ items: [] }); // Fallback
+  })
+);
+```
+
+### Resource Management
+Proper cleanup and lifecycle management:
+
+```typescript
+// Always dispose runtime when shutting down
+process.on("SIGTERM", async () => {
+  await runtime.dispose();
+  process.exit(0);
+});
+```
+
+## Prerequisites
+
+Before exploring examples, ensure you understand:
+
+- [Core Concepts](/docs/core/concepts) - Effect, Module Federation, oRPC, Zod
+- [Runtime Basics](/docs/runtime/basic-usage) - Plugin lifecycle and composition
+- [Error Handling](/docs/runtime/error-handling) - Production error patterns
+
+## Next Steps
+
+Start with the Multi-Source Pipeline example to understand the fundamental patterns, then explore more specialized use cases based on your needs.

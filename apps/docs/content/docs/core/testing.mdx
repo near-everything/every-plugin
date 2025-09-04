@@ -1,0 +1,376 @@
+---
+title: Testing Plugins
+description: Testing strategies and patterns for plugin development
+---
+
+Testing plugins ensures reliability and proper integration with the every-plugin runtime. Use Effect's testing utilities and standard testing frameworks for comprehensive coverage.
+
+## Basic Plugin Testing
+
+Test your plugin implementation with standard testing patterns:
+
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { Effect } from "effect";
+import { MyPlugin } from "./my-plugin";
+
+describe("MyPlugin", () => {
+  let plugin: MyPlugin;
+  
+  beforeEach(() => {
+    plugin = new MyPlugin();
+  });
+  
+  afterEach(async () => {
+    await Effect.runPromise(plugin.shutdown());
+  });
+  
+  it("should initialize with valid config", async () => {
+    const config = {
+      secrets: { apiKey: "test-key" },
+      variables: { timeout: 30000 },
+    };
+    
+    const result = await Effect.runPromise(
+      plugin.initialize(config).pipe(
+        Effect.either
+      )
+    );
+    
+    expect(result._tag).toBe("Right");
+  });
+  
+  it("should execute with valid input", async () => {
+    // Initialize first
+    await Effect.runPromise(plugin.initialize(validConfig));
+    
+    const result = await Effect.runPromise(
+      plugin.execute({
+        procedure: "process",
+        input: { data: "test data" },
+      }).pipe(
+        Effect.either
+      )
+    );
+    
+    expect(result._tag).toBe("Right");
+    if (result._tag === "Right") {
+      expect(result.right.result).toBeDefined();
+    }
+  });
+});
+```
+
+## Configuration Testing
+
+Test configuration validation and error handling:
+
+```typescript
+describe("Plugin Configuration", () => {
+  it("should reject invalid configuration", async () => {
+    const invalidConfig = {
+      secrets: {}, // Missing required apiKey
+      variables: { timeout: -1000 }, // Invalid timeout
+    };
+    
+    const result = await Effect.runPromise(
+      plugin.initialize(invalidConfig).pipe(
+        Effect.either
+      )
+    );
+    
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toBeInstanceOf(ConfigurationError);
+    }
+  });
+  
+  it("should apply default values", async () => {
+    const minimalConfig = {
+      secrets: { apiKey: "test-key" },
+      variables: {}, // No timeout specified
+    };
+    
+    await Effect.runPromise(plugin.initialize(minimalConfig));
+    
+    // Verify default timeout was applied
+    expect(plugin.getTimeout()).toBe(30000);
+  });
+});
+```
+
+## Error Handling Tests
+
+Test error scenarios and recovery:
+
+```typescript
+describe("Error Handling", () => {
+  it("should handle retryable errors", async () => {
+    const mockClient = {
+      process: vi.fn()
+        .mockRejectedValueOnce(new Error("Temporary failure"))
+        .mockResolvedValueOnce({ data: "success" }),
+    };
+    
+    plugin.setClient(mockClient);
+    
+    const result = await Effect.runPromise(
+      plugin.execute({
+        procedure: "process",
+        input: { data: "test" },
+      }).pipe(
+        Effect.retry({ times: 1 }),
+        Effect.either
+      )
+    );
+    
+    expect(result._tag).toBe("Right");
+    expect(mockClient.process).toHaveBeenCalledTimes(2);
+  });
+  
+  it("should fail on non-retryable errors", async () => {
+    const result = await Effect.runPromise(
+      plugin.execute({
+        procedure: "invalid-procedure",
+        input: {},
+      }).pipe(
+        Effect.either
+      )
+    );
+    
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toBeInstanceOf(PluginExecutionError);
+      expect(result.left.retryable).toBe(false);
+    }
+  });
+});
+```
+
+## State Management Testing
+
+For plugins with state, test state transitions:
+
+```typescript
+describe("State Management", () => {
+  it("should maintain state between calls", async () => {
+    const initialState = { cursor: "start" };
+    
+    const result1 = await Effect.runPromise(
+      plugin.execute({
+        procedure: "search",
+        input: { query: "test" },
+        state: initialState,
+      })
+    );
+    
+    expect(result1.nextState).toBeDefined();
+    expect(result1.nextState.cursor).not.toBe("start");
+    
+    // Use returned state for next call
+    const result2 = await Effect.runPromise(
+      plugin.execute({
+        procedure: "search",
+        input: { query: "test" },
+        state: result1.nextState,
+      })
+    );
+    
+    expect(result2.items).toBeDefined();
+  });
+});
+```
+
+## Integration Testing
+
+Test plugin integration with the runtime:
+
+```typescript
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+
+describe("Plugin Integration", () => {
+  let runtime: ReturnType<typeof createPluginRuntime>;
+  
+  beforeEach(() => {
+    runtime = createPluginRuntime({
+      registry: {
+        "test-plugin": {
+          remoteUrl: "http://localhost:3001/remoteEntry.js",
+          type: "transformer",
+          version: "1.0.0",
+        },
+      },
+      secrets: {
+        API_KEY: "test-key",
+      },
+    });
+  });
+  
+  afterEach(async () => {
+    await runtime.dispose();
+  });
+  
+  it("should load and execute plugin through runtime", async () => {
+    const result = await runtime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
+        
+        const plugin = yield* pluginRuntime.usePlugin("test-plugin", {
+          secrets: { apiKey: "{{API_KEY}}" },
+          variables: { timeout: 30000 },
+        });
+        
+        return yield* pluginRuntime.executePlugin(plugin, {
+          procedure: "process",
+          input: { data: "test data" },
+        });
+      })
+    );
+    
+    expect(result).toBeDefined();
+    expect(result.result).toBeDefined();
+  });
+});
+```
+
+## Mocking External Dependencies
+
+Mock external APIs and services:
+
+```typescript
+import { vi } from "vitest";
+
+describe("Plugin with Mocked Dependencies", () => {
+  beforeEach(() => {
+    // Mock fetch for API calls
+    global.fetch = vi.fn();
+  });
+  
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  
+  it("should handle API responses", async () => {
+    const mockResponse = {
+      ok: true,
+      json: () => Promise.resolve({ data: "mocked data" }),
+    };
+    
+    vi.mocked(fetch).mockResolvedValueOnce(mockResponse as any);
+    
+    await Effect.runPromise(plugin.initialize(validConfig));
+    
+    const result = await Effect.runPromise(
+      plugin.execute({
+        procedure: "fetchData",
+        input: { id: "123" },
+      })
+    );
+    
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/data/123"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-key",
+        }),
+      })
+    );
+    
+    expect(result.data).toBe("mocked data");
+  });
+});
+```
+
+## Performance Testing
+
+Test plugin performance and resource usage:
+
+```typescript
+describe("Performance", () => {
+  it("should handle concurrent executions", async () => {
+    await Effect.runPromise(plugin.initialize(validConfig));
+    
+    const concurrentCalls = Array.from({ length: 10 }, (_, i) =>
+      plugin.execute({
+        procedure: "process",
+        input: { data: `test-${i}` },
+      })
+    );
+    
+    const results = await Effect.runPromise(
+      Effect.all(concurrentCalls, { concurrency: 5 })
+    );
+    
+    expect(results).toHaveLength(10);
+    results.forEach((result, i) => {
+      expect(result.result).toContain(`test-${i}`);
+    });
+  });
+  
+  it("should cleanup resources properly", async () => {
+    const resourceSpy = vi.fn();
+    
+    plugin.onResourceCreated = resourceSpy;
+    
+    await Effect.runPromise(plugin.initialize(validConfig));
+    await Effect.runPromise(plugin.shutdown());
+    
+    expect(resourceSpy).toHaveBeenCalledWith("cleanup");
+  });
+});
+```
+
+## Test Utilities
+
+Create reusable test utilities:
+
+```typescript
+// test-utils.ts
+export const createTestConfig = (overrides = {}) => ({
+  secrets: { apiKey: "test-key" },
+  variables: { timeout: 30000 },
+  ...overrides,
+});
+
+export const createMockPlugin = () => {
+  const plugin = new MyPlugin();
+  const mockClient = {
+    process: vi.fn().mockResolvedValue({ data: "mock result" }),
+    ping: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+  };
+  
+  plugin.setClient(mockClient);
+  return { plugin, mockClient };
+};
+
+export const expectEffectSuccess = async <T>(
+  effect: Effect.Effect<T, any>
+): Promise<T> => {
+  const result = await Effect.runPromise(effect.pipe(Effect.either));
+  expect(result._tag).toBe("Right");
+  return (result as any).right;
+};
+
+export const expectEffectFailure = async <E>(
+  effect: Effect.Effect<any, E>
+): Promise<E> => {
+  const result = await Effect.runPromise(effect.pipe(Effect.either));
+  expect(result._tag).toBe("Left");
+  return (result as any).left;
+};
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Runtime Testing" href="/docs/runtime/testing">
+    Test runtime integration and workflows
+  </Card>
+  <Card title="Plugin Testing" href="/docs/plugins/testing">
+    Advanced plugin testing patterns
+  </Card>
+  <Card title="Examples" href="/docs/examples">
+    See testing in real-world scenarios
+  </Card>
+</Cards>

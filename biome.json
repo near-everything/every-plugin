@@ -24,7 +24,8 @@
 			"!**/.wrangler",
 			"!**/.alchemy",
 			"!**/wrangler.jsonc",
-			"!**/.source"
+			"!**/.source",
+			"!**/node_modules"
 		]
 	},
 	"formatter": {
@@ -38,6 +39,9 @@
 			"recommended": true,
 			"correctness": {
 				"useExhaustiveDependencies": "info"
+			},
+			"security": {
+				"noDangerouslySetInnerHtml": "off"
 			},
 			"nursery": {
 				"useSortedClasses": {

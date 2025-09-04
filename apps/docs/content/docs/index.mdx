@@ -1,16 +1,94 @@
 ---
-title: Hello World
-description: Your first document
+title: Every Plugin
+description: A composable plugin runtime using Effect and Module Federation
 ---
 
-Welcome to the docs! You can start writing documents in `/content/docs`.
+every-plugin is a framework for building composable, type-safe plugin systems. It combines [Effect](https://effect.website/) for async composition, [Module Federation](https://module-federation.io/) for remote loading, and [oRPC](https://orpc.io/) for type-safe contracts.
 
-## What is Next?
+## Architecture
+
+<Mermaid
+  chart="
+graph TD
+  A[Runtime] --> B[Plugin Registry]
+  A --> C[Secret Management]
+  A --> D[Module Federation]
+
+  D --> E[Remote Plugin]
+  E --> F[oRPC Contract]
+  E --> G[Plugin Instance]
+
+  G --> H[Initialize]
+  H --> I[Execute]
+  I --> J[Stream Results]
+
+  classDef runtime fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff
+  classDef system fill:#7c3aed,stroke:#6d28d9,stroke-width:2px,color:#fff
+  classDef plugin fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
+  classDef process fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+
+  class A runtime
+  class B,C,D system
+  class E,F,G plugin
+  class H,I,J process"
+/>
+
+## Core Concepts
+
+**Effect Composition**: Chain plugin operations with automatic error handling and resource cleanup.
+
+**Remote Loading**: Load plugins dynamically from CDN URLs without bundling.
+
+**Type Safety**: oRPC contracts ensure compile-time safety between runtime and plugins.
+
+**State Management**: Resumable operations with Zod-validated state schemas.
+
+## Quick Example
+
+```typescript
+import { Effect } from "effect";
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "data-processor": {
+      remoteUrl: "https://cdn.example.com/plugins/processor/remoteEntry.js",
+      type: "transformer",
+      version: "1.0.0"
+    }
+  },
+  secrets: { API_KEY: "secret-value" }
+});
+
+const result = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+
+    const plugin = yield* pluginRuntime.usePlugin("data-processor", {
+      secrets: { apiKey: "{{API_KEY}}" },
+      variables: { batchSize: 100 }
+    });
+
+    return yield* pluginRuntime.executePlugin(plugin, {
+      items: ["data1", "data2", "data3"]
+    });
+  })
+);
+```
+
+## Getting Started
 
 <Cards>
-  <Card title="Learn more about Next.js" href="https://nextjs.org/docs" />
-  <Card title="Learn more about Fumadocs" href="https://fumadocs.vercel.app" />
+  <Card title="Core Concepts" href="/docs/core">
+    Understand the plugin system foundations
+  </Card>
+  <Card title="Runtime Usage" href="/docs/runtime">
+    Install and use plugins in your application
+  </Card>
+  <Card title="Creating Plugins" href="/docs/plugins">
+    Build and deploy your own plugins
+  </Card>
+  <Card title="Examples" href="/docs/examples">
+    Real-world implementation patterns
+  </Card>
 </Cards>
-
-
-every-plugin 

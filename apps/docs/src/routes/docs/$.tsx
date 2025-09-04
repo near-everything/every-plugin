@@ -1,31 +1,32 @@
-import { createFileRoute, notFound } from '@tanstack/react-router';
-import { DocsLayout } from 'fumadocs-ui/layouts/docs';
-import { createServerFn } from '@tanstack/react-start';
-import { source } from '@/lib/source';
-import type { PageTree } from 'fumadocs-core/server';
-import { useMemo } from 'react';
-import { docs } from '../../../source.generated';
+import { createFileRoute, notFound } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
+import type { PageTree } from "fumadocs-core/server";
+import { createClientLoader } from "fumadocs-mdx/runtime/vite";
+import { DocsLayout } from "fumadocs-ui/layouts/docs";
+import defaultMdxComponents from "fumadocs-ui/mdx";
 import {
   DocsBody,
   DocsDescription,
   DocsPage,
   DocsTitle,
-} from 'fumadocs-ui/page';
-import defaultMdxComponents from 'fumadocs-ui/mdx';
-import { createClientLoader } from 'fumadocs-mdx/runtime/vite';
-import { baseOptions } from '@/lib/layout.shared';
+} from "fumadocs-ui/page";
+import { useMemo } from "react";
+import { Mermaid } from "@/components/mermaid";
+import { baseOptions } from "@/lib/layout.shared";
+import { source } from "@/lib/source";
+import { docs } from "../../../source.generated";
 
-export const Route = createFileRoute('/docs/$')({
+export const Route = createFileRoute("/docs/$")({
   component: Page,
   loader: async ({ params }) => {
-    const data = await loader({ data: params._splat?.split('/') ?? [] });
+    const data = await loader({ data: params._splat?.split("/") ?? [] });
     await clientLoader.preload(data.path);
     return data;
   },
 });
 
 const loader = createServerFn({
-  method: 'GET',
+  method: "GET",
 })
   .validator((slugs: string[]) => slugs)
   .handler(async ({ data: slugs }) => {
@@ -39,7 +40,7 @@ const loader = createServerFn({
   });
 
 const clientLoader = createClientLoader(docs.doc, {
-  id: 'docs',
+  id: "docs",
   component({ toc, frontmatter, default: MDX }) {
     return (
       <DocsPage toc={toc}>
@@ -49,6 +50,7 @@ const clientLoader = createClientLoader(docs.doc, {
           <MDX
             components={{
               ...defaultMdxComponents,
+              Mermaid,
             }}
           />
         </DocsBody>
@@ -62,7 +64,7 @@ function Page() {
   const Content = clientLoader.getComponent(data.path);
   const tree = useMemo(
     () => transformPageTree(data.tree as PageTree.Folder),
-    [data.tree],
+    [data.tree]
   );
 
   return (
@@ -74,12 +76,13 @@ function Page() {
 
 function transformPageTree(tree: PageTree.Folder): PageTree.Folder {
   function transform<T extends PageTree.Item | PageTree.Separator>(item: T) {
-    if (typeof item.icon !== 'string') return item;
+    if (typeof item.icon !== "string") return item;
 
     return {
       ...item,
       icon: (
         <span
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: fumadocs
           dangerouslySetInnerHTML={{
             __html: item.icon,
           }}
@@ -92,7 +95,7 @@ function transformPageTree(tree: PageTree.Folder): PageTree.Folder {
     ...tree,
     index: tree.index ? transform(tree.index) : undefined,
     children: tree.children.map((item) => {
-      if (item.type === 'folder') return transformPageTree(item);
+      if (item.type === "folder") return transformPageTree(item);
       return transform(item);
     }),
   };

@@ -4,4 +4,9 @@ export const docs = defineDocs({
   dir: 'content/docs',
 });
 
-export default defineConfig();
+export default defineConfig({
+  mdxOptions: {
+    // jsx: true,
+    development: process.env.NODE_ENV === 'development',
+  },
+});

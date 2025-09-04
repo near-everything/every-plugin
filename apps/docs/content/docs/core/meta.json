@@ -1,0 +1,11 @@
+{
+  "title": "Core",
+  "description": "Plugin system foundations",
+  "pages": [
+    "concepts",
+    "types",
+    "lifecycle",
+    "plugin-interface",
+    "testing"
+  ]
+}

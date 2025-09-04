@@ -17,14 +17,14 @@ import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
 
 const runtime = createPluginRuntime({
   registry: {
-    "@my-org/twitter": {
-      remoteUrl: "https://cdn.example.com/plugins/twitter/remoteEntry.js",
+    "social-feed": {
+      remoteUrl: "https://cdn.example.com/plugins/social/remoteEntry.js",
       type: "source",
       version: "1.0.0",
     },
   },
   secrets: {
-    TWITTER_API_KEY: "your-api-key",
+    SOCIAL_API_KEY: "your-api-key",
   },
 });
 
@@ -34,10 +34,10 @@ const result = await runtime.runPromise(
 
     // Create stream from source plugin
     const stream = yield* pluginRuntime.streamPlugin(
-      "@my-org/twitter",
+      "social-feed",
       {
         secrets: {
-          apiKey: "{{TWITTER_API_KEY}}",
+          apiKey: "{{SOCIAL_API_KEY}}",
         },
         variables: {
           timeout: 30000,
@@ -84,7 +84,7 @@ const processedResults = await runtime.runPromise(
     const pluginRuntime = yield* PluginRuntime;
 
     // Initialize the processor plugin
-    const processorPlugin = yield* pluginRuntime.usePlugin("@curatedotfun/rss", {
+    const processorPlugin = yield* pluginRuntime.usePlugin("content-processor", {
       secrets: {
         apiKey: "{{SECRET}}",
       },
@@ -92,10 +92,10 @@ const processedResults = await runtime.runPromise(
 
     // Get the source stream
     const stream = yield* pluginRuntime.streamPlugin(
-      "@curatedotfun/twitter",
+      "social-feed",
       {
         secrets: {
-          apiKey: "{{TWITTER_API_KEY}}",
+          apiKey: "{{SOCIAL_API_KEY}}",
         },
       },
       {
@@ -221,20 +221,20 @@ const combinedResults = yield* Effect.gen(function* () {
   const pluginRuntime = yield* PluginRuntime;
 
   // Create multiple streams
-  const twitterStream = yield* pluginRuntime.streamPlugin(
-    "@my-org/twitter",
-    twitterConfig,
+  const socialStream = yield* pluginRuntime.streamPlugin(
+    "social-feed",
+    socialConfig,
     { procedure: "search", input: { query: "typescript" }, state: null }
   );
 
-  const redditStream = yield* pluginRuntime.streamPlugin(
-    "@my-org/reddit",
-    redditConfig,
+  const newsStream = yield* pluginRuntime.streamPlugin(
+    "news-api",
+    newsConfig,
     { procedure: "search", input: { query: "typescript" }, state: null }
   );
 
   // Merge streams
-  const mergedStream = Stream.merge(twitterStream, redditStream);
+  const mergedStream = Stream.merge(socialStream, newsStream);
 
   // Process combined stream
   return yield* mergedStream.pipe(
@@ -256,7 +256,7 @@ const continuousProcessing = Effect.gen(function* () {
   yield* Effect.repeat(
     Effect.gen(function* () {
       const stream = yield* pluginRuntime.streamPlugin(
-        "@my-org/news-feed",
+        "news-feed",
         config,
         {
           procedure: "search",
@@ -277,48 +277,6 @@ const continuousProcessing = Effect.gen(function* () {
       }
     }),
     { schedule: Schedule.spaced("30 seconds") }
-  );
-});
-```
-
-## Error Handling
-
-Handle streaming errors at different levels:
-
-```typescript
-const robustStreaming = Effect.gen(function* () {
-  const pluginRuntime = yield* PluginRuntime;
-
-  return yield* pluginRuntime.streamPlugin(
-    "data-source",
-    config,
-    input
-  ).pipe(
-    Effect.flatMap((stream) =>
-      stream.pipe(
-        Stream.mapEffect((item) =>
-          processItem(item).pipe(
-            Effect.catchTag("ProcessingError", (error) => {
-              console.warn("Item processing failed:", error.message);
-              return Effect.succeed(null); // Skip item
-            })
-          )
-        ),
-        Stream.filter((item) => item !== null),
-        Stream.runCollect
-      )
-    ),
-    Effect.catchTag("PluginRuntimeError", (error) => {
-      if (error.retryable) {
-        console.log("Retryable streaming error:", error.cause);
-        // Could implement retry logic here
-      }
-      return Effect.succeed([]); // Return empty result
-    }),
-    Effect.catchAll((error) => {
-      console.error("Unexpected streaming error:", error);
-      return Effect.succeed([]);
-    })
   );
 });
 ```
@@ -347,6 +305,14 @@ const parallelProcessing = yield* stream.pipe(
 
 ## Next Steps
 
-- [Source Plugins](./source) - Create streamable data sources
-- [Runtime API](./runtime) - Complete runtime reference
-- [Effect Streams](https://effect.website/docs/guides/streaming) - Learn more about Effect Streams
+<Cards>
+  <Card title="Multi-Source Pipeline" href="/docs/examples/multi-source-pipeline">
+    Combine multiple data sources
+  </Card>
+  <Card title="API Reference" href="/docs/runtime/api-reference">
+    Complete runtime method reference
+  </Card>
+  <Card title="Source Plugins" href="/docs/plugins/source-plugins">
+    Create streamable data sources
+  </Card>
+</Cards>

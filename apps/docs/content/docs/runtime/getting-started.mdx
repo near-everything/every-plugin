@@ -7,14 +7,15 @@ description: Install and run your first plugin with the every-plugin runtime
 
 ```bash
 npm install every-plugin
-# or
-bun add every-plugin
 ```
 
 ## Core Concept
 
 The every-plugin runtime uses [Effect](https://effect.website/) and [Module Federation](https://module-federation.io/) to load and execute remote plugins.
+
 Effect provides automatic resource cleanup and composable async operations, while Module Federation enables dynamic loading of JavaScript modules from remote URLs.
+
+## First Plugin Execution
 
 ```typescript
 import { Effect } from "effect";
@@ -23,7 +24,7 @@ import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
 // Create runtime once per application
 const runtime = createPluginRuntime({
   registry: {
-    "@my-org/data-processor": {
+    "data-processor": {
       remoteUrl: "https://cdn.example.com/plugins/data-processor/remoteEntry.js",
       type: "transformer",
       version: "1.0.0"
@@ -39,7 +40,7 @@ const result = await runtime.runPromise(
   Effect.gen(function* () {
     const pluginRuntime = yield* PluginRuntime;
     
-    const plugin = yield* pluginRuntime.usePlugin("@my-org/data-processor", {
+    const plugin = yield* pluginRuntime.usePlugin("data-processor", {
       secrets: {
         apiKey: "{{API_KEY}}", // Hydrated from secrets
       },
@@ -58,8 +59,45 @@ console.log(result);
 await runtime.dispose(); // Cleanup
 ```
 
+## Effect Composition
+
+Use `Effect.gen()` with `yield*` to compose operations:
+
+```typescript
+const workflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // Each yield* unwraps an Effect and handles errors automatically
+  const plugin = yield* pluginRuntime.usePlugin("my-plugin", config);
+  const output = yield* pluginRuntime.executePlugin(plugin, input);
+  
+  return output;
+});
+
+const result = await runtime.runPromise(workflow);
+```
+
+## Resource Cleanup
+
+Always dispose the runtime when shutting down:
+
+```typescript
+process.on("SIGTERM", async () => {
+  await runtime.dispose();
+  process.exit(0);
+});
+```
+
 ## Next Steps
 
-- [Basic Usage](./basic-usage) - Learn Effect patterns and plugin lifecycle
-- [Runtime API](./runtime) - Complete runtime reference
-- [Creating Plugins](./plugin) - Build your own plugins
+<Cards>
+  <Card title="Basic Usage" href="/docs/runtime/basic-usage">
+    Learn Effect patterns and plugin lifecycle
+  </Card>
+  <Card title="API Reference" href="/docs/runtime/api-reference">
+    Complete runtime method reference
+  </Card>
+  <Card title="Creating Plugins" href="/docs/plugins">
+    Build your own plugins
+  </Card>
+</Cards>

@@ -1,0 +1,9 @@
+{
+  "title": "Examples",
+  "description": "Real-world plugin examples and patterns",
+  "pages": [
+    "data-aggregation",
+    "real-time-processing",
+    "multi-source-pipeline"
+  ]
+}

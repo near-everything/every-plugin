@@ -1,0 +1,309 @@
+---
+title: Error Handling
+description: Handle runtime errors gracefully with Effect patterns
+---
+
+## Error Types
+
+The runtime uses typed errors for better error handling and debugging:
+
+```typescript
+interface PluginRuntimeError {
+  pluginId: string;
+  operation: string;
+  cause: unknown;
+  retryable: boolean;
+}
+```
+
+## Basic Error Handling
+
+Use `Effect.catchAll()` for general error handling:
+
+```typescript
+const safeExecution = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.usePlugin("unreliable-plugin", config);
+}).pipe(
+  Effect.catchAll((error) => {
+    console.error("Plugin failed:", error);
+    return Effect.succeed(null); // Fallback value
+  })
+);
+```
+
+## Specific Error Handling
+
+Use `Effect.catchTag()` to handle specific error types:
+
+```typescript
+const specificErrorHandling = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.executePlugin(plugin, input);
+}).pipe(
+  Effect.catchTag("PluginRuntimeError", (error) => {
+    console.log("Plugin ID:", error.pluginId);
+    console.log("Operation:", error.operation);
+    console.log("Retryable:", error.retryable);
+    
+    if (error.retryable) {
+      console.log("Could retry this operation");
+    }
+    
+    return Effect.succeed({ items: [] }); // Empty result
+  })
+);
+```
+
+## Retry Logic
+
+Implement retry logic for transient failures:
+
+```typescript
+const withRetry = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.executePlugin(plugin, input);
+}).pipe(
+  Effect.retry({
+    times: 3,
+    schedule: Schedule.exponential("100 millis")
+  }),
+  Effect.catchAll((error) => {
+    console.error("Failed after retries:", error);
+    return Effect.succeed({ items: [] });
+  })
+);
+```
+
+## Streaming Error Handling
+
+Handle errors in streaming operations:
+
+```typescript
+const resilientStream = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+
+  const stream = yield* pluginRuntime.streamPlugin(
+    "data-source",
+    config,
+    input
+  );
+
+  return yield* stream.pipe(
+    Stream.mapEffect((item) =>
+      processItem(item).pipe(
+        Effect.retry({ times: 2 }),
+        Effect.catchAll((error) => {
+          console.warn("Item processing failed:", error);
+          return Effect.succeed(null); // Skip failed items
+        })
+      )
+    ),
+    Stream.filter((item) => item !== null),
+    Stream.runCollect
+  );
+}).pipe(
+  Effect.catchTag("PluginRuntimeError", (error) => {
+    if (error.retryable) {
+      console.log("Retryable streaming error:", error.cause);
+    }
+    return Effect.succeed([]);
+  })
+);
+```
+
+## Configuration Errors
+
+Handle plugin configuration errors:
+
+```typescript
+const handleConfigErrors = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.usePlugin("my-plugin", {
+    secrets: { apiKey: "{{INVALID_KEY}}" }
+  });
+}).pipe(
+  Effect.catchTag("ConfigurationError", (error) => {
+    console.error("Configuration failed:", error.message);
+    // Could prompt for correct configuration
+    return Effect.fail(new Error("Invalid configuration"));
+  })
+);
+```
+
+## Validation Errors
+
+Handle input/output validation errors:
+
+```typescript
+const handleValidationErrors = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.executePlugin(plugin, {
+    // Invalid input that doesn't match schema
+    invalidField: "value"
+  });
+}).pipe(
+  Effect.catchAll((error) => {
+    if (error.message.includes("validation")) {
+      console.error("Input validation failed:", error);
+      return Effect.succeed({ items: [] });
+    }
+    throw error; // Re-throw non-validation errors
+  })
+);
+```
+
+## Error Recovery Patterns
+
+### Circuit Breaker Pattern
+
+```typescript
+let failureCount = 0;
+const maxFailures = 5;
+
+const circuitBreaker = Effect.gen(function* () {
+  if (failureCount >= maxFailures) {
+    return yield* Effect.fail(new Error("Circuit breaker open"));
+  }
+  
+  const pluginRuntime = yield* PluginRuntime;
+  
+  return yield* pluginRuntime.executePlugin(plugin, input);
+}).pipe(
+  Effect.catchAll((error) => {
+    failureCount++;
+    console.error(`Failure ${failureCount}/${maxFailures}:`, error);
+    
+    if (failureCount >= maxFailures) {
+      console.error("Circuit breaker opened");
+    }
+    
+    return Effect.succeed({ items: [] });
+  }),
+  Effect.tap(() => Effect.sync(() => { failureCount = 0; })) // Reset on success
+);
+```
+
+### Fallback Chain
+
+```typescript
+const fallbackChain = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // Try primary plugin
+  return yield* pluginRuntime.executePlugin(primaryPlugin, input);
+}).pipe(
+  Effect.catchAll(() =>
+    // Try secondary plugin
+    Effect.gen(function* () {
+      const pluginRuntime = yield* PluginRuntime;
+      return yield* pluginRuntime.executePlugin(secondaryPlugin, input);
+    })
+  ),
+  Effect.catchAll(() =>
+    // Final fallback
+    Effect.succeed({ items: [], source: "fallback" })
+  )
+);
+```
+
+## Logging and Monitoring
+
+Integrate with logging systems:
+
+```typescript
+const withLogging = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  const logger = yield* PluginLoggerTag;
+  
+  yield* logger.logInfo("Starting plugin execution", { pluginId: "my-plugin" });
+  
+  return yield* pluginRuntime.executePlugin(plugin, input);
+}).pipe(
+  Effect.catchAll((error) => {
+    return Effect.gen(function* () {
+      const logger = yield* PluginLoggerTag;
+      
+      yield* logger.logError("Plugin execution failed", error, {
+        pluginId: "my-plugin",
+        input
+      });
+      
+      return { items: [] };
+    });
+  })
+);
+```
+
+## Production Error Handling
+
+Complete error handling for production systems:
+
+```typescript
+const productionExecution = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  const logger = yield* PluginLoggerTag;
+  
+  yield* logger.logInfo("Processing job", { jobId: input.jobId });
+  
+  const plugin = yield* pluginRuntime.usePlugin("data-processor", config);
+  const result = yield* pluginRuntime.executePlugin(plugin, input);
+  
+  yield* logger.logInfo("Job completed successfully", { 
+    jobId: input.jobId,
+    itemCount: result.items.length 
+  });
+  
+  return result;
+}).pipe(
+  Effect.retry({
+    times: 3,
+    schedule: Schedule.exponential("1 second")
+  }),
+  Effect.catchTag("PluginRuntimeError", (error) =>
+    Effect.gen(function* () {
+      const logger = yield* PluginLoggerTag;
+      
+      yield* logger.logError("Plugin runtime error", error, {
+        jobId: input.jobId,
+        retryable: error.retryable
+      });
+      
+      if (error.retryable) {
+        // Could add to retry queue
+        yield* logger.logInfo("Adding job to retry queue", { jobId: input.jobId });
+      }
+      
+      return { items: [], error: error.message };
+    })
+  ),
+  Effect.catchAll((error) =>
+    Effect.gen(function* () {
+      const logger = yield* PluginLoggerTag;
+      
+      yield* logger.logError("Unexpected error", error, { jobId: input.jobId });
+      
+      return { items: [], error: "Internal error" };
+    })
+  )
+);
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Basic Usage" href="/docs/runtime/basic-usage">
+    Learn Effect patterns and composition
+  </Card>
+  <Card title="Streaming" href="/docs/runtime/streaming">
+    Handle errors in streaming operations
+  </Card>
+  <Card title="Examples" href="/docs/examples">
+    See error handling in real-world examples
+  </Card>
+</Cards>

@@ -1,0 +1,231 @@
+---
+title: Plugin Overview
+description: When to create plugins vs using existing ones
+---
+
+## When to Create Plugins
+
+Create plugins when you need to:
+
+**Integrate with new APIs**: Connect to services not covered by existing plugins.
+
+**Custom Data Processing**: Transform data in ways specific to your domain.
+
+**Proprietary Systems**: Interface with internal or proprietary systems.
+
+**Performance Optimization**: Optimize for specific use cases or data volumes.
+
+## When to Use Existing Plugins
+
+Use existing plugins when:
+
+**Standard APIs**: Working with common services like social media, news feeds, or databases.
+
+**Proven Solutions**: Leveraging battle-tested implementations.
+
+**Rapid Development**: Getting to market quickly without custom development.
+
+**Community Support**: Benefiting from community maintenance and updates.
+
+## Plugin Types
+
+### Source Plugins
+
+Fetch data from external APIs using [oRPC](https://orpc.io/) contracts:
+
+```typescript
+export class MySourcePlugin implements SourcePlugin<Contract, ConfigSchema, StateSchema> {
+  readonly type = "source" as const;
+  readonly contract = contract; // oRPC contract
+  
+  // Multiple procedures: getById, getBulk, search
+  isStreamable(procedureName: string): boolean {
+    return procedureName === "search";
+  }
+}
+```
+
+### Transformer Plugins
+
+Process and transform data between formats:
+
+```typescript
+export class MyTransformerPlugin implements Plugin<InputSchema, OutputSchema, ConfigSchema> {
+  readonly type = "transformer" as const;
+  
+  execute(input: Input): Effect.Effect<Output, PluginExecutionError> {
+    return Effect.gen(function* () {
+      // Transform input.items to output format
+      const transformedItems = input.items.map(transform);
+      return { success: true, data: { items: transformedItems } };
+    });
+  }
+}
+```
+
+### Distributor Plugins
+
+Send data to external systems or storage:
+
+```typescript
+export class MyDistributorPlugin implements Plugin<InputSchema, OutputSchema, ConfigSchema> {
+  readonly type = "distributor" as const;
+  
+  execute(input: Input): Effect.Effect<Output, PluginExecutionError> {
+    return Effect.gen(function* () {
+      // Send input.items to external system
+      const results = yield* Effect.forEach(input.items, (item) =>
+        Effect.tryPromise(() => this.client.send(item))
+      );
+      
+      return { success: true, data: { sent: results.length } };
+    });
+  }
+}
+```
+
+## Development Workflow
+
+### 1. Fork Template
+
+Start with the appropriate template repository:
+
+```bash
+# For source plugins (data fetching)
+git clone https://github.com/your-org/source-plugin-template my-plugin
+
+# For other plugins
+git clone https://github.com/your-org/plugin-template my-plugin
+```
+
+### 2. Define Contract
+
+Create your plugin's API contract with Zod schemas:
+
+```typescript
+// Input/Output schemas
+export const InputSchema = z.object({
+  query: z.string().min(1),
+  limit: z.number().optional()
+});
+
+export const OutputSchema = z.object({
+  items: z.array(ItemSchema),
+  nextCursor: z.string().optional()
+});
+
+// Configuration schema
+export const ConfigSchema = createConfigSchema(
+  z.object({ timeout: z.number().optional() }), // variables
+  z.object({ apiKey: z.string().min(1) })       // secrets
+);
+```
+
+### 3. Implement Plugin
+
+Implement the plugin interface with Effect patterns:
+
+```typescript
+export class MyPlugin implements Plugin<typeof InputSchema, typeof OutputSchema, typeof ConfigSchema> {
+  readonly id = "my-plugin" as const;
+  readonly type = "transformer" as const;
+  readonly inputSchema = InputSchema;
+  readonly outputSchema = OutputSchema;
+  readonly configSchema = ConfigSchema;
+
+  initialize(config: Config): Effect.Effect<void, ConfigurationError> {
+    return Effect.gen(function* () {
+      // Initialize with config and secrets
+      this.client = new ApiClient({
+        apiKey: config.secrets.apiKey,
+        timeout: config.variables?.timeout || 30000
+      });
+    });
+  }
+
+  execute(input: Input): Effect.Effect<Output, PluginExecutionError> {
+    return Effect.gen(function* () {
+      // Process input and return validated output
+      const result = yield* Effect.tryPromise({
+        try: () => this.client.process(input),
+        catch: (error) => new PluginExecutionError(`Processing failed: ${error}`, true)
+      });
+      
+      return { success: true, data: result };
+    });
+  }
+
+  shutdown(): Effect.Effect<void, never> {
+    return Effect.gen(function* () {
+      if (this.client) {
+        yield* Effect.promise(() => this.client.disconnect());
+      }
+    });
+  }
+}
+```
+
+### 4. Build and Deploy
+
+Build with Module Federation and deploy to CDN:
+
+```bash
+# Build for production
+npm run build
+
+# Deploy dist/remoteEntry.js to your CDN
+# Update registry with new plugin URL
+```
+
+## Plugin Registry
+
+Register your plugin for runtime discovery:
+
+```typescript
+const registry = {
+  "my-plugin": {
+    remoteUrl: "https://cdn.example.com/plugins/my-plugin@1.0.0/remoteEntry.js",
+    type: "transformer",
+    version: "1.0.0",
+    description: "Custom data transformation plugin"
+  }
+};
+```
+
+## Testing Strategy
+
+Test plugins in isolation and integration:
+
+```typescript
+describe("MyPlugin", () => {
+  it("should process input correctly", async () => {
+    const plugin = new MyPlugin();
+    
+    await plugin.initialize({
+      secrets: { apiKey: "test-key" },
+      variables: { timeout: 5000 }
+    });
+    
+    const result = await plugin.execute({
+      items: ["test1", "test2"]
+    });
+    
+    expect(result.success).toBe(true);
+    expect(result.data.items).toHaveLength(2);
+  });
+});
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Getting Started" href="/docs/plugins/getting-started">
+    Fork templates and create your first plugin
+  </Card>
+  <Card title="Source Plugins" href="/docs/plugins/source-plugins">
+    Create data fetching plugins with oRPC
+  </Card>
+  <Card title="Deployment" href="/docs/plugins/deployment">
+    Build and deploy plugins to production
+  </Card>
+</Cards>
