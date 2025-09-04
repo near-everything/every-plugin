@@ -13,7 +13,6 @@ import { createServerRootRoute } from '@tanstack/react-start/server'
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocsSplatRouteImport } from './routes/docs/$'
-import { Route as ApiSitemapXmlRouteImport } from './routes/api/sitemap.xml'
 import { ServerRoute as ApiSearchServerRouteImport } from './routes/api/search'
 
 const rootServerRouteImport = createServerRootRoute()
@@ -28,11 +27,6 @@ const DocsSplatRoute = DocsSplatRouteImport.update({
   path: '/docs/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiSitemapXmlRoute = ApiSitemapXmlRouteImport.update({
-  id: '/api/sitemap/xml',
-  path: '/api/sitemap/xml',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiSearchServerRoute = ApiSearchServerRouteImport.update({
   id: '/api/search',
   path: '/api/search',
@@ -42,31 +36,27 @@ const ApiSearchServerRoute = ApiSearchServerRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/docs/$': typeof DocsSplatRoute
-  '/api/sitemap/xml': typeof ApiSitemapXmlRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/docs/$': typeof DocsSplatRoute
-  '/api/sitemap/xml': typeof ApiSitemapXmlRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/docs/$': typeof DocsSplatRoute
-  '/api/sitemap/xml': typeof ApiSitemapXmlRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/docs/$' | '/api/sitemap/xml'
+  fullPaths: '/' | '/docs/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/docs/$' | '/api/sitemap/xml'
-  id: '__root__' | '/' | '/docs/$' | '/api/sitemap/xml'
+  to: '/' | '/docs/$'
+  id: '__root__' | '/' | '/docs/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DocsSplatRoute: typeof DocsSplatRoute
-  ApiSitemapXmlRoute: typeof ApiSitemapXmlRoute
 }
 export interface FileServerRoutesByFullPath {
   '/api/search': typeof ApiSearchServerRoute
@@ -106,13 +96,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/sitemap/xml': {
-      id: '/api/sitemap/xml'
-      path: '/api/sitemap/xml'
-      fullPath: '/api/sitemap/xml'
-      preLoaderRoute: typeof ApiSitemapXmlRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 declare module '@tanstack/react-start/server' {
@@ -130,7 +113,6 @@ declare module '@tanstack/react-start/server' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DocsSplatRoute: DocsSplatRoute,
-  ApiSitemapXmlRoute: ApiSitemapXmlRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
