@@ -1,0 +1,36 @@
+{
+  "name": "@curatedotfun/masa-source",
+  "version": "0.0.1",
+  "description": "Masa source plugin for curate.fun",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "peerDependencies": {
+    "effect": ">=3.17.0 <4.0.0",
+    "zod": ">=4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "@curatedotfun/utils": "^0.0.2",
+    "@module-federation/node": "^2.7.14",
+    "@rspack/cli": "^1.5.2",
+    "@rspack/core": "^1.5.2",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "every-plugin": "link:every-plugin",
+    "msw": "^2.3.0",
+    "vitest": "^1.6.0"
+  },
+  "scripts": {
+    "build": "rspack build && tsc -p tsconfig.build.json",
+    "dev": "rspack serve",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@better-fetch/fetch": "^1.1.18",
+    "@orpc/contract": "^1.8.6",
+    "@orpc/server": "^1.8.6"
+  }
+}

@@ -1,4 +1,4 @@
-import { Duration, Effect, Stream } from "effect";
+import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PluginRegistry } from "../plugin";
 import { createPluginRuntime, PluginRuntime } from "./index";
@@ -22,18 +22,12 @@ type SourceItem = {
 
 // Test registry with our example source plugin
 const TEST_REGISTRY: PluginRegistry = {
-  "test-source-plugin": {
-    remoteUrl: "http://localhost:3001/remoteEntry.js",
+  "test-plugin": {
+    remoteUrl: "http://localhost:3999/remoteEntry.js",
     type: "source",
     version: "0.0.1",
-    description: "Example source plugin for streaming tests",
+    description: "Local template plugin for testing",
   },
-	"test-plugin": {
-		remoteUrl: "http://localhost:3000/remoteEntry.js",
-		type: "transformer",
-		version: "0.0.1",
-		description: "Local template plugin for testing",
-	},
 };
 
 const TEST_CONFIG = {
@@ -107,7 +101,7 @@ describe("Plugin Streaming", () => {
         };
 
         const stream = yield* pluginRuntime.streamPlugin(
-          "test-source-plugin",
+          "test-plugin",
           TEST_CONFIG,
           inputWithProductiveState,
           {
@@ -144,14 +138,14 @@ describe("Plugin Streaming", () => {
 
         // The error should occur when creating the stream, not when running it
         return yield* pluginRuntime.streamPlugin(
-          "test-source-plugin",
+          "test-plugin",
           TEST_CONFIG,
           inputWithInvalidState,
           {
             stopWhenEmpty: true,
           }
         ).pipe(
-          Effect.flatMap(() => 
+          Effect.flatMap(() =>
             // If we get here, validation didn't work
             Effect.succeed("validation-should-have-failed")
           ),
@@ -159,7 +153,7 @@ describe("Plugin Streaming", () => {
             // Should catch state validation error
             expect(error.operation).toBe("validate-state");
             expect(error.retryable).toBe(false);
-            expect(error.pluginId).toBe("test-source-plugin");
+            expect(error.pluginId).toBe("test-plugin");
             expect(error.cause).toBeDefined();
 
             console.debug("Caught expected state validation error:", {
@@ -200,7 +194,7 @@ describe("Plugin Streaming", () => {
         };
 
         const stream = yield* pluginRuntime.streamPlugin(
-          "test-source-plugin",
+          "test-plugin",
           TEST_CONFIG,
           inputWithEmptyState,
           {
@@ -222,31 +216,9 @@ describe("Plugin Streaming", () => {
     expect(result.length).toBe(0); // Empty phase always returns 0 items
   }, 4000);
 
-  it("should validate plugin type", async () => {
-    const result = await runtime.runPromise(
-      Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-
-        return yield* pluginRuntime.streamPlugin(
-          "test-plugin",
-          TEST_CONFIG,
-          TEST_SEARCH_INPUT
-        ).pipe(
-          Effect.catchTag("PluginRuntimeError", (error) => {
-            expect(error.operation).toBe("stream-plugin-validate");
-            expect(error.cause?.message).toContain("not a source plugin");
-            return Effect.succeed("validation-error-handled");
-          })
-        );
-      })
-    );
-
-    expect(result).toBe("validation-error-handled");
-  });
-
   it("should handle workflow phases correctly", async () => {
     const pluginRuntime = await runtime.runPromise(PluginRuntime);
-    const plugin = await runtime.runPromise(pluginRuntime.usePlugin("test-source-plugin", TEST_CONFIG));
+    const plugin = await runtime.runPromise(pluginRuntime.usePlugin("test-plugin", TEST_CONFIG));
 
     // Phase 1: null state -> historical job (empty items)
     const phase1 = await runtime.runPromise(
@@ -294,127 +266,43 @@ describe("Plugin Streaming", () => {
     }
   }, 4000);
 
-  describe("Contract-based Procedures", () => {
-    it("should execute getById procedure", async () => {
-      const result = await runtime.runPromise(
-        Effect.gen(function* () {
-          const pluginRuntime = yield* PluginRuntime;
-          const plugin = yield* pluginRuntime.usePlugin("test-source-plugin", TEST_CONFIG);
-          
-          const output = yield* pluginRuntime.executePlugin(plugin, TEST_GETBYID_INPUT);
-          
-          return output;
-        })
-      );
+  it("should fail when trying to stream non-streamable procedure", async () => {
+    const result = await runtime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
 
-      expect(result).toBeDefined();
-      const typedResult = result as { item: SourceItem };
-      expect(typedResult.item).toBeDefined();
-      expect(typedResult.item.externalId).toBe("test-id-123");
-      expect(typedResult.item.content).toContain("Content for item test-id-123");
-    });
+        // Try to stream getById which is not streamable (no nextState in output)
+        return yield* pluginRuntime.streamPlugin(
+          "test-plugin",
+          TEST_CONFIG,
+          TEST_GETBYID_INPUT
+        ).pipe(
+          Effect.catchTag("PluginRuntimeError", (error) => {
+            expect(error.operation).toBe("stream-plugin-validate");
+            expect(error.retryable).toBe(false);
+            expect(error.pluginId).toBe("test-plugin");
+            expect(error.cause?.message).toContain("not streamable");
 
-    it("should execute getBulk procedure", async () => {
-      const result = await runtime.runPromise(
-        Effect.gen(function* () {
-          const pluginRuntime = yield* PluginRuntime;
-          const plugin = yield* pluginRuntime.usePlugin("test-source-plugin", TEST_CONFIG);
-          
-          const output = yield* pluginRuntime.executePlugin(plugin, TEST_GETBULK_INPUT);
-          
-          return output;
-        })
-      );
+            console.debug("Caught expected non-streamable error:", {
+              operation: error.operation,
+              pluginId: error.pluginId,
+              retryable: error.retryable,
+              cause: error.cause?.message,
+            });
 
-      expect(result).toBeDefined();
-      const typedResult = result as { items: SourceItem[] };
-      expect(typedResult.items).toBeDefined();
-      expect(Array.isArray(typedResult.items)).toBe(true);
-      expect(typedResult.items.length).toBe(3);
-      expect((typedResult.items[0] as SourceItem).externalId).toBe("id1");
-      expect((typedResult.items[1] as SourceItem).externalId).toBe("id2");
-      expect((typedResult.items[2] as SourceItem).externalId).toBe("id3");
-    });
+            return Effect.succeed("non-streamable-error-handled");
+          }),
+          Effect.catchAll((unexpectedError: unknown) => {
+            console.error("Unexpected error type:", unexpectedError);
+            expect.fail(
+              `Expected PluginRuntimeError but got: ${(unexpectedError as { _tag: string })._tag || typeof unexpectedError}`,
+            );
+            return Effect.succeed("should-not-reach-here");
+          }),
+        );
+      })
+    );
 
-    it("should execute search procedure", async () => {
-      const result = await runtime.runPromise(
-        Effect.gen(function* () {
-          const pluginRuntime = yield* PluginRuntime;
-          const plugin = yield* pluginRuntime.usePlugin("test-source-plugin", TEST_CONFIG);
-          
-          // Use Phase 3 state to get historical items
-          const searchInputWithState = {
-            ...TEST_SEARCH_INPUT,
-            state: { phase: "historical", status: "processing" }
-          };
-          
-          const output = yield* pluginRuntime.executePlugin(plugin, searchInputWithState);
-          
-          return output;
-        })
-      );
-
-      expect(result).toBeDefined();
-      const typedResult = result as { items: SourceItem[]; nextState?: string };
-      expect(typedResult.items).toBeDefined();
-      expect(Array.isArray(typedResult.items)).toBe(true);
-      expect(typedResult.items.length).toBeGreaterThan(0);
-      expect((typedResult.items[0] as SourceItem).content).toContain("test query");
-      expect(typedResult.nextState).toBeDefined();
-    });
-
-    it("should stream getById procedure (single item)", async () => {
-      const result = await runtime.runPromise(
-        Effect.gen(function* () {
-          const pluginRuntime = yield* PluginRuntime;
-
-          const stream = yield* pluginRuntime.streamPlugin(
-            "test-source-plugin",
-            TEST_CONFIG,
-            TEST_GETBYID_INPUT,
-            {
-              maxItems: 5, // Safety limit
-            }
-          );
-
-          const items = yield* stream.pipe(
-            Stream.runCollect
-          );
-
-          return Array.from(items);
-        })
-      );
-
-      expect(result).toBeDefined();
-      expect(result.length).toBe(1);
-      expect((result[0] as SourceItem).externalId).toBe("test-id-123");
-    });
-
-    it("should stream getBulk procedure", async () => {
-      const result = await runtime.runPromise(
-        Effect.gen(function* () {
-          const pluginRuntime = yield* PluginRuntime;
-
-          const stream = yield* pluginRuntime.streamPlugin(
-            "test-source-plugin",
-            TEST_CONFIG,
-            TEST_GETBULK_INPUT,
-            {
-              maxItems: 5, // Safety limit
-            }
-          );
-
-          const items = yield* stream.pipe(
-            Stream.runCollect
-          );
-
-          return Array.from(items);
-        })
-      );
-
-      expect(result).toBeDefined();
-      expect(result.length).toBe(3);
-      expect(result.map(item => (item as SourceItem).externalId)).toEqual(["id1", "id2", "id3"]);
-    });
+    expect(result).toBe("non-streamable-error-handled");
   });
 });

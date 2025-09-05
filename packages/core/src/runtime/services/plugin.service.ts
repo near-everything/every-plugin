@@ -1,4 +1,6 @@
 import { Cache, Duration, Effect, Hash, Layer, Schedule } from "effect";
+import type { z } from "zod";
+import { call } from "@orpc/server";
 import { PluginLoggerTag, type PluginRegistry } from "../../plugin";
 import { PluginRuntimeError } from "../errors";
 import type {
@@ -25,8 +27,8 @@ export interface IPluginService {
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
 	readonly executePlugin: <T extends AnyPlugin>(
 		initializedPlugin: InitializedPlugin<T>,
-		input: unknown,
-	) => Effect.Effect<any, PluginRuntimeError>;
+		input: z.infer<T["inputSchema"]>,
+	) => Effect.Effect<z.infer<T["outputSchema"]>, PluginRuntimeError>;
 	readonly usePlugin: <T extends AnyPlugin>(
 		pluginId: string,
 		config: unknown,
@@ -89,7 +91,7 @@ export class PluginService extends Effect.Tag("PluginService")<
 								})
 							)
 						);
-						logger.logInfo(`Trying to load ${pluginId}:${url}`)
+						logger.logDebug(`Trying to load ${pluginId}:${url}`)
 						const ctor = yield* moduleFederationService.loadRemoteConstructor(pluginId, url).pipe(
 							Effect.mapError((error) =>
 								new PluginRuntimeError({
@@ -281,8 +283,8 @@ export class PluginService extends Effect.Tag("PluginService")<
 					initializePlugin: initializePluginImpl,
 					executePlugin: <T extends AnyPlugin>(
 						initializedPlugin: InitializedPlugin<T>,
-						input: unknown,
-					) =>
+						input: z.infer<T["inputSchema"]>,
+					): Effect.Effect<z.infer<T["outputSchema"]>, PluginRuntimeError> =>
 						Effect.gen(function* () {
 							const { plugin } = initializedPlugin;
 
@@ -306,18 +308,41 @@ export class PluginService extends Effect.Tag("PluginService")<
 								),
 							);
 
-							// Execute plugin
-							const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
-							const output = yield* plugin.execute(validatedInput).pipe(
-								Effect.mapError(
-									(error): PluginRuntimeError =>
-										new PluginRuntimeError({
-											pluginId: plugin.id,
-											operation: "execute-plugin",
-											cause: error,
-											retryable: error.retryable ?? false,
-										}),
-								),
+							// Get oRPC router and call procedure directly
+							const router = plugin.createRouter();
+							const procedureName = (validatedInput as z.infer<T["inputSchema"]>).procedure as string;
+							
+							if (!(procedureName in router)) {
+								return yield* Effect.fail(
+									new PluginRuntimeError({
+										pluginId: plugin.id,
+										operation: "execute-plugin",
+										cause: new Error(`Unknown procedure: ${procedureName}`),
+										retryable: false,
+									})
+								);
+							}
+
+							const context = 'state' in validatedInput ? { state: (validatedInput as any).state } : {};
+							const output = yield* Effect.tryPromise({
+								try: () => {
+									const procedure = router[procedureName];
+									
+									if (!procedure) {
+										throw new Error(`Procedure ${procedureName} not found in router`);
+									}
+									
+									// Use oRPC call utility as per docs
+									return call(procedure, validatedInput.input, { context });
+								},
+								catch: (error): PluginRuntimeError =>
+									new PluginRuntimeError({
+										pluginId: plugin.id,
+										operation: "execute-plugin",
+										cause: error instanceof Error ? error : new Error(String(error)),
+										retryable: true,
+									}),
+							}).pipe(
 								Effect.retry(
 									retrySchedule.pipe(
 										Schedule.whileInput(
@@ -325,30 +350,9 @@ export class PluginService extends Effect.Tag("PluginService")<
 										),
 									),
 								),
-								Effect.provide(pluginLayer),
 							);
 
-							// Validate output
-							const validatedOutput = yield* validate(
-								plugin.outputSchema,
-								output,
-								plugin.id,
-								"output",
-							).pipe(
-								Effect.mapError(
-									(validationError): PluginRuntimeError => {
-										console.log("got output error", validationError.zodError);
-										return new PluginRuntimeError({
-											pluginId: plugin.id,
-											operation: "validate-output",
-											cause: validationError.zodError,
-											retryable: false,
-										});
-									},
-								),
-							);
-
-							return validatedOutput;
+							return output as z.infer<T["outputSchema"]>;
 						}),
 					usePlugin: <T extends AnyPlugin>(
 						pluginId: string,

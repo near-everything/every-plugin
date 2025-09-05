@@ -6,7 +6,7 @@ import { createTestLogger } from "./test-utils";
 
 // Test registry for diagnostics
 const TEST_PLUGIN_ID = "test-plugin";
-const TEST_REMOTE_URL = "http://localhost:3000/remoteEntry.js";
+const TEST_REMOTE_URL = "http://localhost:3999/remoteEntry.js";
 
 const testLayer = Layer.succeed(PluginLoggerTag, createTestLogger());
 

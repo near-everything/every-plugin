@@ -18,7 +18,7 @@ module.exports = {
 	devServer: {
 		static: path.join(__dirname, "dist"),
 		hot: true,
-		port: 3000, // CHANGE THIS PORT - Use unique port for your plugin
+		port: 3999,
 		devMiddleware: {
 			writeToDisk: true,
 		},
@@ -49,13 +49,17 @@ module.exports = {
 			shared: {
 				effect: {
 					singleton: true,
-					requiredVersion: "^3.17.6",
+					requiredVersion: false,
 					eager: false,
+					strictVersion: false,
+					version: false,
 				},
 				zod: {
 					singleton: true,
-					requiredVersion: "^4.0.8",
+					requiredVersion: false,
 					eager: false,
+					strictVersion: false,
+					version: false,
 				},
 			},
 		}),

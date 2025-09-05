@@ -1,4 +1,4 @@
-export class TemplateClient {
+export class SourceTemplateClient {
 	private baseUrl: string;
 	private apiKey: string;
 

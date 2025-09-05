@@ -6,8 +6,8 @@ import { createPluginRuntime, PluginRuntime } from "./index";
 // Local template plugin for testing
 const TEST_REGISTRY: PluginRegistry = {
 	"test-plugin": {
-		remoteUrl: "http://localhost:3000/remoteEntry.js",
-		type: "transformer",
+		remoteUrl: "http://localhost:3999/remoteEntry.js",
+		type: "source",
 		version: "0.0.1",
 		description: "Local template plugin for testing",
 	},
@@ -31,10 +31,12 @@ const TEST_CONFIG = {
 };
 
 const TEST_INPUT = {
-	query: "test query for processing",
-	options: {
+	procedure: "search" as const,
+	input: {
+		query: "test query for processing",
 		limit: 2,
 	},
+	state: null,
 };
 
 // Secrets configuration for hydration
@@ -56,62 +58,6 @@ describe("Plugin Runtime Integration", () => {
 		if (runtime) {
 			await runtime.dispose();
 		}
-	});
-
-	it("should create and execute plugin end-to-end", async () => {
-		// Execute the test within the runtime
-		const result = await runtime.runPromise(
-			Effect.gen(function* () {
-				const pluginRuntime = yield* PluginRuntime;
-
-				// Create plugin (load → instantiate → initialize)
-				const initializedPlugin = yield* pluginRuntime.usePlugin(
-					"test-plugin",
-					TEST_CONFIG,
-				);
-
-				// Verify plugin was initialized
-				expect(initializedPlugin).toBeDefined();
-				expect(initializedPlugin.metadata.pluginId).toBe("test-plugin");
-				expect(initializedPlugin.plugin).toBeDefined();
-
-				// Execute plugin
-				const output = yield* pluginRuntime.executePlugin(
-					initializedPlugin,
-					TEST_INPUT,
-				);
-
-				return output;
-			}),
-		);
-
-		// Validate output structure
-		expect(result).toBeDefined();
-		expect(typeof result).toBe("object");
-
-		const typedResult = result as any;
-
-		// Verify success wrapper structure
-		expect(typedResult).toHaveProperty("success");
-		expect(typedResult).toHaveProperty("data");
-		expect(typedResult.success).toBe(true);
-
-		// Verify data content
-		expect(typedResult.data).toHaveProperty("results");
-		expect(typedResult.data).toHaveProperty("count");
-		expect(Array.isArray(typedResult.data.results)).toBe(true);
-		expect(typedResult.data.count).toBe(2); // Should match the limit we set
-		expect(typedResult.data.results).toHaveLength(2);
-
-		// Verify results contain processed query
-		expect(typedResult.data.results[0]).toHaveProperty("id");
-		expect(typedResult.data.results[0]).toHaveProperty("content");
-		expect(typedResult.data.results[0].content).toContain(
-			"test query for processing",
-		);
-		expect(typedResult.data.results[1].content).toContain(
-			"test query for processing",
-		);
 	});
 
 	it("should handle plugin lifecycle correctly", async () => {
@@ -368,6 +314,156 @@ describe("Plugin Runtime Integration", () => {
 		);
 
 		expect(result).toBe("plugin-not-found-handled-properly");
+	});
+
+	it("should handle input validation error", async () => {
+		const invalidInput = {
+			procedure: "search" as const,
+			input: {
+				// Missing required 'query' field
+				limit: 2,
+			},
+			state: null,
+		};
+
+		const result = await runtime.runPromise(
+			Effect.gen(function* () {
+				const pluginRuntime = yield* PluginRuntime;
+
+				const initializedPlugin = yield* pluginRuntime.usePlugin(
+					"test-plugin",
+					TEST_CONFIG,
+				);
+
+				return yield* pluginRuntime
+					.executePlugin(initializedPlugin, invalidInput as any)
+					.pipe(
+						Effect.catchTag("PluginRuntimeError", (error) => {
+							// Should catch input validation error
+							expect(error.operation).toBe("validate-input");
+							expect(error.retryable).toBe(false);
+							expect(error.pluginId).toBe("test-plugin");
+							expect(error.cause).toBeDefined();
+
+							// The error should mention the missing query field
+							const errorMessage = error.cause?.message || "";
+							const lowerMessage = errorMessage.toLowerCase();
+							const hasQueryError =
+								lowerMessage.includes("query") ||
+								lowerMessage.includes("required") ||
+								lowerMessage.includes("invalid");
+							expect(hasQueryError).toBe(true);
+
+							console.debug("Caught expected input validation error:", {
+								operation: error.operation,
+								pluginId: error.pluginId,
+								retryable: error.retryable,
+								cause: error.cause?.message,
+							});
+
+							return Effect.succeed("input-validation-error-handled");
+						}),
+						Effect.catchAll((unexpectedError: unknown) => {
+							console.error("Unexpected error type:", unexpectedError);
+							expect.fail(
+								`Expected PluginRuntimeError but got: ${(unexpectedError as { _tag: string })._tag || typeof unexpectedError}`,
+							);
+							return Effect.succeed("should-not-reach-here");
+						}),
+					);
+			}),
+		);
+
+		expect(result).toBe("input-validation-error-handled");
+	});
+
+	// Contract-based procedure tests
+	it("should execute getById procedure", async () => {
+		const getByIdInput = {
+			procedure: "getById" as const,
+			input: {
+				id: "test-id-123",
+			},
+			state: null,
+		};
+
+		const result = await runtime.runPromise(
+			Effect.gen(function* () {
+				const pluginRuntime = yield* PluginRuntime;
+				const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+
+				const output = yield* pluginRuntime.executePlugin(plugin, getByIdInput);
+
+				return output;
+			})
+		);
+
+		expect(result).toBeDefined();
+		const typedResult = result as { item: any };
+		expect(typedResult.item).toBeDefined();
+		expect(typedResult.item.externalId).toBe("test-id-123");
+		expect(typedResult.item.content).toContain("Content for item test-id-123");
+	});
+
+	it("should execute getBulk procedure", async () => {
+		const getBulkInput = {
+			procedure: "getBulk" as const,
+			input: {
+				ids: ["id1", "id2", "id3"],
+			},
+			state: null,
+		};
+
+		const result = await runtime.runPromise(
+			Effect.gen(function* () {
+				const pluginRuntime = yield* PluginRuntime;
+				const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+
+				const output = yield* pluginRuntime.executePlugin(plugin, getBulkInput);
+
+				return output;
+			})
+		);
+
+		expect(result).toBeDefined();
+		const typedResult = result as { items: any[] };
+		expect(typedResult.items).toBeDefined();
+		expect(Array.isArray(typedResult.items)).toBe(true);
+		expect(typedResult.items.length).toBe(3);
+		expect(typedResult.items[0].externalId).toBe("id1");
+		expect(typedResult.items[1].externalId).toBe("id2");
+		expect(typedResult.items[2].externalId).toBe("id3");
+	});
+
+	it("should execute search procedure (basic execution)", async () => {
+		const searchInput = {
+			procedure: "search" as const,
+			input: {
+				query: "test query",
+				limit: 10,
+			},
+			// Use Phase 3 state to get historical items
+			state: { phase: "historical", status: "processing" }
+		};
+
+		const result = await runtime.runPromise(
+			Effect.gen(function* () {
+				const pluginRuntime = yield* PluginRuntime;
+				const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+
+				const output = yield* pluginRuntime.executePlugin(plugin, searchInput);
+
+				return output;
+			})
+		);
+
+		expect(result).toBeDefined();
+		const typedResult = result as { items: any[]; nextState?: any };
+		expect(typedResult.items).toBeDefined();
+		expect(Array.isArray(typedResult.items)).toBe(true);
+		expect(typedResult.items.length).toBeGreaterThan(0);
+		expect(typedResult.items[0].content).toContain("test query");
+		expect(typedResult.nextState).toBeDefined();
 	});
 
 	it("should handle constructor instantiation failure", async () => {

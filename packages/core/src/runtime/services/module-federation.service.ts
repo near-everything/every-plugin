@@ -85,7 +85,7 @@ export class ModuleFederationService extends Effect.Tag(
 								new ModuleFederationError({
 									pluginId,
 									remoteUrl: url,
-									cause: new Error(`Remote not available: ${error}`),
+									cause: new Error(`Remote not available: ${JSON.stringify(error)}`),
 								}),
 							);
 						}

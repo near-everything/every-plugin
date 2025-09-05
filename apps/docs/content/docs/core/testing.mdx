@@ -195,8 +195,8 @@ describe("Plugin Integration", () => {
     runtime = createPluginRuntime({
       registry: {
         "test-plugin": {
-          remoteUrl: "http://localhost:3001/remoteEntry.js",
-          type: "transformer",
+          remoteUrl: "http://localhost:3999/remoteEntry.js",
+          type: "source",
           version: "1.0.0",
         },
       },

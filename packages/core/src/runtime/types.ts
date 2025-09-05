@@ -13,7 +13,7 @@ export interface SecretsConfig {
 }
 
 // Plugin lifecycle types
-export type AnyPlugin = Plugin<z.ZodTypeAny, z.ZodTypeAny, z.ZodTypeAny>;
+export type AnyPlugin = Plugin<any, z.ZodTypeAny, z.ZodTypeAny>;
 
 export interface PluginConstructor {
 	readonly ctor: new () => AnyPlugin;

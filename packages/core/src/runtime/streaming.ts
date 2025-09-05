@@ -1,7 +1,7 @@
 import { Duration, Effect, Option, Stream } from "effect";
-import z from "zod";
-import type { SourcePlugin } from "../source";
-import { PluginRuntimeError } from "./errors";
+import type { z } from "zod";
+import type { Plugin } from "../plugin";
+import type { PluginRuntimeError } from "./errors";
 import type { InitializedPlugin } from "./types";
 
 
@@ -20,7 +20,7 @@ const extractDelayFromState = (state: any): Duration.Duration | null => {
  * Note: Validation is handled at the runtime level before this function is called
  */
 export const createSourceStream = <
-	T extends SourcePlugin,
+	T extends Plugin,
 	TInput extends z.infer<T["inputSchema"]>,
 	TItem
 >(
@@ -28,27 +28,7 @@ export const createSourceStream = <
 	executePlugin: (plugin: InitializedPlugin<T>, input: TInput) => Effect.Effect<any, PluginRuntimeError>,
 	input: TInput,
 	options: SourceStreamOptions<TItem> = {},
-	isStreamable: boolean
 ): Stream.Stream<TItem, PluginRuntimeError> => {
-	// For non-streamable procedures, execute once and return items
-	if (!isStreamable) {
-		return Stream.fromEffect(
-			executePlugin(initializedPlugin, input).pipe(
-				Effect.map((result) => {
-					const resultObj = result as Record<string, unknown>;
-					const items: TItem[] = Array.isArray(resultObj.items)
-						? resultObj.items as TItem[]
-						: resultObj.item
-							? [resultObj.item as TItem]
-							: [];
-					return items;
-				})
-			)
-		).pipe(
-			Stream.flatMap(items => Stream.fromIterable(items))
-		);
-	}
-
 	const initialState = (input as z.infer<T["inputSchema"]>).state;
 
 	const stream = Stream.unfoldEffect({ state: initialState, invocations: 0 }, ({ state: currentState, invocations }) =>

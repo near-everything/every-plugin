@@ -1,7 +1,6 @@
 import { Effect, Layer, ManagedRuntime, type Stream } from "effect";
 import type { z } from "zod";
-import { type PluginLogger, PluginLoggerTag } from "../plugin";
-import type { SourcePlugin } from "../source";
+import { type Plugin, type PluginLogger, PluginLoggerTag } from "../plugin";
 import { PluginRuntimeError } from "./errors";
 import {
 	ModuleFederationService,
@@ -59,7 +58,7 @@ export interface IPluginRuntime {
 		config: z.infer<T["configSchema"]>,
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
 	readonly streamPlugin: <
-		T extends SourcePlugin,
+		T extends Plugin,
 		TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
 		TItem = unknown
 	>(
@@ -95,7 +94,7 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 						config: z.infer<T["configSchema"]>,
 					) => pluginService.usePlugin<T>(pluginId, config),
 					streamPlugin: <
-						T extends SourcePlugin,
+						T extends Plugin,
 						TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
 						TItem = unknown
 					>(
@@ -107,61 +106,57 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 						// Get initialized plugin (benefits from caching)
 						const initializedPlugin = yield* pluginService.usePlugin<T>(pluginId, config);
 
-						// Validate plugin type
-						if (initializedPlugin.plugin.type !== "source") {
+						// Check if procedure is streamable and validate state
+						const procedureName = (input as { procedure: string }).procedure;
+						const isStreamable = initializedPlugin.plugin.isStreamable(procedureName);
+
+						if (!isStreamable) {
 							return yield* Effect.fail(
 								new PluginRuntimeError({
 									pluginId,
 									operation: "stream-plugin-validate",
-									cause: new Error(`Plugin ${pluginId} is not a source plugin (type: ${initializedPlugin.plugin.type})`),
+									cause: new Error(`Procedure ${procedureName} is not streamable`),
 									retryable: false,
 								})
 							);
 						}
 
-						// Check if procedure is streamable and validate state
-						const procedureName = (input as { procedure: string }).procedure;
-						const isStreamable = initializedPlugin.plugin.isStreamable(procedureName);
-						
-						if (isStreamable) {
-							// Check stateSchema exists
-							if (!('stateSchema' in initializedPlugin.plugin) || !initializedPlugin.plugin.stateSchema) {
-								return yield* Effect.fail(
+						// Check stateSchema exists for streamable procedures
+						if (!('stateSchema' in initializedPlugin.plugin) || !initializedPlugin.plugin.stateSchema) {
+							return yield* Effect.fail(
+								new PluginRuntimeError({
+									pluginId: initializedPlugin.plugin.id,
+									operation: "validate-state",
+									cause: new Error(`Streamable plugin ${initializedPlugin.plugin.id} must have a stateSchema`),
+									retryable: false,
+								})
+							);
+						}
+
+						// Validate initial state
+						yield* validate(
+							initializedPlugin.plugin.stateSchema,
+							input.state,
+							initializedPlugin.plugin.id,
+							"state",
+						).pipe(
+							Effect.mapError(
+								(validationError): PluginRuntimeError =>
 									new PluginRuntimeError({
 										pluginId: initializedPlugin.plugin.id,
 										operation: "validate-state",
-										cause: new Error(`Streamable plugin ${initializedPlugin.plugin.id} must have a stateSchema`),
+										cause: validationError.zodError,
 										retryable: false,
 									})
-								);
-							}
-
-							// Validate initial state
-							yield* validate(
-								initializedPlugin.plugin.stateSchema,
-								(input as any).state,
-								initializedPlugin.plugin.id,
-								"state",
-							).pipe(
-								Effect.mapError(
-									(validationError): PluginRuntimeError => 
-										new PluginRuntimeError({
-											pluginId: initializedPlugin.plugin.id,
-											operation: "validate-state",
-											cause: validationError.zodError,
-											retryable: false,
-										})
-								),
-							);
-						}
+							),
+						);
 
 						// Create and return the stream
 						return createSourceStream<T, TInput, TItem>(
 							initializedPlugin,
 							pluginService.executePlugin,
 							input,
-							options,
-							isStreamable
+							options
 						);
 					}),
 					shutdown: () => pluginService.cleanup(),

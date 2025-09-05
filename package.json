@@ -4,7 +4,8 @@
 	"workspaces": [
 		"apps/*",
 		"packages/*",
-		"templates/*"
+		"templates/*",
+		"plugins/*"
 	],
 	"scripts": {
 		"check": "biome check --write .",

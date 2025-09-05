@@ -168,7 +168,7 @@ const result = await runtime.runPromise(
     const pluginRuntime = yield* PluginRuntime;
 
     return yield* pluginRuntime.streamPlugin(
-          "test-source-plugin",
+          "test-plugin",
           TEST_CONFIG,
           TEST_SEARCH_INPUT,
         ).pipe(
