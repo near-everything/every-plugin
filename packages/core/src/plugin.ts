@@ -144,6 +144,47 @@ export interface Plugin<
 }
 
 /**
+ * State transition utilities for plugins
+ * These provide a functional approach to state updates while keeping the API simple
+ */
+export const StateTransitions = {
+	/**
+	 * Transition to a new phase with optional updates
+	 */
+	to: <T extends { phase?: string }>(phase: string, updates: Partial<T> = {}) => 
+		(state: T): T => ({ ...state, phase, ...updates }),
+		
+	/**
+	 * Add polling delay to state
+	 */
+	withPolling: <T>(delayMs: number) => 
+		(state: T): T => ({ ...state, nextPollMs: delayMs }),
+		
+	/**
+	 * Set error state with message and stop polling
+	 */
+	withError: <T>(errorMessage: string) =>
+		(state: T): T => ({ 
+			...state, 
+			phase: 'error', 
+			errorMessage, 
+			nextPollMs: null 
+		}),
+		
+	/**
+	 * Preserve existing state with updates
+	 */
+	update: <T>(updates: Partial<T>) =>
+		(state: T): T => ({ ...state, ...updates }),
+};
+
+/**
+ * Simple pipe utility for composing state transformations
+ */
+export const pipe = <T>(value: T, ...fns: Array<(val: T) => T>): T =>
+	fns.reduce((acc, fn) => fn(acc), value);
+
+/**
  * Simple plugin base class that uses pure oRPC patterns
  * Plugin just needs to define contract, config, and create oRPC router
  */

@@ -1,7 +1,7 @@
 import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { PluginRegistry } from "../plugin";
-import { createPluginRuntime, PluginRuntime } from "./index";
+import type { PluginRegistry } from "../../plugin";
+import { createPluginRuntime, PluginRuntime } from "../../runtime";
 
 // Import types from the source plugin
 type SourceItem = {
@@ -140,10 +140,7 @@ describe("Plugin Streaming", () => {
         return yield* pluginRuntime.streamPlugin(
           "test-plugin",
           TEST_CONFIG,
-          inputWithInvalidState,
-          {
-            stopWhenEmpty: true,
-          }
+          inputWithInvalidState
         ).pipe(
           Effect.flatMap(() =>
             // If we get here, validation didn't work
@@ -179,42 +176,6 @@ describe("Plugin Streaming", () => {
     expect(result).toBe("state-validation-error-handled");
   }, 4000);
 
-  it("should handle stopWhenEmpty option", async () => {
-    const result = await runtime.runPromise(
-      Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-
-        // Use the deterministic "empty" phase that always returns 0 items
-        const inputWithEmptyState = {
-          ...TEST_SEARCH_INPUT,
-          state: {
-            phase: "empty",
-            nextPollMs: 10,
-          },
-        };
-
-        const stream = yield* pluginRuntime.streamPlugin(
-          "test-plugin",
-          TEST_CONFIG,
-          inputWithEmptyState,
-          {
-            stopWhenEmpty: true,
-            maxInvocations: 3, // Allow a few iterations to verify it stops
-          }
-        );
-
-        const items = yield* stream.pipe(
-          Stream.runCollect
-        );
-
-        return Array.from(items);
-      })
-    );
-
-    // Should stop immediately when no items are returned from empty phase
-    expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBe(0); // Empty phase always returns 0 items
-  }, 4000);
 
   it("should handle workflow phases correctly", async () => {
     const pluginRuntime = await runtime.runPromise(PluginRuntime);
@@ -305,4 +266,46 @@ describe("Plugin Streaming", () => {
 
     expect(result).toBe("non-streamable-error-handled");
   });
+
+  it("should call onStateChange hook with new streaming options", async () => {
+    const stateChanges: Array<{ state: any; itemCount: number }> = [];
+    
+    const result = await runtime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
+
+        const inputWithProductiveState = {
+          ...TEST_SEARCH_INPUT,
+          state: { phase: "historical", status: "processing", nextPollMs: 10 }
+        };
+
+        const stream = yield* pluginRuntime.streamPlugin(
+          "test-plugin",
+          TEST_CONFIG,
+          inputWithProductiveState,
+          {
+            maxItems: 2,
+            maxInvocations: 2,
+            // New: State change hook
+            onStateChange: (newState: any, items: any[]) => 
+              Effect.sync(() => {
+                stateChanges.push({ state: newState, itemCount: items.length });
+              })
+          }
+        );
+
+        const items = yield* stream.pipe(
+          Stream.runCollect
+        );
+
+        return Array.from(items);
+      })
+    );
+
+    // Verify the hook was called
+    expect(stateChanges.length).toBeGreaterThan(0);
+    expect(stateChanges[0]).toHaveProperty('state');
+    expect(stateChanges[0]).toHaveProperty('itemCount');
+    expect(typeof stateChanges[0]?.itemCount).toBe('number');
+  }, 4000);
 });

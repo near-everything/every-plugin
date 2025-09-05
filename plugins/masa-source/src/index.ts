@@ -6,9 +6,9 @@ import { MasaClient, type MasaSearchResult } from "./client";
 import {
   type MasaSourceConfig,
   MasaSourceConfigSchema,
-  masaContract,
   type SourceItem,
-  StateSchema
+  StateSchema,
+  masaContract
 } from "./schemas";
 
 // Helper function to convert Masa API results to plugin format
@@ -76,9 +76,14 @@ export class MasaSourcePlugin extends SimplePlugin<
 
   // Create pure oRPC router following oRPC docs pattern
   createRouter() {
-    const os = implement(masaContract).$context<{ state?: z.infer<typeof StateSchema> }>();
+    const os = implement(masaContract);
+
+    // Create context type for state injection
+    type ContextWithState = { state?: z.infer<typeof StateSchema> };
+    const osWithContext = os.$context<ContextWithState>();
+
     // State injection middleware for streaming procedures
-    const stateMiddleware = os.middleware(async ({ context, next }) => {
+    const stateMiddleware = osWithContext.middleware(async ({ context, next }) => {
       return next({
         context: {
           state: context.state
@@ -87,7 +92,7 @@ export class MasaSourcePlugin extends SimplePlugin<
     });
 
     // Define individual procedure handlers
-    const getById = os.getById.handler(async ({ input }) => {
+    const getById = osWithContext.getById.handler(async ({ input }) => {
       if (!this.client) throw new Error("Plugin not initialized");
 
       const masaResult = await this.client.getById(input.sourceType, input.id);
@@ -95,7 +100,7 @@ export class MasaSourcePlugin extends SimplePlugin<
       return { item };
     });
 
-    const getBulk = os.getBulk.handler(async ({ input }) => {
+    const getBulk = osWithContext.getBulk.handler(async ({ input }) => {
       if (!this.client) throw new Error("Plugin not initialized");
 
       const masaResults = await this.client.getBulk(input.sourceType, input.ids);
@@ -103,7 +108,7 @@ export class MasaSourcePlugin extends SimplePlugin<
       return { items };
     });
 
-    const search = os.use(stateMiddleware).search.handler(async ({ input, context }) => {
+    const search = osWithContext.use(stateMiddleware).search.handler(async ({ input, context }) => {
       if (!this.client) throw new Error("Plugin not initialized");
 
       const state = context.state;
@@ -123,25 +128,37 @@ export class MasaSourcePlugin extends SimplePlugin<
           );
 
           console.log(`[SEARCH HANDLER] Job submitted successfully: ${jobId}`);
+          const initialState: z.infer<typeof StateSchema> = {
+            phase: "submitted",
+            jobId,
+            searchMethod: input.searchMethod,
+            sourceType: input.sourceType,
+            nextPollMs: 1000,
+            lastProcessedId: undefined,
+            nextCursor: undefined,
+            errorMessage: undefined,
+          };
+
           return {
             items: [],
-            nextState: {
-              phase: "submitted",
-              jobId,
-              searchMethod: input.searchMethod,
-              sourceType: input.sourceType,
-              nextPollMs: 1000,
-            }
+            nextState: initialState
           };
         } catch (error) {
           console.log(`[SEARCH HANDLER] Job submission failed:`, error);
+          const errorState: z.infer<typeof StateSchema> = {
+            phase: "error",
+            errorMessage: error instanceof Error ? error.message : String(error),
+            nextPollMs: null,
+            jobId: undefined,
+            searchMethod: undefined,
+            sourceType: undefined,
+            lastProcessedId: undefined,
+            nextCursor: undefined,
+          };
+
           return {
             items: [],
-            nextState: {
-              phase: "error",
-              errorMessage: error instanceof Error ? error.message : String(error),
-              nextPollMs: null,
-            }
+            nextState: errorState
           };
         }
       }
@@ -168,55 +185,69 @@ export class MasaSourcePlugin extends SimplePlugin<
               const items = masaResults.map(convertMasaResultToSourceItem);
               console.log(`[SEARCH HANDLER] Retrieved ${items.length} items`);
 
+              const doneState: z.infer<typeof StateSchema> = {
+                ...state,
+                phase: "done",
+                nextPollMs: 5000,
+                lastProcessedId: items.length > 0 ? items[items.length - 1].externalId : undefined,
+              };
+
               return {
                 items,
-                nextState: {
-                  phase: "done",
-                  lastProcessedId: items.length > 0 ? items[items.length - 1].externalId : undefined,
-                  nextPollMs: 5000,
-                }
+                nextState: doneState
               };
             } catch (resultsError) {
               console.log(`[SEARCH HANDLER] Results fetch failed:`, resultsError);
+              const errorState: z.infer<typeof StateSchema> = {
+                ...state,
+                phase: "error",
+                errorMessage: resultsError instanceof Error ? resultsError.message : String(resultsError),
+                nextPollMs: null,
+              };
+
               return {
                 items: [],
-                nextState: {
-                  phase: "error",
-                  errorMessage: resultsError instanceof Error ? resultsError.message : String(resultsError),
-                  nextPollMs: null,
-                }
+                nextState: errorState
               };
             }
           } else if (status === 'error') {
             console.log(`[SEARCH HANDLER] Job failed`);
+            const errorState: z.infer<typeof StateSchema> = {
+              ...state,
+              phase: "error",
+              errorMessage: "Job failed",
+              nextPollMs: null,
+            };
+
             return {
               items: [],
-              nextState: {
-                phase: "error",
-                errorMessage: "Job failed",
-                nextPollMs: null,
-              }
+              nextState: errorState
             };
           } else {
             console.log(`[SEARCH HANDLER] Job still processing`);
+            const processingState: z.infer<typeof StateSchema> = {
+              ...state,
+              phase: "processing",
+              nextPollMs: 2000,
+            };
+
             return {
               items: [],
-              nextState: {
-                ...state,
-                phase: "processing",
-                nextPollMs: 2000,
-              }
+              nextState: processingState
             };
           }
         } catch (statusError) {
           console.log(`[SEARCH HANDLER] Status check failed:`, statusError);
+          const errorState: z.infer<typeof StateSchema> = {
+            ...state,
+            phase: "error",
+            errorMessage: statusError instanceof Error ? statusError.message : String(statusError),
+            nextPollMs: null,
+          };
+
           return {
             items: [],
-            nextState: {
-              phase: "error",
-              errorMessage: statusError instanceof Error ? statusError.message : String(statusError),
-              nextPollMs: null,
-            }
+            nextState: errorState
           };
         }
       }
@@ -229,7 +260,7 @@ export class MasaSourcePlugin extends SimplePlugin<
       };
     });
 
-    const similaritySearch = os.similaritySearch.handler(async ({ input }) => {
+    const similaritySearch = osWithContext.similaritySearch.handler(async ({ input }) => {
       if (!this.client) throw new Error("Plugin not initialized");
 
       const masaResults = await this.client.similaritySearch({
@@ -244,7 +275,7 @@ export class MasaSourcePlugin extends SimplePlugin<
       return { items };
     });
 
-    const hybridSearch = os.hybridSearch.handler(async ({ input }) => {
+    const hybridSearch = osWithContext.hybridSearch.handler(async ({ input }) => {
       if (!this.client) throw new Error("Plugin not initialized");
 
       const masaResults = await this.client.hybridSearch({
@@ -266,7 +297,7 @@ export class MasaSourcePlugin extends SimplePlugin<
       return { items };
     });
 
-    const getProfile = os.getProfile.handler(async ({ input }) => {
+    const getProfile = osWithContext.getProfile.handler(async ({ input }) => {
       if (!this.client) throw new Error("Plugin not initialized");
 
       const jobId = await this.client.submitSearchJob(
@@ -315,7 +346,7 @@ export class MasaSourcePlugin extends SimplePlugin<
       };
     });
 
-    const getTrends = os.getTrends.handler(async ({ input }) => {
+    const getTrends = osWithContext.getTrends.handler(async ({ input }) => {
       if (!this.client) throw new Error("Plugin not initialized");
 
       const jobId = await this.client.submitSearchJob(
@@ -352,7 +383,7 @@ export class MasaSourcePlugin extends SimplePlugin<
       return { trends };
     });
 
-    return os.router({
+    return osWithContext.router({
       getById,
       getBulk,
       search,

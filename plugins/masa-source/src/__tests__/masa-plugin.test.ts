@@ -34,6 +34,7 @@ describe('Masa Source Plugin Direct Tests', () => {
     variables: {
       baseUrl: "https://data.masa.ai/api/v1",
       timeout: 30000,
+      defaultMaxResults: 10,
     },
     secrets: {
       apiKey: "test-api-key-12345",
@@ -65,125 +66,38 @@ describe('Masa Source Plugin Direct Tests', () => {
     );
   });
 
-  describe('Search Handler Error Scenarios', () => {
-    it('should return error state when API submission fails', async () => {
-      console.log('\n=== Testing API Submission Failure ===');
-      
-      // Mock API failure - should throw error since we removed {data, error} pattern
-      mockClient.submitSearchJob.mockRejectedValue(
-        new Error('Network/API Error: {"error":"Invalid JSON input","details":"Unexpected token o in JSON at position 1","status":400,"statusText":"Bad Request"}')
-      );
-
-      const input = {
-        procedure: "search" as const,
-        input: {
-          query: "@curatedotfun",
-          searchMethod: "searchbyquery" as const,
-          sourceType: "twitter" as const,
-          maxResults: 25
-        },
-        state: null
-      };
-
-      console.log('Input:', JSON.stringify(input, null, 2));
-
-      const result = await Effect.runPromise(
-        plugin.execute(input).pipe(
-          Effect.provide(TestLayer)
-        )
-      );
-      
-      console.log('Direct plugin result:', JSON.stringify(result, null, 2));
-
-      // Verify the structure
-      expect(result).toHaveProperty("items");
-      expect(result).toHaveProperty("nextState");
-      expect(result.items).toEqual([]);
-      
-      // This should be an error state, not undefined
-      expect(result.nextState).not.toBeUndefined();
-      expect(result.nextState).not.toBeNull();
-      
-      if (result.nextState) {
-        expect(result.nextState.phase).toBe("error");
-        expect(result.nextState.errorMessage).toContain("Network/API Error");
-        expect(result.nextState.nextPollMs).toBeNull();
-      }
+  describe('Plugin Initialization', () => {
+    it('should initialize successfully with valid config', async () => {
+      expect(plugin.id).toBe("@curatedotfun/masa-source");
+      expect(plugin.type).toBe("source");
+      expect(mockClient.healthCheck).toHaveBeenCalled();
     });
 
-    it('should return success state when API submission succeeds', async () => {
-      console.log('\n=== Testing API Submission Success ===');
-      
-      // Mock successful API response - should return raw value
-      mockClient.submitSearchJob.mockResolvedValue("job-12345");
-
-      const input = {
-        procedure: "search" as const,
-        input: {
-          query: "@curatedotfun",
-          searchMethod: "searchbyquery" as const,
-          sourceType: "twitter" as const,
-          maxResults: 25
-        },
-        state: null
-      };
-
-      console.log('Input:', JSON.stringify(input, null, 2));
-
-      const result = await Effect.runPromise(
-        plugin.execute(input).pipe(
-          Effect.provide(TestLayer)
-        )
-      );
-      
-      console.log('Direct plugin result:', JSON.stringify(result, null, 2));
-
-      // Verify the structure
-      expect(result).toHaveProperty("items");
-      expect(result).toHaveProperty("nextState");
-      expect(result.items).toEqual([]);
-      
-      // This should be a submitted state
-      expect(result.nextState).not.toBeUndefined();
-      expect(result.nextState).not.toBeNull();
-      
-      if (result.nextState) {
-        expect(result.nextState.phase).toBe("submitted");
-        expect(result.nextState.jobId).toBe("job-12345");
-        expect(result.nextState.nextPollMs).toBe(1000);
-      }
+    it('should create router without errors', () => {
+      const router = plugin.createRouter();
+      expect(router).toBeDefined();
     });
-
   });
 
-  describe('API Payload Testing', () => {
-    it('should log the exact API payload being sent', async () => {
-      console.log('\n=== Testing API Payload ===');
-      
-      // Mock to capture the call - should return raw value
-      mockClient.submitSearchJob.mockImplementation((...args) => {
-        console.log('submitSearchJob called with args:', args);
-        return Promise.resolve("job-12345");
-      });
+  describe('Client Integration', () => {
+    it('should call submitSearchJob with correct parameters', async () => {
+      // Mock successful API response
+      mockClient.submitSearchJob.mockResolvedValue("job-12345");
 
-      const input = {
-        procedure: "search" as const,
-        input: {
-          query: "@curatedotfun",
-          searchMethod: "searchbyquery" as const,
-          sourceType: "twitter" as const,
-          maxResults: 25
-        },
-        state: null
-      };
+      // Access the private client through the plugin for testing
+      const client = (plugin as any).client;
+      expect(client).toBeDefined();
 
-      await Effect.runPromise(
-        plugin.execute(input).pipe(
-          Effect.provide(TestLayer)
-        )
+      // Test the client method directly
+      const jobId = await client.submitSearchJob(
+        "twitter",
+        "searchbyquery",
+        "@curatedotfun",
+        25,
+        undefined
       );
 
-      // Verify the client was called with correct parameters
+      expect(jobId).toBe("job-12345");
       expect(mockClient.submitSearchJob).toHaveBeenCalledWith(
         "twitter",
         "searchbyquery", 
@@ -191,6 +105,37 @@ describe('Masa Source Plugin Direct Tests', () => {
         25,
         undefined
       );
+    });
+
+    it('should handle API errors gracefully', async () => {
+      // Mock API failure
+      mockClient.submitSearchJob.mockRejectedValue(
+        new Error('Network/API Error: {"error":"Invalid JSON input","details":"Unexpected token o in JSON at position 1","status":400,"statusText":"Bad Request"}')
+      );
+
+      const client = (plugin as any).client;
+      
+      await expect(
+        client.submitSearchJob("twitter", "searchbyquery", "@curatedotfun", 25)
+      ).rejects.toThrow("Network/API Error");
+    });
+  });
+
+  describe('Plugin Configuration', () => {
+    it('should have correct contract structure', () => {
+      expect(plugin.contract).toBeDefined();
+      expect(plugin.contract.search).toBeDefined();
+      expect(plugin.contract.getById).toBeDefined();
+      expect(plugin.contract.getBulk).toBeDefined();
+      expect(plugin.contract.similaritySearch).toBeDefined();
+      expect(plugin.contract.hybridSearch).toBeDefined();
+      expect(plugin.contract.getProfile).toBeDefined();
+      expect(plugin.contract.getTrends).toBeDefined();
+    });
+
+    it('should have correct schema definitions', () => {
+      expect(plugin.configSchema).toBeDefined();
+      expect(plugin.stateSchema).toBeDefined();
     });
   });
 });

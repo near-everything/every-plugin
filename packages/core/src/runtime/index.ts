@@ -7,7 +7,7 @@ import {
 	PluginService,
 	SecretsService,
 } from "./services";
-import { createSourceStream, type SourceStreamOptions } from "./streaming";
+import { createSourceStream, type StreamingOptions } from "./streaming";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
@@ -60,12 +60,13 @@ export interface IPluginRuntime {
 	readonly streamPlugin: <
 		T extends Plugin,
 		TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
-		TItem = unknown
+		TItem = unknown,
+		TPluginState extends z.infer<T["stateSchema"]> = z.infer<T["stateSchema"]>
 	>(
 		pluginId: string,
 		config: z.infer<T["configSchema"]>,
 		input: TInput,
-		options?: SourceStreamOptions<TItem>
+		options?: StreamingOptions<TItem, TPluginState>
 	) => Effect.Effect<Stream.Stream<TItem, PluginRuntimeError>, PluginRuntimeError>;
 	readonly shutdown: () => Effect.Effect<void, never, never>;
 }
@@ -96,12 +97,13 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 					streamPlugin: <
 						T extends Plugin,
 						TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
-						TItem = unknown
+						TItem = unknown,
+						TPluginState extends z.infer<T["stateSchema"]> = z.infer<T["stateSchema"]>
 					>(
 						pluginId: string,
 						config: z.infer<T["configSchema"]>,
 						input: TInput,
-						options?: SourceStreamOptions<TItem>
+						options?: StreamingOptions<TItem, TPluginState>
 					) => Effect.gen(function* () {
 						// Get initialized plugin (benefits from caching)
 						const initializedPlugin = yield* pluginService.usePlugin<T>(pluginId, config);
@@ -151,10 +153,25 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 							),
 						);
 
+						// Create wrapper function to adapt plugin execution result
+						const executePluginWrapper = (
+							plugin: InitializedPlugin<T>, 
+							input: TInput
+						) => 
+							pluginService.executePlugin(plugin, input).pipe(
+								Effect.map((result) => {
+									const resultObj = result as Record<string, unknown>;
+									return {
+										items: Array.isArray(resultObj.items) ? resultObj.items as TItem[] : [],
+										nextState: resultObj.nextState as TPluginState
+									};
+								})
+							);
+
 						// Create and return the stream
-						return createSourceStream<T, TInput, TItem>(
+						return createSourceStream<T, TInput, TItem, TPluginState>(
 							initializedPlugin,
-							pluginService.executePlugin,
+							executePluginWrapper,
 							input,
 							options
 						);

@@ -1,6 +1,7 @@
-import { beforeAll, afterAll, afterEach } from 'vitest';
+import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
-import { http, HttpResponse } from 'msw';
+import { afterAll, afterEach, beforeAll } from 'vitest';
+import "dotenv/config";
 
 // Mock Masa API responses
 const mockMasaResponses = {
@@ -93,7 +94,7 @@ const mockMasaResponses = {
     },
     {
       id: 'trend-2',
-      source: 'twitter', 
+      source: 'twitter',
       content: '#Blockchain',
       metadata: {
         username: 'trending',
@@ -119,30 +120,30 @@ export const server = setupServer(
   // Check job status
   http.get('https://data.masa.ai/api/v1/search/live/twitter/status/:jobId', ({ params }) => {
     const { jobId } = params;
-    
+
     if (jobId === 'error-job') {
       return HttpResponse.json({ status: 'error' });
     }
-    
+
     if (jobId === 'processing-job') {
       return HttpResponse.json({ status: 'processing' });
     }
-    
+
     return HttpResponse.json(mockMasaResponses.jobStatus);
   }),
 
   // Get job results
   http.get('https://data.masa.ai/api/v1/search/live/twitter/result/:jobId', ({ params }) => {
     const { jobId } = params;
-    
+
     if (jobId === 'empty-job') {
       return HttpResponse.json([]);
     }
-    
+
     if (jobId === 'trends-job') {
       return HttpResponse.json(mockMasaResponses.trends);
     }
-    
+
     return HttpResponse.json(mockMasaResponses.jobResults);
   }),
 
@@ -150,11 +151,11 @@ export const server = setupServer(
   http.post('https://data.masa.ai/api/v1/search/similarity', async ({ request }) => {
     try {
       const body = await request.json() as any;
-      
+
       if (body.query === 'no-results') {
         return HttpResponse.json([]);
       }
-      
+
       return HttpResponse.json(mockMasaResponses.similarityResults);
     } catch (error) {
       console.log('MSW: Failed to parse similarity search request body as JSON, returning default response');
@@ -166,11 +167,11 @@ export const server = setupServer(
   http.post('https://data.masa.ai/api/v1/search/hybrid', async ({ request }) => {
     try {
       const body = await request.json() as any;
-      
+
       if (body.similarity_query?.query === 'no-results') {
         return HttpResponse.json([]);
       }
-      
+
       return HttpResponse.json(mockMasaResponses.hybridResults);
     } catch (error) {
       console.log('MSW: Failed to parse hybrid search request body as JSON, returning default response');

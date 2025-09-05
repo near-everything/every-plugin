@@ -1,7 +1,7 @@
 import { Duration, Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { PluginRegistry } from "../plugin";
-import { createPluginRuntime, PluginRuntime } from "./index";
+import type { PluginRegistry } from "../../plugin";
+import { createPluginRuntime, PluginRuntime } from "../../runtime";
 
 // Local template plugin for testing
 const TEST_REGISTRY: PluginRegistry = {

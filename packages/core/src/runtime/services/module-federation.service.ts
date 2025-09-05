@@ -32,7 +32,7 @@ const createModuleFederationInstance = Effect.cached(
 							shareConfig: {
 								singleton: true,
 								requiredVersion: "^3.17.0",
-								eager: true,
+								eager: false,
 								strictVersion: false,
 							},
 						},
@@ -40,7 +40,39 @@ const createModuleFederationInstance = Effect.cached(
 							shareConfig: {
 								singleton: true,
 								requiredVersion: "^4.0.0", 
-								eager: true,
+								eager: false,
+								strictVersion: false,
+							},
+						},
+						"@orpc/contract": {
+							shareConfig: {
+								singleton: true,
+								requiredVersion: "^1.8.0",
+								eager: false,
+								strictVersion: false,
+							},
+						},
+						"@orpc/server": {
+							shareConfig: {
+								singleton: true,
+								requiredVersion: "^1.8.0",
+								eager: false,
+								strictVersion: false,
+							},
+						},
+						"@module-federation/enhanced": {
+							shareConfig: {
+								singleton: true,
+								requiredVersion: "^0.18.0",
+								eager: false,
+								strictVersion: false,
+							},
+						},
+						"@module-federation/runtime-core": {
+							shareConfig: {
+								singleton: true,
+								requiredVersion: "^0.18.0",
+								eager: false,
 								strictVersion: false,
 							},
 						},

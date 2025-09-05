@@ -64,14 +64,60 @@ const result = await runtime.runPromise(
 
 ## Stream Options
 
-Control streaming behavior with these options:
+Control streaming behavior with enhanced options:
 
 ```typescript
-interface SourceStreamOptions {
+interface StreamingOptions<TItem = unknown, TPluginState = unknown> {
   maxItems?: number;        // Stop after N total items across all iterations
   maxInvocations?: number;  // Stop after N plugin executions
-  stopWhenEmpty?: boolean;  // Stop when plugin returns no items
+  
+  // Enhanced: State change hook for persistence and observability
+  onStateChange?: (newState: TPluginState, items: TItem[]) => Effect.Effect<void>;
 }
+```
+
+### State Persistence and Recovery
+
+The new `onStateChange` hook enables automatic state persistence and recovery:
+
+```typescript
+// Simple state persistence helpers
+const saveState = (state: any) =>
+  Effect.sync(() => {
+    if (state) {
+      Bun.write('./stream-state.json', JSON.stringify(state, null, 2));
+    }
+  });
+
+const loadState = () =>
+  Effect.tryPromise(async () => {
+    const file = Bun.file('./stream-state.json');
+    const exists = await file.exists();
+    return exists ? await file.json() : null;
+  }).pipe(
+    Effect.catchAll(() => Effect.succeed(null))
+  );
+
+// Enhanced streaming with state persistence
+const stream = yield* pluginRuntime.streamPlugin(
+  "social-feed",
+  config,
+  {
+    procedure: "search",
+    input: { query: "typescript" },
+    state: yield* loadState() // Resume from saved state
+  },
+  {
+    maxItems: 1000,
+    // Automatic state persistence on every state change
+    onStateChange: (newState, items) => 
+      Effect.gen(function* () {
+        const phase = newState?.phase || 'unknown';
+        console.log(`📊 State transition: ${phase} phase (${items.length} items)`);
+        yield* saveState(newState);
+      })
+  }
+);
 ```
 
 ## Stream Composition with Processing
@@ -162,6 +208,72 @@ const nextInput = {
   },
 };
 ```
+
+### Enhanced State Transitions
+
+Plugins can now use functional state transition utilities for cleaner state management:
+
+```typescript
+import { StateTransitions, pipe } from "every-plugin";
+
+// In your plugin handler
+const search = os.use(stateMiddleware).search.handler(async ({ input, context }) => {
+  const state = context.state;
+
+  if (!state) {
+    // Submit new job
+    const jobId = await submitJob(input.query);
+    
+    return {
+      items: [],
+      nextState: pipe(
+        {},
+        StateTransitions.to("submitted"),
+        StateTransitions.withPolling(1000),
+        StateTransitions.update({ jobId })
+      )
+    };
+  }
+
+  if (state.jobId) {
+    const status = await checkJobStatus(state.jobId);
+    
+    if (status === 'done') {
+      const results = await getJobResults(state.jobId);
+      
+      return {
+        items: results,
+        nextState: pipe(
+          state,
+          StateTransitions.to("done"),
+          StateTransitions.withPolling(5000)
+        )
+      };
+    } else if (status === 'error') {
+      return {
+        items: [],
+        nextState: pipe(state, StateTransitions.withError("Job failed"))
+      };
+    } else {
+      return {
+        items: [],
+        nextState: pipe(
+          state,
+          StateTransitions.to("processing"),
+          StateTransitions.withPolling(2000)
+        )
+      };
+    }
+  }
+});
+```
+
+Available state transition utilities:
+- `StateTransitions.to(phase, updates?)` - Transition to a new phase
+- `StateTransitions.withPolling(delayMs)` - Add polling delay
+- `StateTransitions.withError(message)` - Set error state
+- `StateTransitions.update(updates)` - Update state properties
+- `pipe(value, ...functions)` - Compose state transformations
 
 ## Stream Processing Patterns
 

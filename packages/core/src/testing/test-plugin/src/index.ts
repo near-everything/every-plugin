@@ -1,13 +1,13 @@
 import { oc } from "@orpc/contract";
 import { implement } from "@orpc/server";
 import { Effect } from "effect";
+import { z } from "zod";
 import {
 	ConfigurationError,
 	createConfigSchema,
-	PluginLoggerTag, 
+	PluginLoggerTag,
 	SimplePlugin
-} from "every-plugin";
-import { z } from "zod";
+} from "../../..";
 import { SourceTemplateClient } from "./client";
 
 // Configuration schemas
@@ -120,7 +120,7 @@ export class SourceTemplatePlugin extends SimplePlugin<
 	readonly type = "source" as const; // this is where the open api spec of the contract should be stored, asset
 	readonly contract = sourceContract;
 	readonly configSchema = SourceTemplateConfigSchema;
-	readonly stateSchema = StateSchema;
+  override readonly stateSchema = StateSchema;
 
 	// Export contract for client consumption
 	static readonly contract = sourceContract;
@@ -128,7 +128,7 @@ export class SourceTemplatePlugin extends SimplePlugin<
 	private client: SourceTemplateClient | null = null;
 
 	// Initialize the client - called by runtime after validation
-	initialize(config?: SourceTemplateConfig) {
+	override initialize(config?: SourceTemplateConfig) {
 		const self = this;
 		return Effect.gen(function* () {
 			const logger = yield* PluginLoggerTag;
@@ -156,7 +156,7 @@ export class SourceTemplatePlugin extends SimplePlugin<
 		});
 	}
 
-	shutdown() {
+	override shutdown() {
 		this.client = null;
 		return Effect.void;
 	}
@@ -164,7 +164,7 @@ export class SourceTemplatePlugin extends SimplePlugin<
 	// Create pure oRPC router following oRPC docs pattern
 	createRouter() {
 		const self = this;
-		
+
 		// State injection middleware for streaming procedures
 		const stateMiddleware = implement(sourceContract)
 			.$context<{ state?: z.infer<typeof StateSchema> }>()

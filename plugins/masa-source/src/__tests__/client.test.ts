@@ -63,24 +63,24 @@ describe('MasaClient', () => {
 
   describe('checkJobStatus', () => {
     it('should return job status', async () => {
-      const status = await client.checkJobStatus('twitter', 'test-job-uuid-123');
+      const status = await client.checkJobStatus('test-job-uuid-123');
       expect(status).toBe('done');
     });
 
     it('should handle error status', async () => {
-      const status = await client.checkJobStatus('twitter', 'error-job');
+      const status = await client.checkJobStatus('error-job');
       expect(status).toBe('error');
     });
 
     it('should handle processing status', async () => {
-      const status = await client.checkJobStatus('twitter', 'processing-job');
+      const status = await client.checkJobStatus('processing-job');
       expect(status).toBe('processing');
     });
   });
 
   describe('getJobResults', () => {
     it('should return job results', async () => {
-      const results = await client.getJobResults('twitter', 'test-job-uuid-123');
+      const results = await client.getJobResults('test-job-uuid-123');
       
       expect(results).toHaveLength(2);
       expect(results[0]).toEqual(mockMasaResponses.jobResults[0]);
@@ -88,13 +88,13 @@ describe('MasaClient', () => {
     });
 
     it('should return empty array for empty results', async () => {
-      const results = await client.getJobResults('twitter', 'empty-job');
+      const results = await client.getJobResults('empty-job');
       expect(results).toEqual([]);
     });
 
     it('should handle non-array responses', async () => {
       // This tests the Array.isArray check in the method
-      const results = await client.getJobResults('twitter', 'test-job-uuid-123');
+      const results = await client.getJobResults('test-job-uuid-123');
       expect(Array.isArray(results)).toBe(true);
     });
   });

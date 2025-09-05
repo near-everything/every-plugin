@@ -11,6 +11,14 @@
 		"./runtime": {
 			"types": "./dist/runtime/index.d.ts",
 			"default": "./dist/runtime/index.js"
+		},
+		"./build": {
+			"types": "./dist/build/index.d.ts",
+			"default": "./dist/build/index.js"
+		},
+		"./testing": {
+			"types": "./dist/testing/index.d.ts",
+			"default": "./dist/testing/index.js"
 		}
 	},
 	"files": [
@@ -30,7 +38,9 @@
 	"devDependencies": {
 		"@effect/vitest": "^0.25.1",
 		"@module-federation/enhanced": "^0.18.3",
+		"@module-federation/rsbuild-plugin": "^0.18.4",
 		"@module-federation/runtime-core": "^0.18.3",
+		"@rsbuild/core": "^1.5.3",
 		"@types/bun": "^1.2.21",
 		"@types/node": "^24.3.1",
 		"@vitest/ui": "3.2.4",
