@@ -11,8 +11,6 @@
 		"typescript": "^5"
 	},
 	"dependencies": {
-		"effect": "^3.17.13",
-		"every-plugin": "link:every-plugin",
-		"zod": "^4.1.5"
+		"every-plugin": "link:every-plugin"
 	}
 }

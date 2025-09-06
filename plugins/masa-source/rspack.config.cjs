@@ -64,34 +64,36 @@ module.exports = {
         "./plugin": "./src/index.ts",
       },
       shared: {
+        "every-plugin": {
+          singleton: true,
+          requiredVersion: false,
+          eager: true,
+          strictVersion: false,
+        },
         effect: {
           singleton: true,
           requiredVersion: false,
           eager: true,
           strictVersion: false,
-          version: false,
         },
         zod: {
           singleton: true,
           requiredVersion: false,
           eager: true,
           strictVersion: false,
-          version: false,
         },
         "@orpc/contract": {
           singleton: true,
           requiredVersion: false,
           eager: true,
           strictVersion: false,
-          version: false,
         },
         "@orpc/server": {
           singleton: true,
           requiredVersion: false,
           eager: true,
           strictVersion: false,
-          version: false,
-        },
+        }
       },
     }),
   ],

@@ -6,9 +6,9 @@ import { MasaClient, type MasaSearchResult } from "./client";
 import {
   type MasaSourceConfig,
   MasaSourceConfigSchema,
+  masaContract, 
   type SourceItem,
-  StateSchema,
-  masaContract
+  StateSchema
 } from "./schemas";
 
 // Helper function to convert Masa API results to plugin format
@@ -45,16 +45,12 @@ export class MasaSourcePlugin extends SimplePlugin<
   private client: MasaClient | null = null;
 
   // Initialize the Masa client - called by runtime after validation
-  initialize(config?: MasaSourceConfig) {
+  initialize(config: MasaSourceConfig) {
     const self = this;
     return Effect.gen(function* () {
       const logger = yield* PluginLoggerTag;
 
-      if (!config?.secrets?.apiKey) {
-        return yield* Effect.fail(new ConfigurationError("Masa API key is required"));
-      }
-
-      const baseUrl = config.variables?.baseUrl || "https://data.masa.ai/api/v1";
+      const baseUrl = config.variables?.baseUrl as string || "https://data.masa.ai/api/v1";
       // Initialize Masa client
       self.client = new MasaClient(
         baseUrl,

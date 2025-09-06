@@ -3,12 +3,12 @@ import { z } from "zod";
 import type { ConfigurationError } from "./errors";
 
 export function createConfigSchema<
-	V extends z.ZodTypeAny = z.ZodRecord<z.ZodString, z.ZodUnknown>,
-	S extends z.ZodTypeAny = z.ZodRecord<z.ZodString, z.ZodUnknown>,
->(variablesSchema?: V, secretsSchema?: S) {
+	V extends z.ZodTypeAny,
+	S extends z.ZodTypeAny,
+>(variablesSchema: V, secretsSchema: S) {
 	return z.object({
-		variables: variablesSchema ? variablesSchema.optional() : z.record(z.string(), z.unknown()).optional(),
-		secrets: secretsSchema ? secretsSchema.optional() : z.record(z.string(), z.unknown()).optional(),
+		variables: variablesSchema,
+		secrets: secretsSchema
 	});
 }
 

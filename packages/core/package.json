@@ -32,32 +32,27 @@
 		"test:build-plugin": "cd __tests__/test-plugin && NODE_ENV=test npm run build"
 	},
 	"peerDependencies": {
-		"effect": ">=3.17.0 <4.0.0",
-		"zod": ">=4.0.0",
-		"@module-federation/enhanced": ">=0.18.0",
-		"@module-federation/runtime-core": ">=0.18.0",
-		"@orpc/server": ">=0.0.1"
+		"typescript": "^5.0.0"
 	},
 	"devDependencies": {
 		"@effect/language-service": "^0.38.1",
 		"@effect/vitest": "^0.25.1",
-		"@module-federation/enhanced": "^0.18.3",
-		"@module-federation/node": "^2.7.15",
-		"@module-federation/runtime-core": "^0.18.3",
 		"@rspack/cli": "^1.5.2",
 		"@rspack/core": "^1.5.2",
 		"@types/bun": "^1.2.21",
 		"@types/node": "^24.3.1",
 		"@vitest/ui": "3.2.4",
 		"bun-types": "^1.2.21",
-		"effect": "^3.17.13",
 		"sirv": "^3.0.2",
-		"typescript": "^5.0.0",
-		"vitest": "^3.2.4",
-		"zod": "^4.1.5"
+		"vitest": "^3.2.4"
 	},
 	"dependencies": {
 		"@better-fetch/fetch": "^1.1.18",
-		"@orpc/contract": "^1.8.6"
+		"effect": "^3.17.13",
+		"zod": "^4.1.5",
+		"@module-federation/enhanced": "^0.18.3",
+		"@module-federation/node": "^2.7.15",
+		"@module-federation/runtime-core": "^0.18.3",
+		"@orpc/server": "^1.8.6"
 	}
 }

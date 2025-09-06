@@ -90,9 +90,7 @@ describe("Module Federation Integration Tests", () => {
         
         expect(instance).toBeDefined();
         expect(instance.id).toBe("test-plugin");
-        expect(instance.metadata).toBeDefined();
-        expect(instance.metadata.pluginId).toBe("test-plugin");
-        expect(instance.metadata.type).toBe("source");
+        expect(instance.type).toBe("source");
         
         return "plugin-instantiated";
       }).pipe(

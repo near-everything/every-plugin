@@ -5,7 +5,6 @@ import {
 } from "@module-federation/enhanced/runtime";
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
 import { Effect, Layer } from "effect";
-import { PluginLoggerTag } from "../../plugin";
 import { ModuleFederationError } from "../errors";
 
 const normalizePluginId = (pluginId: string): string => {
@@ -36,54 +35,46 @@ const createModuleFederationInstance = Effect.cached(
 					name: "host",
 					remotes: [],
 					shared: {
+						"every-plugin": {
+							shareConfig: {
+								singleton: true,
+								requiredVersion: false,
+								eager: true,
+								strictVersion: false,
+							},
+						},
 						effect: {
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^3.17.0",
-								eager: false,
+								requiredVersion: false,
+								eager: true,
 								strictVersion: false,
 							},
 						},
 						zod: {
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^4.0.0",
-								eager: false,
+								requiredVersion: false,
+								eager: true,
 								strictVersion: false,
 							},
 						},
 						"@orpc/contract": {
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^1.8.0",
-								eager: false,
+								requiredVersion: false,
+								eager: true,
 								strictVersion: false,
 							},
 						},
 						"@orpc/server": {
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^1.8.0",
-								eager: false,
+								requiredVersion: false,
+								eager: true,
 								strictVersion: false,
 							},
-						},
-						"@module-federation/enhanced": {
-							shareConfig: {
-								singleton: true,
-								requiredVersion: "^0.18.0",
-								eager: false,
-								strictVersion: false,
-							},
-						},
-						"@module-federation/runtime-core": {
-							shareConfig: {
-								singleton: true,
-								requiredVersion: "^0.18.0",
-								eager: false,
-								strictVersion: false,
-							},
-						},
+						}
 					},
 				});
 
