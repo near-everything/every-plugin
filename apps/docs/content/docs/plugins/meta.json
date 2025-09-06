@@ -1,9 +1,10 @@
 {
   "title": "Plugins",
-  "description": "Creating plugins",
+  "description": "Building plugins",
+  "root": true,
   "pages": [
-    "getting-started",
-    "source-plugins",
-    "deployment"
+    "plugin-structure",
+    "orpc-contracts",
+    "testing-deployment"
   ]
 }

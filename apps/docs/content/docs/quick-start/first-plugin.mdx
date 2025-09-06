@@ -1,0 +1,101 @@
+---
+title: First Plugin Usage
+description: Use an existing plugin in 5 minutes
+---
+
+## Complete Example
+
+Here's a working example using a hypothetical social media plugin:
+
+```typescript
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+import { Effect } from "effect";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "social-feed": {
+      remoteUrl: "https://cdn.example.com/plugins/social/remoteEntry.js",
+      type: "source",
+      version: "1.0.0"
+    }
+  },
+  secrets: {
+    SOCIAL_API_KEY: "your-api-key"
+  }
+});
+
+// Single execution
+const posts = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    const plugin = yield* pluginRuntime.usePlugin("social-feed", {
+      secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
+      variables: { timeout: 30000 }
+    });
+    
+    return yield* pluginRuntime.executePlugin(plugin, {
+      procedure: "search",
+      input: { query: "typescript", limit: 10 },
+      state: null
+    });
+  })
+);
+
+console.log(`Found ${posts.items.length} posts`);
+await runtime.dispose();
+```
+
+## Streaming Example
+
+For continuous data processing:
+
+```typescript
+import { Stream } from "effect";
+
+const stream = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    return yield* pluginRuntime.streamPlugin(
+      "social-feed",
+      {
+        secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
+        variables: { timeout: 30000 }
+      },
+      {
+        procedure: "search", 
+        input: { query: "typescript" },
+        state: null
+      },
+      { maxItems: 100 }
+    );
+  })
+);
+
+// Process stream
+const items = await runtime.runPromise(
+  stream.pipe(Stream.take(50), Stream.runCollect)
+);
+
+console.log(`Streamed ${items.length} items`);
+```
+
+## Error Handling
+
+```typescript
+const safeResult = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    return yield* pluginRuntime.usePlugin("social-feed", config);
+  }).pipe(
+    Effect.catchAll((error) => {
+      console.error("Plugin failed:", error);
+      return Effect.succeed(null);
+    })
+  )
+);
+```
+
+The runtime uses [Effect](https://effect.website/) for composable error handling and resource management.

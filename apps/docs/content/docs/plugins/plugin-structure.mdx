@@ -1,0 +1,270 @@
+---
+title: Plugin Structure
+description: Build plugins with SimplePlugin and oRPC contracts
+---
+
+## Minimal Plugin
+
+Extend `SimplePlugin` and implement `createRouter()`:
+
+```typescript
+import { SimplePlugin, createConfigSchema, createStateSchema } from "every-plugin";
+import { oc } from "@orpc/contract";
+import { implement } from "@orpc/server";
+import { z } from "zod";
+
+// Configuration
+const ConfigSchema = createConfigSchema(
+  z.object({ timeout: z.number().default(30000) }), // variables
+  z.object({ apiKey: z.string() })                  // secrets
+);
+
+// State for streaming
+const StateSchema = createStateSchema(
+  z.object({ cursor: z.string().optional() })
+).nullable();
+
+// Contract
+const contract = {
+  process: oc
+    .input(z.object({ items: z.array(z.string()) }))
+    .output(z.object({ processed: z.array(z.string()) }))
+};
+
+export class MyPlugin extends SimplePlugin<typeof contract, typeof ConfigSchema, typeof StateSchema> {
+  readonly id = "my-plugin";
+  readonly type = "transformer";
+  readonly contract = contract;
+  readonly configSchema = ConfigSchema;
+  override readonly stateSchema = StateSchema;
+
+  createRouter() {
+    return implement(this.contract).router({
+      process: implement(this.contract).process.handler(async ({ input }) => {
+        return { processed: input.items.map(item => `processed-${item}`) };
+      })
+    });
+  }
+}
+
+export default MyPlugin;
+```
+
+## Source Plugin
+
+Source plugins use oRPC contracts with multiple procedures:
+
+```typescript
+import { oc } from "@orpc/contract";
+import { implement } from "@orpc/server";
+
+const sourceContract = {
+  getById: oc
+    .input(z.object({ id: z.string() }))
+    .output(z.object({ item: ItemSchema.optional() })),
+
+  search: oc
+    .input(z.object({ query: z.string(), limit: z.number().optional() }))
+    .output(z.object({ 
+      items: z.array(ItemSchema),
+      nextState: StateSchema 
+    }))
+};
+
+export class MySourcePlugin extends SimplePlugin<typeof sourceContract, typeof ConfigSchema, typeof StateSchema> {
+  readonly type = "source";
+  readonly contract = sourceContract;
+
+  createRouter() {
+    const os = implement(this.contract);
+
+    return os.router({
+      getById: os.getById.handler(async ({ input }) => {
+        const item = await this.fetchById(input.id);
+        return { item };
+      }),
+
+      search: os.search.handler(async ({ input, context }) => {
+        const results = await this.search(input.query, context?.state);
+        return {
+          items: results.items,
+          nextState: results.nextCursor ? { cursor: results.nextCursor } : null
+        };
+      })
+    });
+  }
+}
+```
+
+## Plugin Types
+
+### Transformer Plugin
+
+Process data between formats:
+
+```typescript
+export class TransformerPlugin extends SimplePlugin<Contract, ConfigSchema> {
+  readonly type = "transformer";
+
+  createRouter() {
+    return implement(this.contract).router({
+      transform: implement(this.contract).transform.handler(async ({ input }) => {
+        const transformed = input.items.map(this.transformItem);
+        return { items: transformed };
+      })
+    });
+  }
+
+  private transformItem(item: any) {
+    // Transform logic
+    return { ...item, transformed: true };
+  }
+}
+```
+
+### Distributor Plugin
+
+Send data to external systems:
+
+```typescript
+export class DistributorPlugin extends SimplePlugin<Contract, ConfigSchema> {
+  readonly type = "distributor";
+
+  createRouter() {
+    return implement(this.contract).router({
+      send: implement(this.contract).send.handler(async ({ input }) => {
+        const results = await Promise.all(
+          input.items.map(item => this.sendItem(item))
+        );
+        return { sent: results.length, failed: results.filter(r => !r.success).length };
+      })
+    });
+  }
+
+  private async sendItem(item: any) {
+    // Send to external system
+    return { success: true, id: item.id };
+  }
+}
+```
+
+## Configuration Schemas
+
+Use `createConfigSchema` for type-safe configuration:
+
+```typescript
+const ConfigSchema = createConfigSchema(
+  // Variables (non-sensitive)
+  z.object({
+    baseUrl: z.string().url().default("https://api.example.com"),
+    timeout: z.number().min(1000).max(300000).default(30000),
+    batchSize: z.number().min(1).max(1000).default(100)
+  }),
+  // Secrets (sensitive)
+  z.object({
+    apiKey: z.string().min(1),
+    clientSecret: z.string().optional()
+  })
+);
+
+type Config = z.infer<typeof ConfigSchema>;
+```
+
+## State Schemas
+
+Use `createStateSchema` for streaming plugins:
+
+```typescript
+const StateSchema = createStateSchema(
+  z.object({
+    phase: z.enum(["historical", "realtime"]).optional(),
+    cursor: z.string().optional(),
+    lastId: z.string().optional(),
+    jobId: z.string().optional()
+  })
+).nullable();
+
+// State controls streaming timing via nextPollMs
+const output = {
+  items: [...],
+  nextState: {
+    phase: "realtime",
+    cursor: "page_2",
+    nextPollMs: 1000 // Wait 1 second before next call
+  }
+};
+```
+
+## Plugin Initialization
+
+Override `initialize()` for setup logic:
+
+```typescript
+export class MyPlugin extends SimplePlugin<Contract, ConfigSchema> {
+  private client: ApiClient | null = null;
+
+  override initialize(config: Config) {
+    return Effect.gen(function* () {
+      if (!config?.secrets?.apiKey) {
+        return yield* Effect.fail(new ConfigurationError("API key required"));
+      }
+
+      this.client = new ApiClient({
+        apiKey: config.secrets.apiKey,
+        timeout: config.variables?.timeout || 30000
+      });
+
+      // Test connection
+      yield* Effect.tryPromise({
+        try: () => this.client!.ping(),
+        catch: (error) => new ConfigurationError(`Connection failed: ${error}`)
+      });
+    }).pipe(Effect.provide(this));
+  }
+
+  override shutdown() {
+    return Effect.gen(function* () {
+      if (this.client) {
+        yield* Effect.promise(() => this.client!.disconnect());
+        this.client = null;
+      }
+    }).pipe(Effect.provide(this));
+  }
+}
+```
+
+## Module Federation Build
+
+Build plugins for deployment:
+
+```javascript
+// rspack.config.cjs
+const { ModuleFederationPlugin } = require("@module-federation/enhanced/rspack");
+
+module.exports = {
+  mode: "production",
+  entry: "./src/index.ts",
+  plugins: [
+    new ModuleFederationPlugin({
+      name: "my-plugin",
+      filename: "remoteEntry.js",
+      exposes: {
+        "./plugin": "./src/index.ts"
+      },
+      shared: {
+        "every-plugin": { singleton: true },
+        "effect": { singleton: true },
+        "zod": { singleton: true }
+      }
+    })
+  ]
+};
+```
+
+```bash
+# Build plugin
+npm run build
+# Creates dist/remoteEntry.js for deployment
+```
+
+That's the complete plugin structure. See oRPC docs for contract patterns and testing section for validation.

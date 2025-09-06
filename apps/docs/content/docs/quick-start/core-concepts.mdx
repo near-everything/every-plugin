@@ -1,0 +1,107 @@
+---
+title: Core Concepts
+description: Essential concepts for using every-plugin
+---
+
+## Plugin Runtime
+
+The runtime manages plugin loading and execution. Create one instance per application:
+
+```typescript
+const runtime = createPluginRuntime({
+  registry: { /* plugin definitions */ },
+  secrets: { /* secret values */ }
+});
+```
+
+## Plugin Registry
+
+Plugins are defined in a registry with their remote URLs:
+
+```typescript
+const registry = {
+  "my-plugin": {
+    remoteUrl: "https://cdn.example.com/plugins/my-plugin/remoteEntry.js",
+    type: "source", // or "transformer", "distributor"
+    version: "1.0.0"
+  }
+};
+```
+
+Plugins are loaded dynamically using [Module Federation](https://module-federation.io/).
+
+## Secret Hydration
+
+Secrets use template syntax and are replaced at runtime:
+
+```typescript
+const config = {
+  secrets: {
+    apiKey: "{{API_KEY}}", // Replaced with actual secret
+    dbUrl: "{{DATABASE_URL}}"
+  },
+  variables: {
+    timeout: 30000 // Regular values pass through
+  }
+};
+```
+
+## Effect Composition
+
+Use `Effect.gen()` with `yield*` to compose operations:
+
+```typescript
+const workflow = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // Each yield* unwraps an Effect and handles errors
+  const plugin = yield* pluginRuntime.usePlugin("my-plugin", config);
+  const result = yield* pluginRuntime.executePlugin(plugin, input);
+  
+  return result;
+});
+```
+
+## Plugin Types
+
+- **Source**: Fetch data from external APIs with oRPC contracts
+- **Transformer**: Process and transform data between formats  
+- **Distributor**: Send data to external systems
+
+## oRPC Contracts
+
+Source plugins use [oRPC](https://orpc.io/) for type-safe API contracts:
+
+```typescript
+// Plugin defines procedures like:
+{
+  procedure: "search",
+  input: { query: "typescript", limit: 10 },
+  state: null // For streaming/pagination
+}
+```
+
+## State Management
+
+Streaming plugins use state for resumable operations:
+
+```typescript
+// Plugin returns nextState for continuation
+{
+  items: [...],
+  nextState: {
+    cursor: "page_2",
+    nextPollMs: 1000 // Controls streaming timing
+  }
+}
+```
+
+## Resource Cleanup
+
+Always dispose the runtime when shutting down:
+
+```typescript
+process.on("SIGTERM", async () => {
+  await runtime.dispose();
+  process.exit(0);
+});

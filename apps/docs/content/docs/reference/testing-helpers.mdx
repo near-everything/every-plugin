@@ -1,0 +1,375 @@
+---
+title: Testing Helpers
+description: Testing utilities and patterns for plugins
+---
+
+## createTestPluginRuntime
+
+Create a test runtime with mock plugins:
+
+```typescript
+function createTestPluginRuntime(
+  config: PluginRuntimeConfig,
+  pluginMap: TestPluginMap
+): ManagedRuntime
+```
+
+**Usage:**
+
+```typescript
+import { createTestPluginRuntime } from "every-plugin/testing";
+
+const testRuntime = createTestPluginRuntime(
+  {
+    registry: {
+      "test-plugin": {
+        remoteUrl: "mock://test-plugin",
+        type: "transformer",
+        version: "1.0.0"
+      }
+    },
+    secrets: { API_KEY: "test-key" }
+  },
+  {
+    "test-plugin": TestPlugin // Your plugin class
+  }
+);
+```
+
+## TestPluginMap
+
+Map plugin IDs to plugin classes for testing:
+
+```typescript
+interface TestPluginMap {
+  [pluginId: string]: new () => Plugin<any, any, any>;
+}
+```
+
+## Test Logger
+
+Create a test logger for debugging:
+
+```typescript
+function createTestLogger(): PluginLogger
+
+// Usage
+const testLogger = createTestLogger();
+const runtime = createTestPluginRuntime(config, pluginMap, testLogger);
+```
+
+## Testing Patterns
+
+### Basic Plugin Testing
+
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { Effect } from "effect";
+
+describe("MyPlugin", () => {
+  let testRuntime: ReturnType<typeof createTestPluginRuntime>;
+
+  beforeEach(() => {
+    testRuntime = createTestPluginRuntime(
+      {
+        registry: {
+          "my-plugin": {
+            remoteUrl: "mock://my-plugin",
+            type: "transformer",
+            version: "1.0.0"
+          }
+        },
+        secrets: { API_KEY: "test-key" }
+      },
+      {
+        "my-plugin": MyPlugin
+      }
+    );
+  });
+
+  afterEach(async () => {
+    await testRuntime.dispose();
+  });
+
+  it("should process items correctly", async () => {
+    const result = await testRuntime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
+        
+        const plugin = yield* pluginRuntime.usePlugin("my-plugin", {
+          secrets: { apiKey: "{{API_KEY}}" },
+          variables: { timeout: 5000 }
+        });
+        
+        return yield* pluginRuntime.executePlugin(plugin, {
+          items: ["test1", "test2"]
+        });
+      })
+    );
+
+    expect(result.processed).toHaveLength(2);
+  });
+});
+```
+
+### Contract Testing
+
+Test oRPC contracts directly:
+
+```typescript
+import { call } from "@orpc/server";
+
+describe("Plugin Contract", () => {
+  let plugin: MyPlugin;
+
+  beforeEach(async () => {
+    plugin = new MyPlugin();
+    await Effect.runPromise(plugin.initialize({
+      secrets: { apiKey: "test-key" },
+      variables: { timeout: 5000 }
+    }));
+  });
+
+  afterEach(async () => {
+    await Effect.runPromise(plugin.shutdown());
+  });
+
+  it("should handle process procedure", async () => {
+    const router = plugin.createRouter();
+    
+    const result = await call(router.process, {
+      items: ["item1", "item2"]
+    });
+    
+    expect(result.processed).toHaveLength(2);
+  });
+});
+```
+
+### Streaming Tests
+
+Test streaming behavior:
+
+```typescript
+describe("Streaming Plugin", () => {
+  it("should stream items with state", async () => {
+    const results = await testRuntime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
+        
+        const stream = yield* pluginRuntime.streamPlugin(
+          "my-source-plugin",
+          config,
+          {
+            procedure: "search",
+            input: { query: "test" },
+            state: null
+          },
+          { maxInvocations: 3 }
+        );
+        
+        return yield* stream.pipe(Stream.runCollect);
+      })
+    );
+    
+    expect(results.length).toBeGreaterThan(0);
+  });
+});
+```
+
+### Error Testing
+
+Test error scenarios:
+
+```typescript
+describe("Error Handling", () => {
+  it("should handle configuration errors", async () => {
+    const result = await testRuntime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
+        
+        return yield* pluginRuntime.usePlugin("my-plugin", {
+          secrets: {}, // Missing required apiKey
+        });
+      }).pipe(Effect.either)
+    );
+    
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toBeInstanceOf(PluginRuntimeError);
+    }
+  });
+
+  it("should handle execution errors", async () => {
+    const result = await testRuntime.runPromise(
+      Effect.gen(function* () {
+        const pluginRuntime = yield* PluginRuntime;
+        
+        const plugin = yield* pluginRuntime.usePlugin("my-plugin", validConfig);
+        
+        return yield* pluginRuntime.executePlugin(plugin, {
+          items: [] // Invalid empty input
+        });
+      }).pipe(Effect.either)
+    );
+    
+    expect(result._tag).toBe("Left");
+  });
+});
+```
+
+## Mock Utilities
+
+### Mock API Client
+
+```typescript
+class MockApiClient {
+  private responses = new Map<string, any>();
+  
+  mockResponse(endpoint: string, response: any) {
+    this.responses.set(endpoint, response);
+  }
+  
+  async get(endpoint: string) {
+    const response = this.responses.get(endpoint);
+    if (!response) {
+      throw new Error(`No mock response for ${endpoint}`);
+    }
+    return response;
+  }
+  
+  async post(endpoint: string, data: any) {
+    return this.get(endpoint);
+  }
+}
+
+// Usage in tests
+const mockClient = new MockApiClient();
+mockClient.mockResponse("/api/data", { items: ["test1", "test2"] });
+```
+
+### Test Data Factories
+
+```typescript
+const createTestItem = (overrides = {}) => ({
+  externalId: "test-id",
+  content: "test content",
+  contentType: "text",
+  createdAt: new Date().toISOString(),
+  ...overrides
+});
+
+const createTestConfig = (overrides = {}) => ({
+  secrets: { apiKey: "test-key" },
+  variables: { timeout: 5000 },
+  ...overrides
+});
+
+const createTestState = (overrides = {}) => ({
+  cursor: "test-cursor",
+  phase: "historical" as const,
+  ...overrides
+});
+```
+
+## Integration Testing
+
+Test with real plugin URLs:
+
+```typescript
+describe("Integration Tests", () => {
+  it("should work with deployed plugin", async () => {
+    const integrationRuntime = createPluginRuntime({
+      registry: {
+        "real-plugin": {
+          remoteUrl: "https://cdn.example.com/plugins/real-plugin/remoteEntry.js",
+          type: "transformer",
+          version: "1.0.0"
+        }
+      },
+      secrets: {
+        API_KEY: process.env.TEST_API_KEY!
+      }
+    });
+
+    try {
+      const result = await integrationRuntime.runPromise(
+        Effect.gen(function* () {
+          const pluginRuntime = yield* PluginRuntime;
+          
+          const plugin = yield* pluginRuntime.usePlugin("real-plugin", {
+            secrets: { apiKey: "{{API_KEY}}" }
+          });
+          
+          return yield* pluginRuntime.executePlugin(plugin, {
+            items: ["integration-test"]
+          });
+        })
+      );
+
+      expect(result).toBeDefined();
+    } finally {
+      await integrationRuntime.dispose();
+    }
+  });
+});
+```
+
+## Test Utilities
+
+### Effect Test Helpers
+
+```typescript
+const expectEffectSuccess = async <T>(
+  effect: Effect.Effect<T, any>
+): Promise<T> => {
+  const result = await Effect.runPromise(effect.pipe(Effect.either));
+  expect(result._tag).toBe("Right");
+  return (result as any).right;
+};
+
+const expectEffectFailure = async <E>(
+  effect: Effect.Effect<any, E>
+): Promise<E> => {
+  const result = await Effect.runPromise(effect.pipe(Effect.either));
+  expect(result._tag).toBe("Left");
+  return (result as any).left;
+};
+
+// Usage
+const result = await expectEffectSuccess(
+  pluginRuntime.executePlugin(plugin, input)
+);
+
+const error = await expectEffectFailure(
+  pluginRuntime.usePlugin("invalid-plugin", {})
+);
+```
+
+### Async Test Patterns
+
+```typescript
+describe("Async Operations", () => {
+  it("should handle concurrent executions", async () => {
+    const promises = Array.from({ length: 10 }, (_, i) =>
+      testRuntime.runPromise(
+        Effect.gen(function* () {
+          const pluginRuntime = yield* PluginRuntime;
+          const plugin = yield* pluginRuntime.usePlugin("my-plugin", config);
+          return yield* pluginRuntime.executePlugin(plugin, {
+            items: [`test-${i}`]
+          });
+        })
+      )
+    );
+
+    const results = await Promise.all(promises);
+    expect(results).toHaveLength(10);
+    results.forEach((result, i) => {
+      expect(result.processed[0]).toBe(`processed-test-${i}`);
+    });
+  });
+});
+```
+
+These testing utilities provide comprehensive coverage for plugin development and integration testing.

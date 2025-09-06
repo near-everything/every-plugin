@@ -4,34 +4,6 @@ title: Introduction
 
 **every-plugin** is a framework for building composable, type-safe plugin systems. It combines [Effect](https://effect.website/) for async composition, [Module Federation](https://module-federation.io/) for remote loading, and [oRPC](https://orpc.io/) for type-safe contracts.
 
-## Architecture
-
-<Mermaid
-  chart="
-graph TD
-  A[Runtime] --> B[Plugin Registry]
-  A --> C[Secret Management]
-  A --> D[Module Federation]
-
-  D --> E[Remote Plugin]
-  E --> F[oRPC Contract]
-  E --> G[Plugin Instance]
-
-  G --> H[Initialize]
-  H --> I[Execute]
-  I --> J[Stream Results]
-
-  classDef runtime fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff
-  classDef system fill:#7c3aed,stroke:#6d28d9,stroke-width:2px,color:#fff
-  classDef plugin fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
-  classDef process fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
-
-  class A runtime
-  class B,C,D system
-  class E,F,G plugin
-  class H,I,J process"
-/>
-
 ## Quick Example
 
 ```typescript
@@ -65,14 +37,43 @@ const result = await runtime.runPromise(
 );
 ```
 
+
+## Architecture
+
+<Mermaid
+  chart="
+graph TD
+  A[Runtime] --> B[Plugin Registry]
+  A --> C[Secret Management]
+  A --> D[Module Federation]
+
+  D --> E[Remote Plugin]
+  E --> F[oRPC Contract]
+  E --> G[Plugin Instance]
+
+  G --> H[Initialize]
+  H --> I[Execute]
+  I --> J[Stream Results]
+
+  classDef runtime fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff
+  classDef system fill:#7c3aed,stroke:#6d28d9,stroke-width:2px,color:#fff
+  classDef plugin fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
+  classDef process fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+
+  class A runtime
+  class B,C,D system
+  class E,F,G plugin
+  class H,I,J process"
+/>
+
 ## Getting Started
 
 <Cards>
-  <Card title="Core Concepts" href="/docs/core">
-    Understand the plugin system foundations
+  <Card title="Quick Start" href="/docs/quick-start">
+    Get up and running in minutes
   </Card>
   <Card title="Runtime Usage" href="/docs/runtime">
-    Install and use plugins in your application
+    Use plugins in your application
   </Card>
   <Card title="Creating Plugins" href="/docs/plugins">
     Build and deploy your own plugins

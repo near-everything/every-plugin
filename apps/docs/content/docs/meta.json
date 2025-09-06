@@ -1,10 +1,11 @@
 {
-  "title": "Plugins",
-  "description": "Creating plugins",
+  "title": "Documentation",
+  "description": "every-plugin documentation",
   "pages": [
-    "core",
+    "quick-start",
+    "runtime", 
     "plugins",
-    "runtime",
-    "examples"
+    "examples",
+    "reference"
   ]
 }

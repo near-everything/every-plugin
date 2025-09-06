@@ -15,6 +15,7 @@ export interface StreamState<TPluginState> {
 export interface StreamingOptions<TItem = unknown, TPluginState = unknown> {
   maxItems?: number;
   maxInvocations?: number;
+  stopWhenEmpty?: boolean;
   
   // State change hook for persistence and observability
   onStateChange?: (newPluginState: TPluginState, items: TItem[]) => Effect.Effect<void>;

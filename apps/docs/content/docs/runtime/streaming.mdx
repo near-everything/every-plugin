@@ -1,62 +1,44 @@
 ---
 title: Streaming
-description: Continuous data processing with Effect Streams and source plugins
+description: Continuous data processing with source plugins
 ---
-
-## Streaming Concept
-
-Streaming turns source plugins into [Effect Streams](https://effect.website/docs/guides/streaming) for continuous data processing. The `streamPlugin()` method returns a `Stream<Item, PluginRuntimeError>` that you compose with standard Effect Stream operations.
 
 ## Basic Streaming
 
-Create a stream from any source plugin with streamable procedures:
+Turn any source plugin into a continuous stream:
 
 ```typescript
 import { Effect, Stream } from "effect";
-import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
-
-const runtime = createPluginRuntime({
-  registry: {
-    "social-feed": {
-      remoteUrl: "https://cdn.example.com/plugins/social/remoteEntry.js",
-      type: "source",
-      version: "1.0.0",
-    },
-  },
-  secrets: {
-    SOCIAL_API_KEY: "your-api-key",
-  },
-});
 
 const result = await runtime.runPromise(
   Effect.gen(function* () {
     const pluginRuntime = yield* PluginRuntime;
 
-    // Create stream from source plugin
+    // Create stream directly - no initialization needed
     const stream = yield* pluginRuntime.streamPlugin(
       "social-feed",
       {
-        secrets: {
-          apiKey: "{{SOCIAL_API_KEY}}",
-        },
-        variables: {
-          timeout: 30000,
-        },
+        secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
+        variables: { timeout: 30000 }
       },
       {
         procedure: "search",
         input: { query: "typescript", limit: 20 },
-        state: null,
+        state: null
       },
       {
         maxItems: 1000,
         maxInvocations: 10,
-        stopWhenEmpty: true,
+        stopWhenEmpty: true
       }
     );
 
-    // Collect all items from stream
-    const items = yield* stream.pipe(Stream.runCollect);
+    // Process with Effect Stream operations
+    const items = yield* stream.pipe(
+      Stream.take(100),
+      Stream.runCollect
+    );
+    
     return Array.from(items);
   })
 );
@@ -64,24 +46,22 @@ const result = await runtime.runPromise(
 
 ## Stream Options
 
-Control streaming behavior with enhanced options:
+Control streaming behavior:
 
 ```typescript
-interface StreamingOptions<TItem = unknown, TPluginState = unknown> {
-  maxItems?: number;        // Stop after N total items across all iterations
-  maxInvocations?: number;  // Stop after N plugin executions
-  
-  // Enhanced: State change hook for persistence and observability
-  onStateChange?: (newState: TPluginState, items: TItem[]) => Effect.Effect<void>;
+interface StreamingOptions {
+  maxItems?: number;        // Stop after N total items
+  maxInvocations?: number;  // Stop after N plugin calls
+  stopWhenEmpty?: boolean;  // Stop when plugin returns no items
+  onStateChange?: (newState, items) => Effect.Effect<void>; // State persistence
 }
 ```
 
-### State Persistence and Recovery
+## State Persistence
 
-The new `onStateChange` hook enables automatic state persistence and recovery:
+Save and resume stream state:
 
 ```typescript
-// Simple state persistence helpers
 const saveState = (state: any) =>
   Effect.sync(() => {
     if (state) {
@@ -92,13 +72,9 @@ const saveState = (state: any) =>
 const loadState = () =>
   Effect.tryPromise(async () => {
     const file = Bun.file('./stream-state.json');
-    const exists = await file.exists();
-    return exists ? await file.json() : null;
-  }).pipe(
-    Effect.catchAll(() => Effect.succeed(null))
-  );
+    return (await file.exists()) ? await file.json() : null;
+  }).pipe(Effect.catchAll(() => Effect.succeed(null)));
 
-// Enhanced streaming with state persistence
 const stream = yield* pluginRuntime.streamPlugin(
   "social-feed",
   config,
@@ -109,246 +85,62 @@ const stream = yield* pluginRuntime.streamPlugin(
   },
   {
     maxItems: 1000,
-    // Automatic state persistence on every state change
     onStateChange: (newState, items) => 
       Effect.gen(function* () {
-        const phase = newState?.phase || 'unknown';
-        console.log(`📊 State transition: ${phase} phase (${items.length} items)`);
+        console.log(`State: ${newState?.phase} (${items.length} items)`);
         yield* saveState(newState);
       })
   }
 );
 ```
 
-## Stream Composition with Processing
+## Stream Processing
 
-Process each item through another plugin using `Stream.mapEffect()`:
-
-```typescript
-const processedResults = await runtime.runPromise(
-  Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
-
-    // Initialize the processor plugin
-    const processorPlugin = yield* pluginRuntime.usePlugin("content-processor", {
-      secrets: {
-        apiKey: "{{SECRET}}",
-      },
-    });
-
-    // Get the source stream
-    const stream = yield* pluginRuntime.streamPlugin(
-      "social-feed",
-      {
-        secrets: {
-          apiKey: "{{SOCIAL_API_KEY}}",
-        },
-      },
-      {
-        procedure: "search",
-        input: { query: "typescript" },
-        state: null,
-      }
-    );
-
-    // Process each item through the processor plugin
-    const processedResults = yield* stream.pipe(
-      Stream.mapEffect((item) =>
-        pluginRuntime.executePlugin(processorPlugin, {
-          items: [item], // Transform single item
-        }).pipe(
-          Effect.catchAll((error) => {
-            console.error("Processing failed for item:", item.id, error);
-            return Effect.succeed({ items: [] }); // Skip failed items
-          })
-        )
-      ),
-      Stream.flatMap((result) => Stream.fromIterable(result.items)),
-      Stream.runCollect
-    );
-
-    return Array.from(processedResults);
-  }).pipe(
-    Effect.catchAll((error) => {
-      console.error("Stream processing failed:", error);
-      return Effect.succeed([]); // Return empty array on failure
-    })
-  )
-);
-```
-
-## State Management
-
-Source plugins manage their own state for resumable operations. State flows through the procedure input:
+Process each item through another plugin:
 
 ```typescript
-// Initial execution with no state
-const initialInput = {
-  procedure: "search",
-  input: { query: "typescript" },
-  state: null,
-};
+const processedResults = yield* Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
 
-// Plugin returns nextState for continuation
-const pluginOutput = {
-  items: [...],
-  nextState: {
-    cursor: "page_2",
-    lastProcessedId: "item_123",
-  },
-};
+  // Get processor plugin
+  const processor = yield* pluginRuntime.usePlugin("content-processor", {
+    secrets: { apiKey: "{{API_KEY}}" }
+  });
 
-// Subsequent execution with state
-const nextInput = {
-  procedure: "search", 
-  input: { query: "typescript" },
-  state: {
-    cursor: "page_2",
-    lastProcessedId: "item_123",
-  },
-};
-```
+  // Get source stream
+  const stream = yield* pluginRuntime.streamPlugin("social-feed", config, input);
 
-### Enhanced State Transitions
-
-Plugins can now use functional state transition utilities for cleaner state management:
-
-```typescript
-import { StateTransitions, pipe } from "every-plugin";
-
-// In your plugin handler
-const search = os.use(stateMiddleware).search.handler(async ({ input, context }) => {
-  const state = context.state;
-
-  if (!state) {
-    // Submit new job
-    const jobId = await submitJob(input.query);
-    
-    return {
-      items: [],
-      nextState: pipe(
-        {},
-        StateTransitions.to("submitted"),
-        StateTransitions.withPolling(1000),
-        StateTransitions.update({ jobId })
+  // Process each item
+  return yield* stream.pipe(
+    Stream.mapEffect((item) =>
+      pluginRuntime.executePlugin(processor, { items: [item] }).pipe(
+        Effect.catchAll((error) => {
+          console.error("Processing failed:", error);
+          return Effect.succeed({ items: [] });
+        })
       )
-    };
-  }
-
-  if (state.jobId) {
-    const status = await checkJobStatus(state.jobId);
-    
-    if (status === 'done') {
-      const results = await getJobResults(state.jobId);
-      
-      return {
-        items: results,
-        nextState: pipe(
-          state,
-          StateTransitions.to("done"),
-          StateTransitions.withPolling(5000)
-        )
-      };
-    } else if (status === 'error') {
-      return {
-        items: [],
-        nextState: pipe(state, StateTransitions.withError("Job failed"))
-      };
-    } else {
-      return {
-        items: [],
-        nextState: pipe(
-          state,
-          StateTransitions.to("processing"),
-          StateTransitions.withPolling(2000)
-        )
-      };
-    }
-  }
+    ),
+    Stream.flatMap((result) => Stream.fromIterable(result.items)),
+    Stream.runCollect
+  );
 });
 ```
 
-Available state transition utilities:
-- `StateTransitions.to(phase, updates?)` - Transition to a new phase
-- `StateTransitions.withPolling(delayMs)` - Add polling delay
-- `StateTransitions.withError(message)` - Set error state
-- `StateTransitions.update(updates)` - Update state properties
-- `pipe(value, ...functions)` - Compose state transformations
+## Multiple Source Streams
 
-## Stream Processing Patterns
-
-### Filter and Transform
-
-```typescript
-const filteredStream = yield* stream.pipe(
-  Stream.filter((item) => item.score > 0.8),
-  Stream.map((item) => ({
-    ...item,
-    processed: true,
-    timestamp: Date.now(),
-  })),
-  Stream.take(100),
-  Stream.runCollect
-);
-```
-
-### Batch Processing
-
-```typescript
-const batchedResults = yield* stream.pipe(
-  Stream.grouped(10), // Process in batches of 10
-  Stream.mapEffect((batch) =>
-    pluginRuntime.executePlugin(batchProcessor, {
-      items: Array.from(batch),
-    })
-  ),
-  Stream.runCollect
-);
-```
-
-### Error Recovery
-
-```typescript
-const resilientStream = yield* stream.pipe(
-  Stream.mapEffect((item) =>
-    processItem(item).pipe(
-      Effect.retry({ times: 3 }),
-      Effect.catchAll((error) => {
-        console.warn("Failed to process item after retries:", error);
-        return Effect.succeed(null); // Skip failed items
-      })
-    )
-  ),
-  Stream.filter((item) => item !== null),
-  Stream.runCollect
-);
-```
-
-## Streaming with Multiple Sources
-
-Combine streams from multiple source plugins:
+Combine streams from different plugins:
 
 ```typescript
 const combinedResults = yield* Effect.gen(function* () {
   const pluginRuntime = yield* PluginRuntime;
 
   // Create multiple streams
-  const socialStream = yield* pluginRuntime.streamPlugin(
-    "social-feed",
-    socialConfig,
-    { procedure: "search", input: { query: "typescript" }, state: null }
-  );
+  const socialStream = yield* pluginRuntime.streamPlugin("social-feed", socialConfig, socialInput);
+  const newsStream = yield* pluginRuntime.streamPlugin("news-api", newsConfig, newsInput);
 
-  const newsStream = yield* pluginRuntime.streamPlugin(
-    "news-api",
-    newsConfig,
-    { procedure: "search", input: { query: "typescript" }, state: null }
-  );
-
-  // Merge streams
+  // Merge and process
   const mergedStream = Stream.merge(socialStream, newsStream);
 
-  // Process combined stream
   return yield* mergedStream.pipe(
     Stream.take(200),
     Stream.runCollect
@@ -356,35 +148,64 @@ const combinedResults = yield* Effect.gen(function* () {
 });
 ```
 
-## Real-time Processing
+## State Management
 
-Set up continuous processing with periodic execution:
+Plugins control streaming through state:
 
 ```typescript
+// Plugin returns state to control streaming
+{
+  items: [...],
+  nextState: {
+    phase: "realtime",
+    cursor: "page_2", 
+    nextPollMs: 1000 // Wait 1 second before next call
+  }
+}
+
+// nextPollMs controls timing:
+// - null: Stop streaming
+// - undefined/0: No delay
+// - number: Delay in milliseconds
+```
+
+## Batch Processing
+
+Process items in batches for efficiency:
+
+```typescript
+const batchedResults = yield* stream.pipe(
+  Stream.grouped(10), // Process in batches of 10
+  Stream.mapEffect((batch) =>
+    pluginRuntime.executePlugin(batchProcessor, {
+      items: Array.from(batch)
+    })
+  ),
+  Stream.flatMap((result) => Stream.fromIterable(result.items)),
+  Stream.runCollect
+);
+```
+
+## Real-time Processing
+
+Continuous processing with periodic execution:
+
+```typescript
+import { Schedule } from "effect";
+
 const continuousProcessing = Effect.gen(function* () {
   const pluginRuntime = yield* PluginRuntime;
 
-  // Process every 30 seconds
   yield* Effect.repeat(
     Effect.gen(function* () {
       const stream = yield* pluginRuntime.streamPlugin(
-        "news-feed",
-        config,
-        {
-          procedure: "search",
-          input: { query: "breaking news" },
-          state: null,
-        },
-        {
-          maxItems: 50,
-          stopWhenEmpty: true,
-        }
+        "news-feed", config, input, { maxItems: 50, stopWhenEmpty: true }
       );
 
       const newItems = yield* stream.pipe(Stream.runCollect);
       
       if (newItems.length > 0) {
-        yield* Effect.log(`Processed ${newItems.length} new items`);
+        console.log(`Processed ${newItems.length} new items`);
         // Store or process items...
       }
     }),
@@ -393,38 +214,4 @@ const continuousProcessing = Effect.gen(function* () {
 });
 ```
 
-## Performance Considerations
-
-Optimize streaming performance:
-
-```typescript
-// Use takeWhile for early termination
-const optimizedStream = yield* stream.pipe(
-  Stream.takeWhile((item) => item.relevanceScore > 0.5),
-  Stream.buffer(100), // Buffer items for batch processing
-  Stream.runCollect
-);
-
-// Parallel processing with controlled concurrency
-const parallelProcessing = yield* stream.pipe(
-  Stream.mapEffect(
-    (item) => processItem(item),
-    { concurrency: 5 } // Process up to 5 items concurrently
-  ),
-  Stream.runCollect
-);
-```
-
-## Next Steps
-
-<Cards>
-  <Card title="Multi-Source Pipeline" href="/docs/examples/multi-source-pipeline">
-    Combine multiple data sources
-  </Card>
-  <Card title="API Reference" href="/docs/runtime/api-reference">
-    Complete runtime method reference
-  </Card>
-  <Card title="Source Plugins" href="/docs/plugins/source-plugins">
-    Create streamable data sources
-  </Card>
-</Cards>
+Streaming automatically handles plugin state, pagination, and timing control.

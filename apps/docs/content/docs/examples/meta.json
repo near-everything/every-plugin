@@ -2,8 +2,8 @@
   "title": "Examples",
   "description": "Real-world plugin examples and patterns",
   "pages": [
-    "data-aggregation",
+    "simple-pipeline",
     "real-time-processing",
-    "multi-source-pipeline"
+    "multi-plugin-flows"
   ]
 }

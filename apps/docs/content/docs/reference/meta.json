@@ -1,0 +1,10 @@
+{
+  "title": "Reference",
+  "description": "API reference and technical specifications",
+  "root": true,
+  "pages": [
+    "api-reference",
+    "type-system",
+    "testing-helpers"
+  ]
+}

@@ -123,6 +123,12 @@ export const createSourceStream = <
             break;
           }
 
+          // Check stopWhenEmpty condition
+          if (options.stopWhenEmpty && items.length === 0) {
+            console.log(`[STREAMING] Stopping due to empty result and stopWhenEmpty=true`);
+            break;
+          }
+
           // Handle delay AFTER emission, BEFORE next iteration
           const nextDelay = extractDelayFromState(nextPluginState);
           if (nextDelay && Duration.toMillis(nextDelay) > 0) {

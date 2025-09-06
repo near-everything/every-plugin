@@ -1,5 +1,5 @@
-import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
-import { BookIcon, CodeIcon, GithubIcon, RocketIcon } from 'lucide-react';
+import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
+import { BookIcon, CodeIcon, GithubIcon, RocketIcon } from "lucide-react";
 
 export function baseOptions(): BaseLayoutProps {
   return {
@@ -14,36 +14,36 @@ export function baseOptions(): BaseLayoutProps {
           </span>
         </div>
       ),
-      transparentMode: 'always',
+      transparentMode: "always",
     },
     links: [
       {
-        text: 'Documentation',
-        url: '/docs',
+        text: "Documentation",
+        url: "/docs",
         icon: <BookIcon className="w-4 h-4" />,
-        active: 'nested-url',
+        active: "nested-url",
       },
       {
-        text: 'Examples',
-        url: '/docs/examples',
-        icon: <CodeIcon className="w-4 h-4" />,
-        active: 'nested-url',
-      },
-      {
-        text: 'Runtime',
-        url: '/docs/runtime',
+        text: "Runtime",
+        url: "/docs/runtime",
         icon: <RocketIcon className="w-4 h-4" />,
-        active: 'nested-url',
+        active: "nested-url",
       },
       {
-        type: 'icon',
-        text: 'Github',
-        label: 'GitHub Repository',
+        text: "Examples",
+        url: "/docs/examples",
+        icon: <CodeIcon className="w-4 h-4" />,
+        active: "nested-url",
+      },
+      {
+        type: "icon",
+        text: "Github",
+        label: "GitHub Repository",
         icon: <GithubIcon className="w-5 h-5" />,
-        url: 'https://github.com/near-everything/run',
+        url: "https://github.com/near-everything/run",
         secondary: true,
       },
     ],
-    githubUrl: 'https://github.com/near-everything/run',
+    githubUrl: "https://github.com/near-everything/run",
   };
 }

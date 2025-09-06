@@ -10,7 +10,7 @@ function Home() {
   return (
     <HomeLayout {...baseOptions()}>
       {/* Hero Section with Gradient Background */}
-      <div className="relative min-h-screen flex flex-col items-start justify-center overflow-hidden bg-black">
+      <div className="relative min-h-screen flex flex-col items-start justify-center overflow-hidden bg-black  -mt-14 pt-14">
         {/* Animated Gradient Background */}
         <div className="absolute inset-0 opacity-60">
           <div 

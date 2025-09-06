@@ -86,8 +86,14 @@ export type SourceContract = typeof sourceContract;
 export type SourceItem = z.infer<typeof sourceItemSchema>;
 
 // Add missing helper functions
-function generateHistoricalItems(query: string) {
-	return Array.from({ length: 3 }, (_, i) => ({
+function generateHistoricalItems(query: string, limit?: number) {
+	// Handle special test cases
+	if (query === "empty-results" || limit === 0) {
+		return [];
+	}
+	
+	const count = limit !== undefined ? Math.min(limit, 3) : 3;
+	return Array.from({ length: count }, (_, i) => ({
 		externalId: `hist_${query}_${i}`,
 		content: `Historical ${query} item ${i}`,
 		contentType: "post",
@@ -98,9 +104,20 @@ function generateHistoricalItems(query: string) {
 	}));
 }
 
-function generateRealtimeItems(query: string, lastId: string) {
+function generateRealtimeItems(query: string, lastId: string, limit?: number) {
+	// Handle special test cases
+	if (query === "empty-results" || limit === 0) {
+		return [];
+	}
+	
+	// For mixed-results, sometimes return empty to test stopWhenEmpty=false
+	if (query === "mixed-results" && Math.random() < 0.5) {
+		return [];
+	}
+	
 	// Return 0-2 random items to simulate real-time activity
-	const count = Math.floor(Math.random() * 3);
+	const maxCount = limit !== undefined ? Math.min(limit, 2) : 2;
+	const count = Math.floor(Math.random() * (maxCount + 1));
 	return Array.from({ length: count }, (_, i) => ({
 		externalId: `rt_${query}_${Date.now()}_${i}`,
 		content: `Real-time ${query} item ${i}`,
@@ -210,8 +227,8 @@ export class SourceTemplatePlugin extends SimplePlugin<
 
 			// Phase 1: Initial call - return immediate results and set up for streaming
 			if (!state) {
-				console.log(`[TEST-PLUGIN] Initial call for query: ${input.query}`);
-				const initialItems = generateHistoricalItems(input.query);
+				console.log(`[TEST-PLUGIN] Initial call for query: ${input.query}, limit: ${input.limit}`);
+				const initialItems = generateHistoricalItems(input.query, input.limit);
 				return {
 					items: initialItems, // Return items immediately for single-call compatibility
 					nextState: {
@@ -226,7 +243,7 @@ export class SourceTemplatePlugin extends SimplePlugin<
 			// Phase 2: Historical data collection (simulate catching up)
 			if (state.phase === "historical") {
 				console.log(`[TEST-PLUGIN] Historical phase`);
-				const historicalItems = generateHistoricalItems(input.query);
+				const historicalItems = generateHistoricalItems(input.query, input.limit);
 				return {
 					items: historicalItems,
 					nextState: {
@@ -241,7 +258,7 @@ export class SourceTemplatePlugin extends SimplePlugin<
 			// Phase 3: Real-time polling (simulate ongoing data) - runs forever
 			if (state.phase === "realtime") {
 				console.log(`[TEST-PLUGIN] Realtime phase`);
-				const newItems = generateRealtimeItems(input.query, state.lastId || "");
+				const newItems = generateRealtimeItems(input.query, state.lastId || "", input.limit);
 
 				// Continue indefinitely - let maxInvocations stop the stream
 				return {

@@ -3,19 +3,6 @@ title: Error Handling
 description: Handle runtime errors gracefully with Effect patterns
 ---
 
-## Error Types
-
-The runtime uses typed errors for better error handling and debugging:
-
-```typescript
-interface PluginRuntimeError {
-  pluginId: string;
-  operation: string;
-  cause: unknown;
-  retryable: boolean;
-}
-```
-
 ## Basic Error Handling
 
 Use `Effect.catchAll()` for general error handling:
@@ -33,9 +20,9 @@ const safeExecution = Effect.gen(function* () {
 );
 ```
 
-## Specific Error Handling
+## Specific Error Types
 
-Use `Effect.catchTag()` to handle specific error types:
+Handle different error types with `Effect.catchTag()`:
 
 ```typescript
 const specificErrorHandling = Effect.gen(function* () {
@@ -52,7 +39,7 @@ const specificErrorHandling = Effect.gen(function* () {
       console.log("Could retry this operation");
     }
     
-    return Effect.succeed({ items: [] }); // Empty result
+    return Effect.succeed({ items: [] });
   })
 );
 ```
@@ -62,6 +49,8 @@ const specificErrorHandling = Effect.gen(function* () {
 Implement retry logic for transient failures:
 
 ```typescript
+import { Schedule, Duration } from "effect";
+
 const withRetry = Effect.gen(function* () {
   const pluginRuntime = yield* PluginRuntime;
   
@@ -69,7 +58,7 @@ const withRetry = Effect.gen(function* () {
 }).pipe(
   Effect.retry({
     times: 3,
-    schedule: Schedule.exponential("100 millis")
+    schedule: Schedule.exponential(Duration.millis(100))
   }),
   Effect.catchAll((error) => {
     console.error("Failed after retries:", error);
@@ -86,11 +75,7 @@ Handle errors in streaming operations:
 const resilientStream = Effect.gen(function* () {
   const pluginRuntime = yield* PluginRuntime;
 
-  const stream = yield* pluginRuntime.streamPlugin(
-    "data-source",
-    config,
-    input
-  );
+  const stream = yield* pluginRuntime.streamPlugin("data-source", config, input);
 
   return yield* stream.pipe(
     Stream.mapEffect((item) =>
@@ -129,38 +114,14 @@ const handleConfigErrors = Effect.gen(function* () {
 }).pipe(
   Effect.catchTag("ConfigurationError", (error) => {
     console.error("Configuration failed:", error.message);
-    // Could prompt for correct configuration
     return Effect.fail(new Error("Invalid configuration"));
   })
 );
 ```
 
-## Validation Errors
+## Fallback Patterns
 
-Handle input/output validation errors:
-
-```typescript
-const handleValidationErrors = Effect.gen(function* () {
-  const pluginRuntime = yield* PluginRuntime;
-  
-  return yield* pluginRuntime.executePlugin(plugin, {
-    // Invalid input that doesn't match schema
-    invalidField: "value"
-  });
-}).pipe(
-  Effect.catchAll((error) => {
-    if (error.message.includes("validation")) {
-      console.error("Input validation failed:", error);
-      return Effect.succeed({ items: [] });
-    }
-    throw error; // Re-throw non-validation errors
-  })
-);
-```
-
-## Error Recovery Patterns
-
-### Circuit Breaker Pattern
+### Circuit Breaker
 
 ```typescript
 let failureCount = 0;
@@ -172,7 +133,6 @@ const circuitBreaker = Effect.gen(function* () {
   }
   
   const pluginRuntime = yield* PluginRuntime;
-  
   return yield* pluginRuntime.executePlugin(plugin, input);
 }).pipe(
   Effect.catchAll((error) => {
@@ -212,34 +172,6 @@ const fallbackChain = Effect.gen(function* () {
 );
 ```
 
-## Logging and Monitoring
-
-Integrate with logging systems:
-
-```typescript
-const withLogging = Effect.gen(function* () {
-  const pluginRuntime = yield* PluginRuntime;
-  const logger = yield* PluginLoggerTag;
-  
-  yield* logger.logInfo("Starting plugin execution", { pluginId: "my-plugin" });
-  
-  return yield* pluginRuntime.executePlugin(plugin, input);
-}).pipe(
-  Effect.catchAll((error) => {
-    return Effect.gen(function* () {
-      const logger = yield* PluginLoggerTag;
-      
-      yield* logger.logError("Plugin execution failed", error, {
-        pluginId: "my-plugin",
-        input
-      });
-      
-      return { items: [] };
-    });
-  })
-);
-```
-
 ## Production Error Handling
 
 Complete error handling for production systems:
@@ -247,14 +179,13 @@ Complete error handling for production systems:
 ```typescript
 const productionExecution = Effect.gen(function* () {
   const pluginRuntime = yield* PluginRuntime;
-  const logger = yield* PluginLoggerTag;
   
-  yield* logger.logInfo("Processing job", { jobId: input.jobId });
+  console.log("Processing job", { jobId: input.jobId });
   
   const plugin = yield* pluginRuntime.usePlugin("data-processor", config);
   const result = yield* pluginRuntime.executePlugin(plugin, input);
   
-  yield* logger.logInfo("Job completed successfully", { 
+  console.log("Job completed successfully", { 
     jobId: input.jobId,
     itemCount: result.items.length 
   });
@@ -263,20 +194,17 @@ const productionExecution = Effect.gen(function* () {
 }).pipe(
   Effect.retry({
     times: 3,
-    schedule: Schedule.exponential("1 second")
+    schedule: Schedule.exponential(Duration.seconds(1))
   }),
   Effect.catchTag("PluginRuntimeError", (error) =>
     Effect.gen(function* () {
-      const logger = yield* PluginLoggerTag;
-      
-      yield* logger.logError("Plugin runtime error", error, {
+      console.error("Plugin runtime error", error, {
         jobId: input.jobId,
         retryable: error.retryable
       });
       
       if (error.retryable) {
-        // Could add to retry queue
-        yield* logger.logInfo("Adding job to retry queue", { jobId: input.jobId });
+        console.log("Adding job to retry queue", { jobId: input.jobId });
       }
       
       return { items: [], error: error.message };
@@ -284,26 +212,11 @@ const productionExecution = Effect.gen(function* () {
   ),
   Effect.catchAll((error) =>
     Effect.gen(function* () {
-      const logger = yield* PluginLoggerTag;
-      
-      yield* logger.logError("Unexpected error", error, { jobId: input.jobId });
-      
+      console.error("Unexpected error", error, { jobId: input.jobId });
       return { items: [], error: "Internal error" };
     })
   )
 );
 ```
 
-## Next Steps
-
-<Cards>
-  <Card title="Basic Usage" href="/docs/runtime/basic-usage">
-    Learn Effect patterns and composition
-  </Card>
-  <Card title="Streaming" href="/docs/runtime/streaming">
-    Handle errors in streaming operations
-  </Card>
-  <Card title="Examples" href="/docs/examples">
-    See error handling in real-world examples
-  </Card>
-</Cards>
+Effect provides composable error handling with automatic resource cleanup and retry logic.

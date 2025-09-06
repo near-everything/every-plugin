@@ -1,0 +1,56 @@
+---
+title: Installation
+description: Install every-plugin and get running in minutes
+---
+
+## Install
+
+```bash
+bun add every-plugin
+```
+
+## Basic Setup
+
+Create a runtime with your plugin registry:
+
+```typescript
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+import { Effect } from "effect";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "data-processor": {
+      remoteUrl: "https://cdn.example.com/plugins/processor/remoteEntry.js",
+      type: "transformer",
+      version: "1.0.0"
+    }
+  },
+  secrets: {
+    API_KEY: "your-secret-key"
+  }
+});
+```
+
+## Execute Your First Plugin
+
+```typescript
+const result = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    const plugin = yield* pluginRuntime.usePlugin("data-processor", {
+      secrets: { apiKey: "{{API_KEY}}" },
+      variables: { timeout: 30000 }
+    });
+    
+    return yield* pluginRuntime.executePlugin(plugin, {
+      items: ["data1", "data2", "data3"]
+    });
+  })
+);
+
+console.log(result);
+await runtime.dispose();
+```
+
+That's it. The runtime handles plugin loading, initialization, and execution automatically.
