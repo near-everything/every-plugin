@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { HomeLayout } from 'fumadocs-ui/layouts/home';
 import { baseOptions } from '@/lib/layout.shared';
+import { motion } from 'framer-motion';
 
 export const Route = createFileRoute('/')({
   component: Home,
+  ssr: false
 });
 
 function Home() {
@@ -12,39 +14,68 @@ function Home() {
       {/* Hero Section with Gradient Background */}
       <div className="relative min-h-screen flex flex-col items-start justify-center overflow-hidden bg-black  -mt-14 pt-14">
         {/* Animated Gradient Background */}
-        <div className="absolute inset-0 opacity-60">
-          <div 
+        <motion.div 
+          className="absolute inset-0 opacity-60"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.6 }}
+          transition={{ duration: 1, ease: "easeOut" }}
+        >
+          <motion.div 
             className="absolute inset-0 bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600"
             style={{ filter: 'blur(120px)' }}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 2, ease: "easeOut" }}
           />
-          <div 
+          <motion.div 
             className="absolute top-1/4 left-1/3 w-96 h-96 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full opacity-40"
             style={{ filter: 'blur(80px)' }}
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 0.4 }}
+            transition={{ duration: 2, delay: 0.25, ease: "easeOut" }}
           />
-          <div 
+          <motion.div 
             className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full opacity-30"
             style={{ filter: 'blur(100px)' }}
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 0.3 }}
+            transition={{ duration: 2, delay: .75, ease: "easeOut" }}
           />
-        </div>
+        </motion.div>
 
         {/* Content */}
         <div className="relative z-10 max-w-7xl mx-auto px-8 py-20">
           <div className="max-w-4xl">
             {/* Main Heading - Large, Off-centered, Left-aligned */}
-            <h1 className="text-8xl md:text-9xl lg:text-[12rem] font-bold text-white mb-8 leading-[0.85] tracking-tight gt-standard">
+            <motion.h1 
+              className="text-8xl md:text-9xl lg:text-[12rem] font-bold text-white mb-8 leading-[0.85] tracking-tight gt-standard"
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
+            >
               every<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400">
                 plugin
               </span>
-            </h1>
+            </motion.h1>
             
             {/* Subtitle */}
-            <p className="text-2xl md:text-3xl text-gray-300 mb-12 max-w-2xl leading-relaxed gt-standard">
+            <motion.p 
+              className="text-2xl md:text-3xl text-gray-300 mb-12 max-w-2xl leading-relaxed gt-standard"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1, delay: 1, ease: "easeOut" }}
+            >
               a composable plugin runtime
-            </p>
+            </motion.p>
 
             {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 mb-16">
+            <motion.div 
+              className="flex flex-col sm:flex-row gap-4 mb-16"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1, delay: 1.5, ease: "easeOut" }}
+            >
               <Link
                 to="/docs/$"
                 params={{ _splat: '' }}
@@ -59,7 +90,7 @@ function Home() {
               >
                 View Examples
               </Link>
-            </div>
+            </motion.div>
           </div>
         </div>
       </div>
