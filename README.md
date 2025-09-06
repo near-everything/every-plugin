@@ -18,104 +18,199 @@ A modular plugin runtime & system built with [Effect.TS](https://effect.website/
 ## Installation
 
 ```bash
-npm install every-plugin
-# or
 bun add every-plugin
 ```
 
 ## Quick Start
 
-### Basic Plugin Usage
+Create a runtime and execute your first plugin:
 
 ```typescript
-import { Effect } from "effect";
 import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+import { Effect } from "effect";
 
-// Create a managed runtime (do this once per application/worker)
 const runtime = createPluginRuntime({
   registry: {
-    "@my-org/data-processor": {
-      version: "1.0.0",
-      remoteUrl: "https://cdn.example.com/plugins/data-processor@latest/remoteEntry.js",
-      description: "Processes data items",
-      type: "pipeline"
+    "data-processor": {
+      remoteUrl: "https://cdn.example.com/plugins/processor/remoteEntry.js",
+      type: "transformer",
+      version: "1.0.0"
     }
   },
   secrets: {
-    API_KEY: "your-secret-key",
-    DATABASE_URL: "postgresql://..."
-  },
-  logger: customLogger // optional
+    API_KEY: "your-secret-key"
+  }
 });
 
-// Use the runtime to execute plugins
 const result = await runtime.runPromise(
   Effect.gen(function* () {
     const pluginRuntime = yield* PluginRuntime;
     
-    // Load, instantiate and initialize a plugin
-    const plugin = yield* pluginRuntime.usePlugin("@my-org/data-processor", {
-      apiKey: "{{API_KEY}}", // Will be hydrated from secrets
-      batchSize: 100
+    const plugin = yield* pluginRuntime.usePlugin("data-processor", {
+      secrets: { apiKey: "{{API_KEY}}" },
+      variables: { timeout: 30000 }
     });
     
-    const output = yield* pluginRuntime.executePlugin(plugin, {
-      items: ["item1", "item2", "item3"]
+    return yield* pluginRuntime.executePlugin(plugin, {
+      items: ["data1", "data2", "data3"]
     });
-    
-    return output;
   })
 );
 
 console.log(result);
-
-// Clean up when done
 await runtime.dispose();
 ```
 
-### Alternative: Direct Layer Construction
+## Core Concepts
 
-If you prefer more explicit control over the runtime construction:
+### Plugin Runtime
+
+The runtime manages plugin loading and execution. Create one instance per application:
 
 ```typescript
-import { Effect, ManagedRuntime } from "effect";
-import { PluginRuntime } from "every-plugin/runtime";
+const runtime = createPluginRuntime({
+  registry: { /* plugin definitions */ },
+  secrets: { /* secret values */ }
+});
+```
 
-// This is equivalent to createPluginRuntime(config)
-const runtime = ManagedRuntime.make(PluginRuntime.Live({
-  registry: { /* ... */ },
-  secrets: { /* ... */ }
-}));
+### Plugin Registry
 
-const result = await runtime.runPromise(
+Plugins are defined in a registry with their remote URLs:
+
+```typescript
+const registry = {
+  "my-plugin": {
+    remoteUrl: "https://cdn.example.com/plugins/my-plugin/remoteEntry.js",
+    type: "source", // or "transformer", "distributor"
+    version: "1.0.0"
+  }
+};
+```
+
+Plugins are loaded dynamically using [Module Federation](https://module-federation.io/).
+
+### Secret Hydration
+
+Secrets use template syntax and are replaced at runtime:
+
+```typescript
+const config = {
+  secrets: {
+    apiKey: "{{API_KEY}}", // Replaced with actual secret
+    dbUrl: "{{DATABASE_URL}}"
+  },
+  variables: {
+    timeout: 30000 // Regular values pass through
+  }
+};
+```
+
+### Plugin Types
+
+- **Source**: Fetch data from external APIs with oRPC contracts
+- **Transformer**: Process and transform data between formats  
+- **Distributor**: Send data to external systems
+
+## Usage Examples
+
+### Single Execution
+
+Execute a plugin once with oRPC contract format:
+
+```typescript
+import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+import { Effect } from "effect";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "social-feed": {
+      remoteUrl: "https://cdn.example.com/plugins/social/remoteEntry.js",
+      type: "source",
+      version: "1.0.0"
+    }
+  },
+  secrets: {
+    SOCIAL_API_KEY: "your-api-key"
+  }
+});
+
+const posts = await runtime.runPromise(
   Effect.gen(function* () {
     const pluginRuntime = yield* PluginRuntime;
-    const plugin = yield* pluginRuntime.usePlugin(pluginId, config);
-    return yield* pluginRuntime.executePlugin(plugin, input);
+    
+    const plugin = yield* pluginRuntime.usePlugin("social-feed", {
+      secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
+      variables: { timeout: 30000 }
+    });
+    
+    return yield* pluginRuntime.executePlugin(plugin, {
+      procedure: "search",
+      input: { query: "typescript", limit: 10 },
+      state: null
+    });
   })
+);
+
+console.log(`Found ${posts.items.length} posts`);
+await runtime.dispose();
+```
+
+### Streaming Data
+
+For continuous data processing:
+
+```typescript
+import { Stream } from "effect";
+
+const stream = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    return yield* pluginRuntime.streamPlugin(
+      "social-feed",
+      {
+        secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
+        variables: { timeout: 30000 }
+      },
+      {
+        procedure: "search", 
+        input: { query: "typescript" },
+        state: null
+      },
+      { maxItems: 100 }
+    );
+  })
+);
+
+// Process stream
+const items = await runtime.runPromise(
+  stream.pipe(Stream.take(50), Stream.runCollect)
+);
+
+console.log(`Streamed ${items.length} items`);
+```
+
+### Error Handling
+
+All operations return Effect types with composable error handling:
+
+```typescript
+const safeResult = await runtime.runPromise(
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    return yield* pluginRuntime.usePlugin("social-feed", config);
+  }).pipe(
+    Effect.catchAll((error) => {
+      console.error("Plugin failed:", error);
+      return Effect.succeed(null);
+    })
+  )
 );
 ```
 
-### Advanced Usage - Granular Control
-
-```typescript
-import { Effect } from "effect";
-import { PluginRuntime } from "every-plugin/runtime";
-
-const processWithGranularControl = Effect.gen(function* () {
-  const pluginRuntime = yield* PluginRuntime;
-  
-  // Step-by-step plugin lifecycle
-  const constructor = yield* pluginRuntime.loadPlugin("@my-org/data-processor");
-  const instance = yield* pluginRuntime.instantiatePlugin(constructor);
-  const initialized = yield* pluginRuntime.initializePlugin(instance, config);
-  const output = yield* pluginRuntime.executePlugin(initialized, input);
-  
-  return output;
-});
-
-await runtime.runPromise(processWithGranularControl);
-```
+## Advanced Patterns
 
 ### Worker Integration
 
@@ -154,66 +249,24 @@ process.on("SIGTERM", async () => {
 });
 ```
 
-```typescript
-import { Effect } from "effect";
-import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+### Granular Control
 
-// Create a managed runtime (do this once per application/worker)
-const runtime = createPluginRuntime({
-  registry: {
-    "@my-org/data-processor": {
-      version: "1.0.0",
-      remoteUrl: "https://cdn.example.com/plugins/data-processor@latest/remoteEntry.js",
-      description: "Processes data items",
-      type: "pipeline"
-    }
-  },
-  secrets: {
-    API_KEY: "your-secret-key",
-    DATABASE_URL: "postgresql://..."
-  },
-  logger: customLogger // optional
+For step-by-step plugin lifecycle management:
+
+```typescript
+const processWithGranularControl = Effect.gen(function* () {
+  const pluginRuntime = yield* PluginRuntime;
+  
+  // Step-by-step plugin lifecycle
+  const constructor = yield* pluginRuntime.loadPlugin("@my-org/data-processor");
+  const instance = yield* pluginRuntime.instantiatePlugin(constructor);
+  const initialized = yield* pluginRuntime.initializePlugin(instance, config);
+  const output = yield* pluginRuntime.executePlugin(initialized, input);
+  
+  return output;
 });
 
-// Use the runtime to execute plugins
-const result = await runtime.runPromise(
-  Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
-
-    return yield* pluginRuntime.streamPlugin(
-          "test-plugin",
-          TEST_CONFIG,
-          TEST_SEARCH_INPUT,
-        ).pipe(
-          Effect.flatMap(stream => stream.pipe(Stream.runCollect)),
-          Effect.catchAll((error: unknown) => {
-            // Should handle callback errors
-            expect(error).toBeDefined();
-            return Effect.succeed("callback-error-handled");
-          }),
-        );
-    
-    // Load, instantiate and initialize a plugin
-    const plugin = yield* pluginRuntime.usePlugin("@my-org/data-processor", {
-      apiKey: "{{API_KEY}}", // Will be hydrated from secrets
-      batchSize: 100
-    });
-    
-    // I want to do this in the source stream
-    const output = yield* pluginRuntime.executePlugin(plugin, {
-      items: ["item1", "item2", "item3"]
-    });
-
-    
-    
-    return output;
-  })
-);
-
-console.log(result);
-
-// Clean up when done
-await runtime.dispose();
+await runtime.runPromise(processWithGranularControl);
 ```
 
 ### React/Next.js Integration
@@ -245,59 +298,6 @@ export function cleanup() {
 }
 ```
 
-## Core Concepts
-
-### Plugin Registry
-
-The registry defines available plugins and their remote locations:
-
-```typescript
-type PluginRegistry = {
-  [pluginId: string]: {
-    version: string;
-    remoteUrl: string;
-    description?: string;
-    type?: string;
-  };
-};
-```
-
-### Secret Hydration
-
-Secrets are automatically hydrated using Mustache-style templating:
-
-```typescript
-const config = {
-  apiKey: "{{API_KEY}}", // Will be replaced with actual secret
-  endpoint: "https://api.example.com"
-};
-```
-
-### Plugin Lifecycle
-
-1. **Load**: Download and cache the remote plugin module
-2. **Instantiate**: Create a new instance of the plugin class
-3. **Initialize**: Configure the plugin with validated config and secrets
-4. **Execute**: Run the plugin with validated input, return validated output
-
-### Error Handling
-
-All operations return Effect types with proper error handling:
-
-```typescript
-const result = await runtime.runPromise(
-  Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
-    return yield* pluginRuntime.usePlugin(pluginId, config);
-  }).pipe(
-    Effect.catchAll((error) => {
-      console.error("Plugin execution failed:", error);
-      return Effect.succeed(null); // Fallback value
-    })
-  )
-);
-```
-
 ## API Reference
 
 ### `createPluginRuntime(config)`
@@ -322,7 +322,8 @@ Effect service tag for accessing the plugin runtime within Effect workflows.
 - `instantiatePlugin(constructor)`: Create plugin instance
 - `initializePlugin(instance, config)`: Initialize with config and secrets
 - `executePlugin(plugin, input)`: Execute plugin with input
-- `usePlugin(pluginId, config)`: Load + instantiate + initialize in one step (does not execute)
+- `usePlugin(pluginId, config)`: Load + instantiate + initialize in one step
+- `streamPlugin(pluginId, config, input, options)`: Stream plugin execution
 
 ## Development
 

@@ -53,10 +53,11 @@ const clientLoader = createClientLoader(docs.doc, {
     const owner = "near-everything";
     const repo = "run";
     const rawMarkdownUrl = `https://raw.githubusercontent.com/${owner}/${repo}/refs/heads/main/apps/docs/content/docs/${data.page.path}`;
-    
+
     return (
       <DocsPage toc={toc}>
         <DocsTitle>{frontmatter.title}</DocsTitle>
+        <DocsDescription>{frontmatter.description}</DocsDescription>
         <div className="flex flex-row gap-2 items-center border-b pt-2 pb-6">
           <LLMCopyButton markdownUrl={rawMarkdownUrl} />
           <ViewOptions
@@ -64,7 +65,6 @@ const clientLoader = createClientLoader(docs.doc, {
             githubUrl={`https://github.com/${owner}/${repo}/blob/dev/apps/docs/content/docs/${data.page.path}`}
           />
         </div>
-        <DocsDescription>{frontmatter.description}</DocsDescription>
         <DocsBody>
           <MDX
             components={{
