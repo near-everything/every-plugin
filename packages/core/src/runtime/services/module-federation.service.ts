@@ -5,7 +5,15 @@ import {
 } from "@module-federation/enhanced/runtime";
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
 import { Effect, Layer } from "effect";
+import { PluginLoggerTag } from "../../plugin";
 import { ModuleFederationError } from "../errors";
+
+const normalizePluginId = (pluginId: string): string => {
+	return pluginId
+		.toLowerCase()
+		.replace(/^@/, "")
+		.replace(/\//g, "_");
+};
 
 export interface IModuleFederationService {
 	readonly registerRemote: (
@@ -39,7 +47,7 @@ const createModuleFederationInstance = Effect.cached(
 						zod: {
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^4.0.0", 
+								requiredVersion: "^4.0.0",
 								eager: false,
 								strictVersion: false,
 							},
@@ -100,6 +108,8 @@ export class ModuleFederationService extends Effect.Tag(
 			return {
 				registerRemote: (pluginId: string, url: string) =>
 					Effect.gen(function* () {
+						console.log(`[MF] Registering ${pluginId}`);
+
 						// Check if remote is available
 						const { error } = yield* Effect.tryPromise({
 							try: () => betterFetch(url, { method: "HEAD" }),
@@ -113,11 +123,12 @@ export class ModuleFederationService extends Effect.Tag(
 						});
 
 						if (error) {
+							console.log(`[MF] ❌ Remote not available for ${pluginId}`);
 							return yield* Effect.fail(
 								new ModuleFederationError({
 									pluginId,
 									remoteUrl: url,
-									cause: new Error(`Remote not available: ${JSON.stringify(error)}`),
+									cause: new Error(`Remote not available (${url}): ${JSON.stringify(error)}`),
 								}),
 							);
 						}
@@ -125,8 +136,8 @@ export class ModuleFederationService extends Effect.Tag(
 						// Register remote
 						const remoteName = pluginId
 							.toLowerCase()
-							.replace("@", "")
-							.replace("/", "_");
+							.replace(/^@/, "")
+							.replace(/\//g, "_");
 
 						yield* Effect.try({
 							try: () => mf.registerRemotes([{ name: remoteName, entry: url }]),
@@ -138,14 +149,14 @@ export class ModuleFederationService extends Effect.Tag(
 										error instanceof Error ? error : new Error(String(error)),
 								}),
 						});
+
+						console.log(`[MF] ✅ Registered ${pluginId}`);
 					}),
 
 				loadRemoteConstructor: (pluginId: string, url: string) =>
 					Effect.gen(function* () {
-						const remoteName = pluginId
-							.toLowerCase()
-							.replace("@", "")
-							.replace("/", "_");
+						const remoteName = normalizePluginId(pluginId);
+						console.log(`[MF] Loading remote ${remoteName}`);
 						const modulePath = `${remoteName}/plugin`;
 
 						return yield* Effect.tryPromise({
@@ -167,6 +178,7 @@ export class ModuleFederationService extends Effect.Tag(
 									);
 								}
 
+								console.log(`[MF] ✅ Loaded constructor for ${pluginId}`);
 								return Constructor;
 							},
 							catch: (error): ModuleFederationError =>

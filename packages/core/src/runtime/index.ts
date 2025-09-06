@@ -104,78 +104,7 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 						config: z.infer<T["configSchema"]>,
 						input: TInput,
 						options?: StreamingOptions<TItem, TPluginState>
-					) => Effect.gen(function* () {
-						// Get initialized plugin (benefits from caching)
-						const initializedPlugin = yield* pluginService.usePlugin<T>(pluginId, config);
-
-						// Check if procedure is streamable and validate state
-						const procedureName = (input as { procedure: string }).procedure;
-						const isStreamable = initializedPlugin.plugin.isStreamable(procedureName);
-
-						if (!isStreamable) {
-							return yield* Effect.fail(
-								new PluginRuntimeError({
-									pluginId,
-									operation: "stream-plugin-validate",
-									cause: new Error(`Procedure ${procedureName} is not streamable`),
-									retryable: false,
-								})
-							);
-						}
-
-						// Check stateSchema exists for streamable procedures
-						if (!('stateSchema' in initializedPlugin.plugin) || !initializedPlugin.plugin.stateSchema) {
-							return yield* Effect.fail(
-								new PluginRuntimeError({
-									pluginId: initializedPlugin.plugin.id,
-									operation: "validate-state",
-									cause: new Error(`Streamable plugin ${initializedPlugin.plugin.id} must have a stateSchema`),
-									retryable: false,
-								})
-							);
-						}
-
-						// Validate initial state
-						yield* validate(
-							initializedPlugin.plugin.stateSchema,
-							input.state,
-							initializedPlugin.plugin.id,
-							"state",
-						).pipe(
-							Effect.mapError(
-								(validationError): PluginRuntimeError =>
-									new PluginRuntimeError({
-										pluginId: initializedPlugin.plugin.id,
-										operation: "validate-state",
-										cause: validationError.zodError,
-										retryable: false,
-									})
-							),
-						);
-
-						// Create wrapper function to adapt plugin execution result
-						const executePluginWrapper = (
-							plugin: InitializedPlugin<T>, 
-							input: TInput
-						) => 
-							pluginService.executePlugin(plugin, input).pipe(
-								Effect.map((result) => {
-									const resultObj = result as Record<string, unknown>;
-									return {
-										items: Array.isArray(resultObj.items) ? resultObj.items as TItem[] : [],
-										nextState: resultObj.nextState as TPluginState
-									};
-								})
-							);
-
-						// Create and return the stream
-						return createSourceStream<T, TInput, TItem, TPluginState>(
-							initializedPlugin,
-							executePluginWrapper,
-							input,
-							options
-						);
-					}),
+					) => pluginService.streamPlugin<T, TInput, TItem, TPluginState>(pluginId, config, input, options),
 					shutdown: () => pluginService.cleanup(),
 				};
 			}),

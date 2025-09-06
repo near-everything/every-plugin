@@ -34,14 +34,16 @@ const loadState = () =>
     Effect.catchAll(() => Effect.succeed(null))
   );
 
-console.log("🚀 Streaming @curatedotfun mentions with enhanced state management...\n");
+const query = "@curatedotfun";
+
+console.log(`🚀 Streaming ${query} mentions...\n`);
 
 const program = Effect.gen(function* () {
   const pluginRuntime = yield* PluginRuntime;
-  
+
   // Load any previous state for recovery
   const resumeState = yield* loadState();
-  
+
   if (resumeState) {
     console.log(`📂 Resuming from saved state: ${resumeState.phase || 'unknown'} phase`);
   }
@@ -55,7 +57,7 @@ const program = Effect.gen(function* () {
     {
       procedure: "search",
       input: {
-        query: "@curatedotfun",
+        query: query,
         searchMethod: "searchbyquery",
         sourceType: "twitter",
         maxResults: 25
@@ -65,11 +67,11 @@ const program = Effect.gen(function* () {
     {
       maxItems: 100,
       // Enhanced: State change hook for persistence and observability
-      onStateChange: (newState: any, items: any[]) => 
+      onStateChange: (newState: any, items: any[]) =>
         Effect.gen(function* () {
           const phase = newState?.phase || 'unknown';
           console.log(`📊 State transition: ${phase} phase (${items.length} items)`);
-          
+
           // Persist state for recovery
           yield* saveState(newState);
         })
@@ -79,7 +81,7 @@ const program = Effect.gen(function* () {
   // Enhanced item processing with better logging
   let totalCount = 0;
   let phaseItems: Record<string, number> = {};
-  
+
   const items = yield* stream.pipe(
     Stream.tap((item: any) =>
       Effect.sync(() => {

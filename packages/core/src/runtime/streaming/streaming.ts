@@ -1,4 +1,4 @@
-import { Duration, Effect, Option, Ref, Stream } from "effect";
+import { Duration, Effect, Option, Ref, Schedule, Stream } from "effect";
 import type { z } from "zod";
 import type { Plugin } from "../../plugin";
 import type { PluginRuntimeError } from "../errors";
@@ -15,10 +15,22 @@ interface PluginExecutionResult<TItem, TPluginState> {
 
 /**
  * Extract delay from plugin state (nextPollMs field)
+ * Returns null if nextPollMs is null (signals termination) or undefined (no delay specified)
  */
 const extractDelayFromState = <TPluginState>(state: TPluginState): Duration.Duration | null => {
-  const stateWithPolling = state as TPluginState & { nextPollMs?: number };
+  const stateWithPolling = state as TPluginState & { nextPollMs?: number | null };
+  if (stateWithPolling?.nextPollMs === null) {
+    return null; // Explicit termination signal
+  }
   return stateWithPolling?.nextPollMs ? Duration.millis(stateWithPolling.nextPollMs) : null;
+};
+
+/**
+ * Check if plugin state signals stream termination
+ */
+const isTerminalState = <TPluginState>(state: TPluginState): boolean => {
+  const stateWithPolling = state as TPluginState & { nextPollMs?: number | null };
+  return stateWithPolling?.nextPollMs === null;
 };
 
 export const createSourceStream = <
@@ -28,7 +40,7 @@ export const createSourceStream = <
   TPluginState extends z.infer<T["stateSchema"]>
 >(
   initializedPlugin: InitializedPlugin<T>,
-  executePlugin: (plugin: InitializedPlugin<T>, input: TInput) => Effect.Effect<PluginExecutionResult<TItem, TPluginState>, PluginRuntimeError>,
+  executePlugin: (plugin: InitializedPlugin<T>, input: TInput) => Effect.Effect<any, PluginRuntimeError>,
   input: TInput,
   options: StreamingOptions<TItem, TPluginState> = {},
 ): Stream.Stream<TItem, PluginRuntimeError> => {
@@ -40,24 +52,26 @@ export const createSourceStream = <
     lastItemCount: 0,
   };
 
-  return Stream.fromEffect(
-    Ref.make(initialStreamState)
-  ).pipe(
-    Stream.flatMap(stateRef =>
-      Stream.unfoldEffect(null, () =>
-        Effect.gen(function* () {
-          // Get current stream state atomically
-          const currentStreamState = yield* Ref.get(stateRef);
+  // Use Stream.async for full control over emission timing and delays
+  return Stream.async<TItem, PluginRuntimeError>((emit) => {
+    let currentStreamState = initialStreamState;
+    let totalItemsEmitted = 0;
 
-          // Check invocation limit
+    const loop = async () => {
+      try {
+        while (true) {
+          console.log(`[STREAMING] Starting iteration ${currentStreamState.invocations + 1}`);
+
+          // Check invocation limit BEFORE executing
           if (options.maxInvocations && currentStreamState.invocations >= options.maxInvocations) {
-            return Option.none();
+            console.log(`[STREAMING] Reached maxInvocations limit: ${options.maxInvocations}`);
+            break;
           }
 
-          // Extract timing from plugin state and sleep if needed
-          const nextDelay = extractDelayFromState(currentStreamState.pluginState);
-          if (nextDelay) {
-            yield* Effect.sleep(nextDelay);
+          // Check maxItems limit BEFORE executing
+          if (options.maxItems && totalItemsEmitted >= options.maxItems) {
+            console.log(`[STREAMING] Reached maxItems limit: ${options.maxItems}`);
+            break;
           }
 
           // Execute plugin with current plugin state
@@ -66,31 +80,66 @@ export const createSourceStream = <
             state: currentStreamState.pluginState ?? null
           } as TInput;
 
-          const result = yield* executePlugin(initializedPlugin, pluginInput);
-          const items: TItem[] = result.items;
-          const nextPluginState = result.nextState;
+          console.log(`[STREAMING] About to execute plugin with input:`, JSON.stringify(pluginInput, null, 2));
+          console.log(`[STREAMING] Plugin state:`, JSON.stringify(currentStreamState.pluginState, null, 2));
 
-          // Update stream state atomically
-          const newStreamState: StreamState<TPluginState> = {
+          const rawResult = await Effect.runPromise(executePlugin(initializedPlugin, pluginInput));
+          console.log(`[STREAMING] Plugin execution completed`);
+          
+          // Transform raw plugin result to streaming format
+          const resultObj = rawResult as Record<string, unknown>;
+          const items: TItem[] = Array.isArray(resultObj.items) ? resultObj.items as TItem[] : [];
+          const nextPluginState = resultObj.nextState as TPluginState;
+          
+          console.log(`[STREAMING] Transformed result: ${items.length} items`);
+
+          // Update stream state (increment AFTER execution)
+          currentStreamState = {
             invocations: currentStreamState.invocations + 1,
             pluginState: nextPluginState as TPluginState,
             lastItemCount: items.length,
           };
 
-          yield* Ref.set(stateRef, newStreamState);
+          console.log(`[STREAMING] Invocation ${currentStreamState.invocations}, Items: ${items.length}`);
 
           // Call state change hook if provided
           if (options.onStateChange) {
-            yield* options.onStateChange(nextPluginState as TPluginState, items);
+            await Effect.runPromise(options.onStateChange(nextPluginState as TPluginState, items));
           }
 
-          return Option.some([items, null]);
-        })
-      )
-    ),
-    // Flatten items from each iteration
-    Stream.flatMap(items => Stream.fromIterable(items)),
-    // Apply maxItems limit if specified
-    options.maxItems ? Stream.take(options.maxItems) : Stream.identity
-  );
+          // Emit items immediately (before any delays)
+          for (const item of items) {
+            if (options.maxItems && totalItemsEmitted >= options.maxItems) {
+              console.log(`[STREAMING] Stopping emission at maxItems limit: ${options.maxItems}`);
+              break;
+            }
+            emit.single(item);
+            totalItemsEmitted++;
+          }
+
+          // Check for termination conditions
+          if (nextPluginState && isTerminalState(nextPluginState)) {
+            console.log(`[STREAMING] Plugin signaled termination`);
+            break;
+          }
+
+          // Handle delay AFTER emission, BEFORE next iteration
+          const nextDelay = extractDelayFromState(nextPluginState);
+          if (nextDelay && Duration.toMillis(nextDelay) > 0) {
+            console.log(`[STREAMING] Sleeping for ${Duration.toMillis(nextDelay)}ms before next iteration`);
+            await Effect.runPromise(Effect.sleep(nextDelay));
+          }
+        }
+
+        // End the stream
+        emit.end();
+      } catch (error) {
+        console.log(`[STREAMING] Error occurred:`, error);
+        emit.fail(error as PluginRuntimeError);
+      }
+    };
+
+    // Start the loop
+    loop();
+  });
 };

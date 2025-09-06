@@ -1,29 +1,25 @@
 import { Context, Effect } from "effect";
 import { z } from "zod";
-import { type ConfigurationError, PluginExecutionError } from "./errors";
-
-// Helper to create config schema with variables and secrets
-export function createConfigSchema<
-	V extends z.ZodTypeAny,
-	S extends z.ZodTypeAny,
->(
-	variablesSchema?: V,
-	secretsSchema?: S,
-): z.ZodObject<{
-	variables: z.ZodOptional<V>;
-	secrets: z.ZodOptional<S>;
-}>;
+import type { ConfigurationError } from "./errors";
 
 export function createConfigSchema<
 	V extends z.ZodTypeAny = z.ZodRecord<z.ZodString, z.ZodUnknown>,
 	S extends z.ZodTypeAny = z.ZodRecord<z.ZodString, z.ZodUnknown>,
 >(variablesSchema?: V, secretsSchema?: S) {
 	return z.object({
-		variables: (
-			variablesSchema ?? z.record(z.string(), z.unknown())
-		).optional(),
-		secrets: (secretsSchema ?? z.record(z.string(), z.unknown())).optional(),
+		variables: variablesSchema ? variablesSchema.optional() : z.record(z.string(), z.unknown()).optional(),
+		secrets: secretsSchema ? secretsSchema.optional() : z.record(z.string(), z.unknown()).optional(),
 	});
+}
+
+export function createStateSchema<T extends z.ZodTypeAny>(
+	pluginStateSchema: T,
+) {
+	const BaseStreamingStateSchema = z.object({
+		nextPollMs: z.number().nullable().optional(), // null = terminate, undefined/0 = no delay, number = delay ms
+	});
+
+	return BaseStreamingStateSchema.and(pluginStateSchema);
 }
 
 // Plugin types
@@ -151,26 +147,26 @@ export const StateTransitions = {
 	/**
 	 * Transition to a new phase with optional updates
 	 */
-	to: <T extends { phase?: string }>(phase: string, updates: Partial<T> = {}) => 
+	to: <T extends { phase?: string }>(phase: string, updates: Partial<T> = {}) =>
 		(state: T): T => ({ ...state, phase, ...updates }),
-		
+
 	/**
 	 * Add polling delay to state
 	 */
-	withPolling: <T>(delayMs: number) => 
+	withPolling: <T>(delayMs: number) =>
 		(state: T): T => ({ ...state, nextPollMs: delayMs }),
-		
+
 	/**
 	 * Set error state with message and stop polling
 	 */
 	withError: <T>(errorMessage: string) =>
-		(state: T): T => ({ 
-			...state, 
-			phase: 'error', 
-			errorMessage, 
-			nextPollMs: null 
+		(state: T): T => ({
+			...state,
+			phase: 'error',
+			errorMessage,
+			nextPollMs: null
 		}),
-		
+
 	/**
 	 * Preserve existing state with updates
 	 */

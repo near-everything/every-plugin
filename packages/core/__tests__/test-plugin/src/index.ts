@@ -1,13 +1,13 @@
 import { oc } from "@orpc/contract";
 import { implement } from "@orpc/server";
 import { Effect } from "effect";
-import { z } from "zod";
 import {
 	ConfigurationError,
 	createConfigSchema,
-	PluginLoggerTag,
+	createStateSchema,
 	SimplePlugin
-} from "../../..";
+} from "every-plugin";
+import { z } from "zod";
 import { SourceTemplateClient } from "./client";
 
 // Configuration schemas
@@ -24,13 +24,14 @@ const SourceTemplateConfigSchema = createConfigSchema(VariablesSchema, SecretsSc
 type SourceTemplateConfig = z.infer<typeof SourceTemplateConfigSchema>;
 
 // State schema for pagination (used in contract-based input generation)
-export const StateSchema = z.object({
-	phase: z.string(),
-	status: z.string().optional(),
-	jobId: z.string().optional(),
-	lastId: z.string().optional(),
-	nextPollMs: z.number().optional()
-}).nullable();
+export const StateSchema = createStateSchema(
+	z.object({
+		phase: z.string(),
+		status: z.string().optional(),
+		jobId: z.string().optional(),
+		lastId: z.string().optional(),
+	})
+).nullable();
 
 // Source item schema that plugins return
 const sourceItemSchema = z.object({
@@ -120,7 +121,7 @@ export class SourceTemplatePlugin extends SimplePlugin<
 	readonly type = "source" as const; // this is where the open api spec of the contract should be stored, asset
 	readonly contract = sourceContract;
 	readonly configSchema = SourceTemplateConfigSchema;
-  override readonly stateSchema = StateSchema;
+	override readonly stateSchema = StateSchema;
 
 	// Export contract for client consumption
 	static readonly contract = sourceContract;
@@ -131,8 +132,6 @@ export class SourceTemplatePlugin extends SimplePlugin<
 	override initialize(config?: SourceTemplateConfig) {
 		const self = this;
 		return Effect.gen(function* () {
-			const logger = yield* PluginLoggerTag;
-
 			if (!config?.secrets?.apiKey) {
 				return yield* Effect.fail(new ConfigurationError("API key is required"));
 			}
@@ -147,11 +146,6 @@ export class SourceTemplatePlugin extends SimplePlugin<
 			yield* Effect.tryPromise({
 				try: () => self.client!.healthCheck(),
 				catch: (error) => new ConfigurationError(`Health check failed: ${error instanceof Error ? error.message : String(error)}`)
-			});
-
-			yield* logger.logDebug("SourceTemplate plugin initialized successfully", {
-				pluginId: self.id,
-				baseUrl: config.variables?.baseUrl || "http://localhost:1337"
 			});
 		});
 	}
@@ -169,11 +163,14 @@ export class SourceTemplatePlugin extends SimplePlugin<
 		const stateMiddleware = implement(sourceContract)
 			.$context<{ state?: z.infer<typeof StateSchema> }>()
 			.middleware(async ({ context, next }) => {
-				return next({
+				console.log(`[TEST-PLUGIN] Middleware called with context:`, JSON.stringify(context, null, 2));
+				const result = await next({
 					context: {
 						state: context.state
 					}
 				});
+				console.log(`[TEST-PLUGIN] Middleware completed`);
+				return result;
 			});
 
 		const os = implement(sourceContract);
@@ -211,70 +208,64 @@ export class SourceTemplatePlugin extends SimplePlugin<
 		const search = os.use(stateMiddleware).search.handler(async ({ input, context }) => {
 			const state = context.state;
 
-			// Phase 1: Initialize historical job
+			// Phase 1: Initial call - return immediate results and set up for streaming
 			if (!state) {
+				console.log(`[TEST-PLUGIN] Initial call for query: ${input.query}`);
+				const initialItems = generateHistoricalItems(input.query);
 				return {
-					items: [],
+					items: initialItems, // Return items immediately for single-call compatibility
 					nextState: {
+						nextPollMs: 50, // Short delay for testing
 						phase: "historical",
 						jobId: `hist_${Date.now()}`,
-						nextPollMs: 10
+						lastId: initialItems.length > 0 ? initialItems[initialItems.length - 1].externalId : undefined,
 					}
 				};
 			}
 
-			// Phase 2-5: Handle state transitions
-			switch (`${state.phase}-${state.status || 'none'}`) {
-				case "historical-none":
-					return {
-						items: [],
-						nextState: { ...state, status: "processing", nextPollMs: 10 }
-					};
-
-				case "historical-processing":
-					return {
-						items: generateHistoricalItems(input.query),
-						nextState: {
-							phase: "realtime",
-							lastId: `hist_end_${Date.now()}`,
-							nextPollMs: 10
-						}
-					};
-
-				case "empty-none":
-					// Deterministic empty phase - always returns 0 items
-					return {
-						items: [],
-						nextState: {
-							phase: "empty",
-							status: "complete",
-							nextPollMs: 10
-						}
-					};
-
-				case "empty-complete":
-					// Stay in empty phase, always return 0 items
-					return {
-						items: [],
-						nextState: {
-							phase: "empty",
-							status: "complete",
-							nextPollMs: 10
-						}
-					};
-
-				default: {// realtime phase
-					const newItems = generateRealtimeItems(input.query, state.lastId || "");
-					return {
-						items: newItems,
-						nextState: {
-							phase: "realtime",
-							lastId: newItems.length > 0 ? `new_${Date.now()}` : (state.lastId || ""),
-							nextPollMs: newItems.length > 0 ? 10 : 10
-						}
-					};
-				}
+			// Phase 2: Historical data collection (simulate catching up)
+			if (state.phase === "historical") {
+				console.log(`[TEST-PLUGIN] Historical phase`);
+				const historicalItems = generateHistoricalItems(input.query);
+				return {
+					items: historicalItems,
+					nextState: {
+						nextPollMs: 50, // Short delay for testing
+						phase: "realtime",
+						jobId: state.jobId,
+						lastId: historicalItems.length > 0 ? historicalItems[historicalItems.length - 1].externalId : state.lastId,
+					}
+				};
 			}
+
+			// Phase 3: Real-time polling (simulate ongoing data) - runs forever
+			if (state.phase === "realtime") {
+				console.log(`[TEST-PLUGIN] Realtime phase`);
+				const newItems = generateRealtimeItems(input.query, state.lastId || "");
+
+				// Continue indefinitely - let maxInvocations stop the stream
+				return {
+					items: newItems,
+					nextState: {
+						nextPollMs: 50, // Short delay for testing
+						phase: "realtime",
+						jobId: state.jobId,
+						lastId: newItems.length > 0 ? newItems[newItems.length - 1].externalId : state.lastId,
+					}
+				};
+			}
+
+			// Fallback - should not reach here in normal operation
+			console.log(`[TEST-PLUGIN] Fallback case, phase: ${state?.phase}`);
+			return {
+				items: [],
+				nextState: {
+					nextPollMs: 50,
+					phase: "realtime",
+					jobId: state?.jobId || `fallback_${Date.now()}`,
+					lastId: state?.lastId,
+				}
+			};
 		});
 
 		const getBulk = os.getBulk.handler(async ({ input }) => {

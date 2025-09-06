@@ -1,8 +1,9 @@
-import { Cache, Duration, Effect, Hash, Layer, Schedule } from "effect";
-import type { z } from "zod";
 import { call } from "@orpc/server";
-import { PluginLoggerTag, type PluginRegistry } from "../../plugin";
+import { Cache, Duration, Effect, Hash, Layer, Schedule, type Stream } from "effect";
+import type { z } from "zod";
+import { type Plugin, PluginLoggerTag, type PluginRegistry } from "../../plugin";
 import { PluginRuntimeError } from "../errors";
+import { createSourceStream, type StreamingOptions } from "../streaming";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
@@ -33,6 +34,17 @@ export interface IPluginService {
 		pluginId: string,
 		config: unknown,
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
+	readonly streamPlugin: <
+		T extends Plugin,
+		TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
+		TItem = unknown,
+		TPluginState extends z.infer<T["stateSchema"]> = z.infer<T["stateSchema"]>
+	>(
+		pluginId: string,
+		config: z.infer<T["configSchema"]>,
+		input: TInput,
+		options?: StreamingOptions<TItem, TPluginState>
+	) => Effect.Effect<Stream.Stream<TItem, PluginRuntimeError>, PluginRuntimeError>;
 	readonly shutdownPlugin: (plugin: InitializedPlugin<AnyPlugin>) => Effect.Effect<void, PluginRuntimeError>;
 	readonly clearCache: () => Effect.Effect<void, never>;
 	readonly cleanup: () => Effect.Effect<void, never>;
@@ -277,97 +289,168 @@ export class PluginService extends Effect.Tag("PluginService")<
 				});
 
 
+				const usePluginImpl = <T extends AnyPlugin>(
+					pluginId: string,
+					config: unknown,
+				): Effect.Effect<InitializedPlugin<T>, PluginRuntimeError> => {
+					const configHash = generateConfigHash(config);
+					const cacheKey = `${pluginId}:${configHash}`;
+
+					// Store config for cache lookup
+					configByHash.set(configHash, config);
+
+					return cache.get(cacheKey).pipe(
+						Effect.map(plugin => plugin as InitializedPlugin<T>)
+					);
+				};
+
+				// Extract executePlugin implementation for reuse
+				const executePluginImpl = <T extends AnyPlugin>(
+					initializedPlugin: InitializedPlugin<T>,
+					input: z.infer<T["inputSchema"]>,
+				): Effect.Effect<z.infer<T["outputSchema"]>, PluginRuntimeError> =>
+					Effect.gen(function* () {
+						const { plugin } = initializedPlugin;
+
+						// Validate input
+						const validatedInput = yield* validate(
+							plugin.inputSchema,
+							input,
+							plugin.id,
+							"input",
+						).pipe(
+							Effect.mapError(
+								(validationError): PluginRuntimeError => {
+									return new PluginRuntimeError({
+										pluginId: plugin.id,
+										operation: "validate-input",
+										cause: validationError.zodError,
+										retryable: false,
+									});
+								},
+							),
+						);
+
+						// Get oRPC router and call procedure directly
+						const router = plugin.createRouter();
+						const procedureName = (validatedInput as z.infer<T["inputSchema"]>).procedure as string;
+
+						if (!(procedureName in router)) {
+							return yield* Effect.fail(
+								new PluginRuntimeError({
+									pluginId: plugin.id,
+									operation: "execute-plugin",
+									cause: new Error(`Unknown procedure: ${procedureName}`),
+									retryable: false,
+								})
+							);
+						}
+
+						const context = 'state' in validatedInput ? { state: (validatedInput as any).state } : {};
+						const output = yield* Effect.tryPromise({
+							try: () => {
+								const procedure = router[procedureName];
+
+								if (!procedure) {
+									throw new Error(`Procedure ${procedureName} not found in router`);
+								}
+
+								// Use oRPC call utility as per docs
+								return call(procedure, validatedInput.input, { context });
+							},
+							catch: (error): PluginRuntimeError =>
+								new PluginRuntimeError({
+									pluginId: plugin.id,
+									operation: "execute-plugin",
+									cause: error instanceof Error ? error : new Error(String(error)),
+									retryable: true,
+								}),
+						}).pipe(
+							Effect.retry(
+								retrySchedule.pipe(
+									Schedule.whileInput(
+										(error: PluginRuntimeError) => error.retryable,
+									),
+								),
+							),
+						);
+
+						return output as z.infer<T["outputSchema"]>;
+					});
+
 				return {
 					loadPlugin: loadPluginImpl,
 					instantiatePlugin: instantiatePluginImpl,
 					initializePlugin: initializePluginImpl,
-					executePlugin: <T extends AnyPlugin>(
-						initializedPlugin: InitializedPlugin<T>,
-						input: z.infer<T["inputSchema"]>,
-					): Effect.Effect<z.infer<T["outputSchema"]>, PluginRuntimeError> =>
-						Effect.gen(function* () {
-							const { plugin } = initializedPlugin;
+					executePlugin: executePluginImpl,
+					usePlugin: usePluginImpl,
+					streamPlugin: <
+						T extends Plugin,
+						TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
+						TItem = unknown,
+						TPluginState extends z.infer<T["stateSchema"]> = z.infer<T["stateSchema"]>
+					>(
+						pluginId: string,
+						config: z.infer<T["configSchema"]>,
+						input: TInput,
+						options?: StreamingOptions<TItem, TPluginState>
+					): Effect.Effect<Stream.Stream<TItem, PluginRuntimeError>, PluginRuntimeError> => Effect.gen(function* () {
 
-							// Validate input
-							const validatedInput = yield* validate(
-								plugin.inputSchema,
-								input,
-								plugin.id,
-								"input",
-							).pipe(
-								Effect.mapError(
-									(validationError): PluginRuntimeError => {
-										console.log("got input error", validationError.zodError);
-										return new PluginRuntimeError({
-											pluginId: plugin.id,
-											operation: "validate-input",
-											cause: validationError.zodError,
-											retryable: false,
-										});
-									},
-								),
+						const initializedPlugin = yield* usePluginImpl<T>(pluginId, config);
+
+						// Check if procedure is streamable and validate state
+						const procedureName = (input as { procedure: string }).procedure;
+						const isStreamable = initializedPlugin.plugin.isStreamable(procedureName);
+
+						if (!isStreamable) {
+							return yield* Effect.fail(
+								new PluginRuntimeError({
+									pluginId,
+									operation: "stream-plugin-validate",
+									cause: new Error(`Procedure ${procedureName} is not streamable`),
+									retryable: false,
+								})
 							);
+						}
 
-							// Get oRPC router and call procedure directly
-							const router = plugin.createRouter();
-							const procedureName = (validatedInput as z.infer<T["inputSchema"]>).procedure as string;
-							
-							if (!(procedureName in router)) {
-								return yield* Effect.fail(
+						// Check stateSchema exists for streamable procedures
+						if (!('stateSchema' in initializedPlugin.plugin) || !initializedPlugin.plugin.stateSchema) {
+							return yield* Effect.fail(
+								new PluginRuntimeError({
+									pluginId: initializedPlugin.plugin.id,
+									operation: "validate-state",
+									cause: new Error(`Streamable plugin ${initializedPlugin.plugin.id} must have a stateSchema`),
+									retryable: false,
+								})
+							);
+						}
+
+						// Validate initial state
+						yield* validate(
+							initializedPlugin.plugin.stateSchema,
+							input.state,
+							initializedPlugin.plugin.id,
+							"state",
+						).pipe(
+							Effect.mapError(
+								(validationError): PluginRuntimeError =>
 									new PluginRuntimeError({
-										pluginId: plugin.id,
-										operation: "execute-plugin",
-										cause: new Error(`Unknown procedure: ${procedureName}`),
+										pluginId: initializedPlugin.plugin.id,
+										operation: "validate-state",
+										cause: validationError.zodError,
 										retryable: false,
 									})
-								);
-							}
-
-							const context = 'state' in validatedInput ? { state: (validatedInput as any).state } : {};
-							const output = yield* Effect.tryPromise({
-								try: () => {
-									const procedure = router[procedureName];
-									
-									if (!procedure) {
-										throw new Error(`Procedure ${procedureName} not found in router`);
-									}
-									
-									// Use oRPC call utility as per docs
-									return call(procedure, validatedInput.input, { context });
-								},
-								catch: (error): PluginRuntimeError =>
-									new PluginRuntimeError({
-										pluginId: plugin.id,
-										operation: "execute-plugin",
-										cause: error instanceof Error ? error : new Error(String(error)),
-										retryable: true,
-									}),
-							}).pipe(
-								Effect.retry(
-									retrySchedule.pipe(
-										Schedule.whileInput(
-											(error: PluginRuntimeError) => error.retryable,
-										),
-									),
-								),
-							);
-
-							return output as z.infer<T["outputSchema"]>;
-						}),
-					usePlugin: <T extends AnyPlugin>(
-						pluginId: string,
-						config: unknown,
-					): Effect.Effect<InitializedPlugin<T>, PluginRuntimeError> => {
-						const configHash = generateConfigHash(config);
-						const cacheKey = `${pluginId}:${configHash}`;
-
-						// Store config for cache lookup
-						configByHash.set(configHash, config);
-
-						return cache.get(cacheKey).pipe(
-							Effect.map(plugin => plugin as InitializedPlugin<T>)
+							),
 						);
-					},
+
+						// Create and return the stream
+						return createSourceStream<T, TInput, TItem, TPluginState>(
+							initializedPlugin,
+							executePluginImpl,
+							input,
+							options
+						);
+					}),
 					shutdownPlugin: (plugin: InitializedPlugin<AnyPlugin>) =>
 						Effect.gen(function* () {
 							const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
