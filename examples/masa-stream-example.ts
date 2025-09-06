@@ -8,8 +8,7 @@ const runtime = createPluginRuntime({
   registry: {
     "@curatedotfun/masa-source": {
       remoteUrl: "http://localhost:3013/remoteEntry.js",
-      type: "source",
-      version: "0.0.1"
+      type: "source"
     }
   },
   secrets: {

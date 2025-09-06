@@ -1,0 +1,5 @@
+{
+  "phase": "error",
+  "nextPollMs": null,
+  "errorMessage": "Masa API error: {\"error\":\"Unauthorized\",\"details\":\"Invalid API key\",\"status\":401,\"statusText\":\"Unauthorized\"}"
+}

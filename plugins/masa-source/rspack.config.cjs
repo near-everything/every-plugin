@@ -5,7 +5,11 @@ const pkg = require("./package.json");
 
 // Helper to get normalized remote name
 function getNormalizedRemoteName(name) {
-  return name.replace(/[@\/]/g, "_").replace(/-/g, "_");
+  return name
+    .toLowerCase()
+    .replace(/^@/, '')  // Remove leading @
+    .replace(/\//g, '_'); // Replace / with _
+    // Keep hyphens as-is
 }
 
 function getPluginInfo() {
@@ -67,31 +71,26 @@ module.exports = {
         "every-plugin": {
           singleton: true,
           requiredVersion: false,
-          eager: true,
           strictVersion: false,
         },
         effect: {
           singleton: true,
           requiredVersion: false,
-          eager: true,
           strictVersion: false,
         },
         zod: {
           singleton: true,
           requiredVersion: false,
-          eager: true,
           strictVersion: false,
         },
         "@orpc/contract": {
           singleton: true,
           requiredVersion: false,
-          eager: true,
           strictVersion: false,
         },
         "@orpc/server": {
           singleton: true,
           requiredVersion: false,
-          eager: true,
           strictVersion: false,
         }
       },

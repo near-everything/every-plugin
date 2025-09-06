@@ -74,31 +74,26 @@ module.exports = {
         "every-plugin": {
           singleton: true,
           requiredVersion: false,
-          eager: true,
           strictVersion: false,
         },
         effect: {
           singleton: true,
           requiredVersion: false,
-          eager: true,
           strictVersion: false,
         },
         zod: {
           singleton: true,
           requiredVersion: false,
-          eager: true,
           strictVersion: false,
         },
         "@orpc/contract": {
           singleton: true,
           requiredVersion: false,
-          eager: true,
           strictVersion: false,
         },
         "@orpc/server": {
           singleton: true,
           requiredVersion: false,
-          eager: true,
           strictVersion: false,
         }
       },

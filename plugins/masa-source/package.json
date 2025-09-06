@@ -12,6 +12,7 @@
   "devDependencies": {
     "@curatedotfun/utils": "^0.0.2",
     "@effect/vitest": "^0.25.1",
+    "@module-federation/node": "^2.7.15",
     "@module-federation/runtime-core": "^0.18.3",
     "@orpc/server": "^1.8.6",
     "@rspack/cli": "^1.5.2",
