@@ -22,16 +22,16 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "every plugin | composable remote plugin runtime",
+        title: "every plugin | composable plugin runtime",
       },
       {
         name: "title",
-        content: "every plugin | composable remote plugin runtime",
+        content: "every plugin | composable plugin runtime",
       },
       {
         name: "description",
         content:
-          "An open source, modular plugin runtime & system built with Effect.TS for loading, initializing, and executing remote plugins via Module Federation. Create and connect remote plugins together to build powerful workflows.",
+          "An open source, modular plugin runtime & system built with Effect.TS for loading, initializing, and executing plugins via Module Federation. Create and connect plugins together to build powerful workflows.",
       },
       // Open Graph / Facebook
       {
@@ -44,12 +44,12 @@ export const Route = createRootRoute({
       },
       {
         property: "og:title",
-        content: "every plugin | composable remote plugin runtime",
+        content: "every plugin | composable plugin runtime",
       },
       {
         property: "og:description",
         content:
-          "An open source, modular plugin runtime & system built with Effect.TS for loading, initializing, and executing remote plugins via Module Federation. Create and connect remote plugins together to build powerful workflows.",
+          "An open source, modular plugin runtime & system built with Effect.TS for loading, initializing, and executing plugins via Module Federation. Create and connect plugins together to build powerful workflows.",
       },
       {
         property: "og:image",
@@ -66,12 +66,12 @@ export const Route = createRootRoute({
       },
       {
         property: "twitter:title",
-        content: "every plugin | composable remote plugin runtime",
+        content: "every plugin | composable plugin runtime",
       },
       {
         property: "twitter:description",
         content:
-          "An open source, modular plugin runtime & system built with Effect.TS for loading, initializing, and executing remote plugins via Module Federation. Create and connect remote plugins together to build powerful workflows.",
+          "An open source, modular plugin runtime & system built with Effect.TS for loading, initializing, and executing plugins via Module Federation. Create and connect plugins together to build powerful workflows.",
       },
       {
         property: "twitter:image",
@@ -89,7 +89,7 @@ export const Route = createRootRoute({
       {
         name: "keywords",
         content:
-          "plugin runtime, module federation, effect.ts, remote plugins, composable plugins, typescript, orpc",
+          "plugin runtime, module federation, effect.ts, plugins, composable plugins, typescript, orpc",
       },
     ],
     links: [
