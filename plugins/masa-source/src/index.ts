@@ -54,11 +54,12 @@ export class MasaSourcePlugin extends SimplePlugin<
         return yield* Effect.fail(new ConfigurationError("Masa API key is required"));
       }
 
+      const baseUrl = config.variables?.baseUrl || "https://data.masa.ai/api/v1";
       // Initialize Masa client
       self.client = new MasaClient(
-        config.variables?.baseUrl || "https://data.masa.ai/api/v1",
+        baseUrl,
         config.secrets.apiKey,
-        config.variables?.timeout || 30000
+        config.variables?.timeout
       );
 
       // Test connection
@@ -69,7 +70,7 @@ export class MasaSourcePlugin extends SimplePlugin<
 
       yield* logger.logDebug("Masa source plugin initialized successfully", {
         pluginId: self.id,
-        baseUrl: config.variables?.baseUrl || "https://data.masa.ai/api/v1"
+        baseUrl
       });
     });
   }
@@ -112,11 +113,9 @@ export class MasaSourcePlugin extends SimplePlugin<
       if (!this.client) throw new Error("Plugin not initialized");
 
       const state = context.state;
-      console.log(`[SEARCH HANDLER] Processing search with state:`, JSON.stringify(state, null, 2));
 
       // Phase 1: Submit new job if no state
       if (!state) {
-        console.log(`[SEARCH HANDLER] Phase 1: Submitting new job for query "${input.query}"`);
 
         try {
           const jobId = await this.client.submitSearchJob(
@@ -127,13 +126,12 @@ export class MasaSourcePlugin extends SimplePlugin<
             input.nextCursor
           );
 
-          console.log(`[SEARCH HANDLER] Job submitted successfully: ${jobId}`);
           const initialState: z.infer<typeof StateSchema> = {
             phase: "submitted",
             jobId,
             searchMethod: input.searchMethod,
             sourceType: input.sourceType,
-            nextPollMs: 1000,
+            nextPollMs: 10,
             lastProcessedId: undefined,
             nextCursor: undefined,
             errorMessage: undefined,
@@ -144,7 +142,6 @@ export class MasaSourcePlugin extends SimplePlugin<
             nextState: initialState
           };
         } catch (error) {
-          console.log(`[SEARCH HANDLER] Job submission failed:`, error);
           const errorState: z.infer<typeof StateSchema> = {
             phase: "error",
             errorMessage: error instanceof Error ? error.message : String(error),
@@ -165,17 +162,14 @@ export class MasaSourcePlugin extends SimplePlugin<
 
       // Phase 2: Check job status and handle completion
       if (state.jobId) {
-        console.log(`[SEARCH HANDLER] Phase 2: Checking status for job ${state.jobId}`);
 
         try {
           const status = await this.client.checkJobStatus(
             state.jobId
           );
 
-          console.log(`[SEARCH HANDLER] Job status: ${status}`);
 
           if (status === 'done') {
-            console.log(`[SEARCH HANDLER] Job completed, fetching results`);
 
             try {
               const masaResults = await this.client.getJobResults(
@@ -183,12 +177,11 @@ export class MasaSourcePlugin extends SimplePlugin<
               );
 
               const items = masaResults.map(convertMasaResultToSourceItem);
-              console.log(`[SEARCH HANDLER] Retrieved ${items.length} items`);
 
               const doneState: z.infer<typeof StateSchema> = {
                 ...state,
                 phase: "done",
-                nextPollMs: 5000,
+                nextPollMs: 0,
                 lastProcessedId: items.length > 0 ? items[items.length - 1].externalId : undefined,
               };
 
@@ -197,7 +190,6 @@ export class MasaSourcePlugin extends SimplePlugin<
                 nextState: doneState
               };
             } catch (resultsError) {
-              console.log(`[SEARCH HANDLER] Results fetch failed:`, resultsError);
               const errorState: z.infer<typeof StateSchema> = {
                 ...state,
                 phase: "error",
@@ -211,7 +203,6 @@ export class MasaSourcePlugin extends SimplePlugin<
               };
             }
           } else if (status === 'error') {
-            console.log(`[SEARCH HANDLER] Job failed`);
             const errorState: z.infer<typeof StateSchema> = {
               ...state,
               phase: "error",
@@ -224,11 +215,10 @@ export class MasaSourcePlugin extends SimplePlugin<
               nextState: errorState
             };
           } else {
-            console.log(`[SEARCH HANDLER] Job still processing`);
             const processingState: z.infer<typeof StateSchema> = {
               ...state,
               phase: "processing",
-              nextPollMs: 2000,
+              nextPollMs: 20,
             };
 
             return {
@@ -237,7 +227,6 @@ export class MasaSourcePlugin extends SimplePlugin<
             };
           }
         } catch (statusError) {
-          console.log(`[SEARCH HANDLER] Status check failed:`, statusError);
           const errorState: z.infer<typeof StateSchema> = {
             ...state,
             phase: "error",
@@ -253,7 +242,6 @@ export class MasaSourcePlugin extends SimplePlugin<
       }
 
       // Fallback: return empty results
-      console.log(`[SEARCH HANDLER] Fallback: returning empty results`);
       return {
         items: [],
         nextState: null
@@ -313,7 +301,7 @@ export class MasaSourcePlugin extends SimplePlugin<
       const maxAttempts = 30;
 
       while (status !== 'done' && status !== 'error' && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 10));
         status = await this.client.checkJobStatus(jobId);
         attempts++;
       }
@@ -362,7 +350,7 @@ export class MasaSourcePlugin extends SimplePlugin<
       const maxAttempts = 30;
 
       while (status !== 'done' && status !== 'error' && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 10));
         status = await this.client.checkJobStatus(jobId);
         attempts++;
       }

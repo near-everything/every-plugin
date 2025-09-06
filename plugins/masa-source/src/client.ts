@@ -74,6 +74,16 @@ export interface MasaHybridSearchOptions {
   max_results?: number;
 }
 
+export interface MasaSearchJobPayload {
+  type: MasaSourceType;
+  arguments: {
+    type: MasaSearchMethod;
+    query: string;
+    max_results: number;
+    next_cursor?: string;
+  };
+}
+
 export interface MasaSearchResult {
   id: string;
   source: string;
@@ -144,21 +154,16 @@ export class MasaClient {
     maxResults: number,
     nextCursor?: string
   ): Promise<string> {
-    console.log(`[MASA CLIENT] Submitting search job: ${searchMethod} for "${query}"`);
 
-    const payload = {
+    const payload: MasaSearchJobPayload = {
       type: sourceType,
       arguments: {
         type: searchMethod,
         query,
         max_results: maxResults,
+        ...(nextCursor && { next_cursor: nextCursor }),
       },
     };
-
-    // Add cursor for pagination if provided
-    if (nextCursor) {
-      payload.arguments.next_cursor = nextCursor;
-    }
 
     try {
       const { data, error } = await this.$fetch('/search/live/twitter', {
@@ -172,25 +177,20 @@ export class MasaClient {
       });
 
       if (error) {
-        console.log(`[MASA CLIENT] API request failed:`, error);
         const errorMessage = typeof error === 'string' ? error : JSON.stringify(error);
         throw new Error(`Masa API error: ${errorMessage}`);
       }
 
       if (data.error) {
-        console.log(`[MASA CLIENT] Masa API returned error:`, data.error);
         throw new Error(`Masa API error: 400`);
       }
 
       if (!data.uuid) {
-        console.log(`[MASA CLIENT] No UUID in response:`, data);
         throw new Error('Masa API did not return a UUID for the submitted job.');
       }
 
-      console.log(`[MASA CLIENT] Job submitted successfully: ${data.uuid}`);
       return data.uuid;
     } catch (fetchError) {
-      console.log(`[MASA CLIENT] Fetch error:`, fetchError);
       // Handle HTTP errors (like 400, 500, etc.)
       if (fetchError instanceof Error && fetchError.message.includes('400')) {
         throw new Error('Masa API error: 400');
@@ -200,7 +200,6 @@ export class MasaClient {
   }
 
   async checkJobStatus(jobId: string): Promise<string> {
-    console.log(`[MASA CLIENT] Checking job status: ${jobId}`);
 
     const { data, error } = await this.$fetch(`/search/live/twitter/status/${jobId}`, {
       method: 'GET',
@@ -211,27 +210,22 @@ export class MasaClient {
     });
 
     if (error) {
-      console.log(`[MASA CLIENT] Status check failed:`, error);
       const errorMessage = typeof error === 'string' ? error : JSON.stringify(error);
       throw new Error(`Network/API Error: ${errorMessage}`);
     }
 
     if (data.error) {
-      console.log(`[MASA CLIENT] Masa API status error:`, data.error);
       throw new Error(`Masa API Error: ${data.error}`);
     }
 
     if (!data.status) {
-      console.log(`[MASA CLIENT] No status in response:`, data);
       throw new Error('Masa API did not return a status for the job.');
     }
 
-    console.log(`[MASA CLIENT] Job status: ${data.status}`);
     return data.status;
   }
 
   async getJobResults(jobId: string): Promise<MasaSearchResult[]> {
-    console.log(`[MASA CLIENT] Getting job results: ${jobId}`);
 
     const { data, error } = await this.$fetch(`/search/live/twitter/result/${jobId}`, {
       method: 'GET',
@@ -242,13 +236,11 @@ export class MasaClient {
     });
 
     if (error) {
-      console.log(`[MASA CLIENT] Results fetch failed:`, error);
       const errorMessage = typeof error === 'string' ? error : JSON.stringify(error);
       throw new Error(`Network/API Error: ${errorMessage}`);
     }
 
     const results = Array.isArray(data) ? data : [];
-    console.log(`[MASA CLIENT] Retrieved ${results.length} results`);
     return results;
   }
 
