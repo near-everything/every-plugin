@@ -53,7 +53,7 @@ export const Route = createRootRoute({
       },
       {
         property: "og:image",
-        content: "/metadata.png",
+        content: "/metadata.jpg",
       },
       // X (Twitter)
       {
@@ -75,7 +75,7 @@ export const Route = createRootRoute({
       },
       {
         property: "twitter:image",
-        content: "/metadata.png",
+        content: "/metadata.jpg",
       },
       // Additional SEO
       {
