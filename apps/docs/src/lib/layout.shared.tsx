@@ -1,5 +1,5 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
-import { BookIcon, CodeIcon, GithubIcon, RocketIcon } from "lucide-react";
+import { BookIcon, CodeIcon, RocketIcon } from "lucide-react";
 
 export function baseOptions(): BaseLayoutProps {
   return {
@@ -34,14 +34,6 @@ export function baseOptions(): BaseLayoutProps {
         url: "/docs/examples",
         icon: <CodeIcon className="w-4 h-4" />,
         active: "nested-url",
-      },
-      {
-        type: "icon",
-        text: "Github",
-        label: "GitHub Repository",
-        icon: <GithubIcon className="w-5 h-5" />,
-        url: "https://github.com/near-everything/run",
-        secondary: true,
       },
     ],
     githubUrl: "https://github.com/near-everything/run",
