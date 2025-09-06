@@ -71,7 +71,7 @@ function Home() {
             </motion.p>
 
             {/* CTA Buttons */}
-            <motion.div
+            {/* <motion.div
               className="flex flex-col sm:flex-row gap-4 mb-16"
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
@@ -91,7 +91,7 @@ function Home() {
               >
                 View Examples
               </Link>
-            </motion.div>
+            </motion.div> */}
           </div>
         </div>
       </div>

@@ -1,7 +1,6 @@
 {
   "title": "Plugins",
   "description": "Building plugins",
-  "root": true,
   "pages": [
     "plugin-structure",
     "orpc-contracts",
