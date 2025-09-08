@@ -1,13 +1,13 @@
 import { Effect, Layer, ManagedRuntime, type Stream } from "effect";
 import type { z } from "zod";
-import { type Plugin, type PluginLogger, PluginLoggerTag } from "../plugin";
+import { Contract, type Plugin, type PluginLogger, PluginLoggerTag } from "../plugin";
 import { PluginRuntimeError } from "./errors";
 import {
 	ModuleFederationService,
 	PluginService,
 	SecretsService,
 } from "./services";
-import { createSourceStream, type StreamingOptions } from "./streaming";
+import { type StreamingOptions } from "./streaming";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
@@ -15,7 +15,6 @@ import type {
 	PluginInstance,
 	PluginRuntimeConfig,
 } from "./types";
-import { validate } from "./validation";
 
 // Default logger implementation
 const createDefaultLogger = (): PluginLogger => ({
@@ -58,7 +57,7 @@ export interface IPluginRuntime {
 		config: z.infer<T["configSchema"]>,
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
 	readonly streamPlugin: <
-		T extends Plugin,
+		T extends Plugin<Contract>,
 		TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
 		TItem = unknown,
 		TPluginState extends z.infer<T["stateSchema"]> = z.infer<T["stateSchema"]>
@@ -95,7 +94,7 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 						config: z.infer<T["configSchema"]>,
 					) => pluginService.usePlugin<T>(pluginId, config),
 					streamPlugin: <
-						T extends Plugin,
+						T extends Plugin<Contract>,
 						TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
 						TItem = unknown,
 						TPluginState extends z.infer<T["stateSchema"]> = z.infer<T["stateSchema"]>

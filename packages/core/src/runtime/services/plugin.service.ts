@@ -1,7 +1,8 @@
-import { call } from "@orpc/server";
+import { AnySchema, ErrorMap, Meta } from "@orpc/contract";
+import { call, Context as OContext, Procedure } from "@orpc/server";
 import { Cache, Duration, Effect, Hash, Layer, Schedule, type Stream } from "effect";
 import type { z } from "zod";
-import { type Plugin, PluginLoggerTag, type PluginRegistry } from "../../plugin";
+import { Contract, type Plugin, PluginLoggerTag, type PluginRegistry } from "../../plugin";
 import { PluginRuntimeError } from "../errors";
 import { createSourceStream, type StreamingOptions } from "../streaming";
 import type {
@@ -35,7 +36,7 @@ export interface IPluginService {
 		config: unknown,
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
 	readonly streamPlugin: <
-		T extends Plugin,
+		T extends Plugin<Contract>,
 		TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
 		TItem = unknown,
 		TPluginState extends z.infer<T["stateSchema"]> = z.infer<T["stateSchema"]>
@@ -346,10 +347,10 @@ export class PluginService extends Effect.Tag("PluginService")<
 							);
 						}
 
-						const context = 'state' in validatedInput ? { state: (validatedInput as any).state } : {};
+						const context = 'state' in validatedInput ? { state: validatedInput.state } : {};
 						const output = yield* Effect.tryPromise({
 							try: () => {
-								const procedure = router[procedureName];
+								const procedure = router[procedureName as keyof typeof router] as Procedure<OContext, OContext, AnySchema, AnySchema, ErrorMap, Meta>;;
 
 								if (!procedure) {
 									throw new Error(`Procedure ${procedureName} not found in router`);
@@ -385,7 +386,7 @@ export class PluginService extends Effect.Tag("PluginService")<
 					executePlugin: executePluginImpl,
 					usePlugin: usePluginImpl,
 					streamPlugin: <
-						T extends Plugin,
+						T extends Plugin<Contract>,
 						TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
 						TItem = unknown,
 						TPluginState extends z.infer<T["stateSchema"]> = z.infer<T["stateSchema"]>

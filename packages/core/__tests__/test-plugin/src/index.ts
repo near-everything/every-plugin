@@ -2,6 +2,7 @@ import { oc } from "@orpc/contract";
 import { implement } from "@orpc/server";
 import { Effect } from "effect";
 import {
+	CommonPluginErrors,
 	ConfigurationError,
 	createConfigSchema,
 	createStateSchema,
@@ -50,7 +51,7 @@ const sourceItemSchema = z.object({
 });
 
 // Contract definition for the source plugin
-export const sourceContract = {
+export const sourceContract = oc.router({
 	// Single item fetch by ID
 	getById: oc
 		.input(z.object({
@@ -58,7 +59,8 @@ export const sourceContract = {
 		}))
 		.output(z.object({
 			item: sourceItemSchema
-		})),
+		}))
+		.errors(CommonPluginErrors),
 
 	// Streamable search operation
 	search: oc
@@ -69,7 +71,8 @@ export const sourceContract = {
 		.output(z.object({
 			items: z.array(sourceItemSchema),
 			nextState: StateSchema
-		})),
+		}))
+		.errors(CommonPluginErrors),
 
 	// Bulk fetch operation
 	getBulk: oc
@@ -78,8 +81,9 @@ export const sourceContract = {
 		}))
 		.output(z.object({
 			items: z.array(sourceItemSchema),
-		})),
-};
+		}))
+		.errors(CommonPluginErrors),
+});
 
 // Export types for use in implementation
 export type SourceContract = typeof sourceContract;
@@ -91,7 +95,7 @@ function generateHistoricalItems(query: string, limit?: number) {
 	if (query === "empty-results" || limit === 0) {
 		return [];
 	}
-	
+
 	const count = limit !== undefined ? Math.min(limit, 3) : 3;
 	return Array.from({ length: count }, (_, i) => ({
 		externalId: `hist_${query}_${i}`,
@@ -109,12 +113,12 @@ function generateRealtimeItems(query: string, lastId: string, limit?: number) {
 	if (query === "empty-results" || limit === 0) {
 		return [];
 	}
-	
+
 	// For mixed-results, sometimes return empty to test stopWhenEmpty=false
 	if (query === "mixed-results" && Math.random() < 0.5) {
 		return [];
 	}
-	
+
 	// Return 0-2 random items to simulate real-time activity
 	const maxCount = limit !== undefined ? Math.min(limit, 2) : 2;
 	const count = Math.floor(Math.random() * (maxCount + 1));
@@ -176,9 +180,10 @@ export class SourceTemplatePlugin extends SimplePlugin<
 	createRouter() {
 		const self = this;
 
-		// State injection middleware for streaming procedures
-		const stateMiddleware = implement(sourceContract)
-			.$context<{ state?: z.infer<typeof StateSchema> }>()
+		const os = implement(sourceContract)
+			.$context<{ state?: z.infer<typeof StateSchema> }>();
+
+		const stateMiddleware = os
 			.middleware(async ({ context, next }) => {
 				console.log(`[TEST-PLUGIN] Middleware called with context:`, JSON.stringify(context, null, 2));
 				const result = await next({
@@ -190,7 +195,6 @@ export class SourceTemplatePlugin extends SimplePlugin<
 				return result;
 			});
 
-		const os = implement(sourceContract);
 
 		// Define individual procedure handlers
 		const getById = os.getById.handler(async ({ input }) => {
@@ -224,6 +228,114 @@ export class SourceTemplatePlugin extends SimplePlugin<
 
 		const search = os.use(stateMiddleware).search.handler(async ({ input, context }) => {
 			const state = context.state;
+
+			// Handle error test cases
+			if (input.query === "trigger-error-state") {
+				return {
+					items: [],
+					nextState: {
+						nextPollMs: null, // Signal termination
+						phase: "error",
+						errorMessage: "Non-retryable error detected in plugin state",
+						errorType: "ConfigurationError",
+					}
+				};
+			}
+
+			if (input.query === "trigger-config-error") {
+				return {
+					items: [],
+					nextState: {
+						nextPollMs: null,
+						phase: "error",
+						errorMessage: "Invalid API configuration",
+						errorType: "ConfigurationError",
+					}
+				};
+			}
+
+			if (input.query === "trigger-non-retryable-execution-error") {
+				return {
+					items: [],
+					nextState: {
+						nextPollMs: null,
+						phase: "error",
+						errorMessage: "Non-retryable execution error",
+						errorType: "PluginExecutionError",
+						retryable: false,
+					}
+				};
+			}
+
+			if (input.query === "401-unauthorized") {
+				return {
+					items: [],
+					nextState: {
+						nextPollMs: null,
+						phase: "error",
+						errorMessage: "401 Unauthorized - Invalid API key",
+						errorType: "ConfigurationError",
+						httpStatus: 401,
+					}
+				};
+			}
+
+			if (input.query === "429-rate-limit") {
+				// First call: return rate limit error
+				if (!state || state.phase !== "retry") {
+					return {
+						items: [],
+						nextState: {
+							nextPollMs: 100, // Retry after delay
+							phase: "retry",
+							errorMessage: "429 Rate Limit - Too many requests",
+							errorType: "PluginExecutionError",
+							retryable: true,
+							httpStatus: 429,
+							retryCount: 1,
+						}
+					};
+				}
+				// Second call: succeed after retry
+				if (state.phase === "retry") {
+					const items = generateHistoricalItems("rate-limit-recovered", input.limit);
+					return {
+						items,
+						nextState: {
+							nextPollMs: null, // Terminate after successful retry
+							phase: "done",
+						}
+					};
+				}
+			}
+
+			if (input.query === "trigger-recoverable-error") {
+				// Simulate recoverable error that eventually succeeds
+				if (!state || state.phase !== "recovered") {
+					return {
+						items: [],
+						nextState: {
+							nextPollMs: 50,
+							phase: "recovered",
+							errorMessage: "Temporary service unavailable",
+							errorType: "PluginExecutionError",
+							retryable: true,
+							httpStatus: 503,
+						}
+					};
+				}
+				// After recovery, return normal results
+				const items = generateHistoricalItems("recovered-data", input.limit);
+				return {
+					items,
+					nextState: {
+						nextPollMs: 50,
+						phase: "realtime",
+						jobId: `recovered_${Date.now()}`,
+						lastId: items.length > 0 ? items[items.length - 1].externalId : undefined,
+					}
+				};
+			}
 
 			// Phase 1: Initial call - return immediate results and set up for streaming
 			if (!state) {

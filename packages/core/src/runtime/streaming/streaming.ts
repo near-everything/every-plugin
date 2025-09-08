@@ -1,6 +1,6 @@
-import { Duration, Effect, Option, Ref, Schedule, Stream } from "effect";
+import { Duration, Effect, Stream } from "effect";
 import type { z } from "zod";
-import type { Plugin } from "../../plugin";
+import type { Contract, Plugin } from "../../plugin";
 import type { PluginRuntimeError } from "../errors";
 import type { InitializedPlugin } from "../types";
 import type { StreamingOptions, StreamState } from "./types";
@@ -34,13 +34,13 @@ const isTerminalState = <TPluginState>(state: TPluginState): boolean => {
 };
 
 export const createSourceStream = <
-  T extends Plugin,
+  T extends Plugin<Contract>,
   TInput extends z.infer<T["inputSchema"]>,
   TItem,
   TPluginState extends z.infer<T["stateSchema"]>
 >(
   initializedPlugin: InitializedPlugin<T>,
-  executePlugin: (plugin: InitializedPlugin<T>, input: TInput) => Effect.Effect<any, PluginRuntimeError>,
+  executePlugin: (plugin: InitializedPlugin<T>, input: TInput) => Effect.Effect<z.infer<T["outputSchema"]>, PluginRuntimeError>,
   input: TInput,
   options: StreamingOptions<TItem, TPluginState> = {},
 ): Stream.Stream<TItem, PluginRuntimeError> => {
@@ -85,12 +85,12 @@ export const createSourceStream = <
 
           const rawResult = await Effect.runPromise(executePlugin(initializedPlugin, pluginInput));
           console.log(`[STREAMING] Plugin execution completed`);
-          
+
           // Transform raw plugin result to streaming format
           const resultObj = rawResult as Record<string, unknown>;
           const items: TItem[] = Array.isArray(resultObj.items) ? resultObj.items as TItem[] : [];
           const nextPluginState = resultObj.nextState as TPluginState;
-          
+
           console.log(`[STREAMING] Transformed result: ${items.length} items`);
 
           // Update stream state (increment AFTER execution)

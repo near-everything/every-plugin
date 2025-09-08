@@ -1,6 +1,9 @@
+import type { ContractRouter, Meta } from "@orpc/server";
 import { Context, Effect } from "effect";
 import { z } from "zod";
 import type { ConfigurationError } from "./errors";
+
+export type Contract = ContractRouter<Meta>;
 
 export function createConfigSchema<
 	V extends z.ZodTypeAny,
@@ -61,16 +64,67 @@ export class PluginLoggerTag extends Context.Tag("PluginLogger")<
 >() { }
 
 /**
+ * Common error schemas that all plugins can use
+ * These provide consistent error handling across the plugin ecosystem
+ */
+export const CommonPluginErrors = {
+	UNAUTHORIZED: {
+		data: z.object({
+			apiKeyProvided: z.boolean(),
+			provider: z.string().optional(),
+			authType: z.enum(['apiKey', 'oauth', 'token']).optional(),
+		})
+	},
+	RATE_LIMITED: {
+		data: z.object({
+			retryAfter: z.number().int().min(1),
+			remainingRequests: z.number().int().min(0).optional(),
+			resetTime: z.string().datetime().optional(),
+			limitType: z.enum(['requests', 'tokens', 'bandwidth']).optional(),
+		})
+	},
+	SERVICE_UNAVAILABLE: {
+		data: z.object({
+			retryAfter: z.number().int().optional(),
+			maintenanceWindow: z.boolean().default(false),
+			estimatedUptime: z.string().datetime().optional(),
+		})
+	},
+	BAD_REQUEST: {
+		data: z.object({
+			invalidFields: z.array(z.string()).optional(),
+			validationErrors: z.array(z.object({
+				field: z.string(),
+				message: z.string(),
+				code: z.string().optional(),
+			})).optional(),
+		})
+	},
+	NOT_FOUND: {
+		data: z.object({
+			resource: z.string().optional(),
+			resourceId: z.string().optional(),
+		})
+	},
+	FORBIDDEN: {
+		data: z.object({
+			requiredPermissions: z.array(z.string()).optional(),
+			action: z.string().optional(),
+		})
+	}
+};
+
+/**
  * Schema creators for contract-based plugins
  */
 export function createPluginInputSchema<
-	TContract,
+	TContract extends Contract,
 	TStateSchema extends z.ZodTypeAny,
 >(
 	contract: TContract,
 	stateSchema: TStateSchema,
 ) {
-	const contractEntries = Object.entries(contract as Record<string, any>);
+	const contractEntries = Object.entries(contract);
 
 	const procedureSchemas = contractEntries.map(([procedureName, procedureSpec]) => {
 		// Extract input and output schemas from oRPC contract procedure
@@ -95,7 +149,7 @@ export function createPluginInputSchema<
 }
 
 export function createPluginOutputSchema<
-	TContract,
+	TContract extends Contract,
 	TStateSchema extends z.ZodTypeAny,
 >(
 	contract: TContract,
@@ -116,7 +170,7 @@ export function createPluginOutputSchema<
  * Unified Plugin interface for all plugin types
  */
 export interface Plugin<
-	TContract = Record<string, any>,
+	TContract extends Contract,
 	TConfigSchema extends z.ZodTypeAny = z.ZodTypeAny,
 	TStateSchema extends z.ZodTypeAny = z.ZodNull,
 > {
@@ -134,7 +188,7 @@ export interface Plugin<
 
 	shutdown(): Effect.Effect<void, never, PluginLoggerTag>;
 
-	createRouter(): any; // Returns oRPC router
+	createRouter(): Contract
 
 	isStreamable(procedureName: string): boolean;
 }
@@ -185,7 +239,7 @@ export const pipe = <T>(value: T, ...fns: Array<(val: T) => T>): T =>
  * Plugin just needs to define contract, config, and create oRPC router
  */
 export abstract class SimplePlugin<
-	TContract,
+	TContract extends Contract,
 	TConfigSchema extends z.ZodTypeAny,
 	TStateSchema extends z.ZodTypeAny = z.ZodNull
 > implements Plugin<TContract, TConfigSchema, TStateSchema> {
@@ -195,6 +249,8 @@ export abstract class SimplePlugin<
 	abstract readonly configSchema: TConfigSchema;
 
 	readonly stateSchema = z.null() as unknown as TStateSchema;
+
+
 
 	// Auto-generated schemas
 	get inputSchema() {
@@ -211,7 +267,7 @@ export abstract class SimplePlugin<
 	}
 
 	// Plugin implements this to return pure oRPC router following oRPC docs pattern
-	abstract createRouter(): any; // Returns oRPC router directly
+	abstract createRouter(): Contract
 
 	shutdown(): Effect.Effect<void, never, PluginLoggerTag> {
 		return Effect.void;
