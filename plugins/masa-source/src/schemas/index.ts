@@ -1,23 +1,6 @@
 import { oc } from "@orpc/contract";
-import { createConfigSchema } from "every-plugin";
+import { createConfigSchema, CommonPluginErrors } from "every-plugin";
 import { z } from "zod";
-
-// State schema for async job management and pagination
-export const StateSchema = z.object({
-  // For async job workflows (live/historical search)
-  phase: z.enum(['submitted', 'processing', 'done', 'error']).optional(),
-  jobId: z.string().optional(),
-  searchMethod: z.string().optional(),
-  sourceType: z.string().optional(),
-  
-  // For pagination/streaming
-  lastProcessedId: z.string().optional(),
-  nextCursor: z.string().optional(),
-  nextPollMs: z.number().nullable().optional(),
-  
-  // Error handling
-  errorMessage: z.string().optional(),
-}).nullable();
 
 // Source item schema that plugins return
 const sourceItemSchema = z.object({
@@ -57,6 +40,38 @@ const MasaSearchMethodSchema = z.enum([
 
 // Contract definition for the Masa source plugin
 export const masaContract = {
+  // Core job operations for async search
+  submitSearchJob: oc
+    .input(z.object({
+      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
+      searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
+      query: z.string(),
+      maxResults: z.number().min(1).max(500).optional().default(10),
+      nextCursor: z.string().optional(),
+    }))
+    .output(z.object({
+      jobId: z.string()
+    }))
+    .errors(CommonPluginErrors),
+
+  checkJobStatus: oc
+    .input(z.object({
+      jobId: z.string(),
+    }))
+    .output(z.object({
+      status: z.enum(['submitted', 'in progress', 'done', 'error'])
+    }))
+    .errors(CommonPluginErrors),
+
+  getJobResults: oc
+    .input(z.object({
+      jobId: z.string(),
+    }))
+    .output(z.object({
+      items: z.array(sourceItemSchema)
+    }))
+    .errors(CommonPluginErrors),
+
   // Single item fetch by ID
   getById: oc
     .input(z.object({
@@ -65,7 +80,8 @@ export const masaContract = {
     }))
     .output(z.object({
       item: sourceItemSchema
-    })),
+    }))
+    .errors(CommonPluginErrors),
 
   // Bulk fetch operation
   getBulk: oc
@@ -75,21 +91,8 @@ export const masaContract = {
     }))
     .output(z.object({
       items: z.array(sourceItemSchema),
-    })),
-
-  // Main search operation (async jobs with polling)
-  search: oc
-    .input(z.object({
-      query: z.string(),
-      searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
-      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
-      maxResults: z.number().min(1).max(500).optional().default(10),
-      nextCursor: z.string().optional(),
     }))
-    .output(z.object({
-      items: z.array(sourceItemSchema),
-      nextState: StateSchema
-    })),
+    .errors(CommonPluginErrors),
 
   // Instant similarity search (vector-based)
   similaritySearch: oc
@@ -102,7 +105,8 @@ export const masaContract = {
     }))
     .output(z.object({
       items: z.array(sourceItemSchema),
-    })),
+    }))
+    .errors(CommonPluginErrors),
 
   // Instant hybrid search (semantic + keyword)
   hybridSearch: oc
@@ -122,7 +126,8 @@ export const masaContract = {
     }))
     .output(z.object({
       items: z.array(sourceItemSchema),
-    })),
+    }))
+    .errors(CommonPluginErrors),
 
   // Profile operations
   getProfile: oc
@@ -143,7 +148,8 @@ export const masaContract = {
         profileImageUrl: z.string().optional(),
         raw: z.unknown(),
       })
-    })),
+    }))
+    .errors(CommonPluginErrors),
 
   // Get trending topics
   getTrends: oc
@@ -157,7 +163,8 @@ export const masaContract = {
         tweetVolume: z.number().optional(),
         raw: z.unknown(),
       }))
-    })),
+    }))
+    .errors(CommonPluginErrors),
 };
 
 // Export types for use in implementation

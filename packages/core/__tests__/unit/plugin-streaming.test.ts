@@ -424,4 +424,129 @@ describe("Plugin Streaming Unit Tests", () => {
       expect(branches.length).toBeGreaterThan(0);
     }).pipe(Effect.provide(testLayer), Effect.timeout("6 seconds"))
   );
+
+  // New streaming error handling tests
+  it.effect("should terminate stream immediately on non-retryable errors", () =>
+    Effect.gen(function* () {
+      const pluginRuntime = yield* PluginRuntime;
+
+      // Test 401 UNAUTHORIZED - should terminate immediately
+      yield* pluginRuntime.streamPlugin(
+        "test-plugin",
+        TEST_CONFIG,
+        {
+          procedure: "search" as const,
+          input: { query: "401-unauthorized" },
+          state: null,
+        },
+        {
+          maxInvocations: 10 // High limit - should terminate before reaching this
+        }
+      ).pipe(
+        Stream.runCollect,
+        Effect.catchAll((error: any) => {
+          expect(error.message).toContain("UNAUTHORIZED");
+          expect(error.retryable).toBe(false);
+          return Effect.succeed("unauthorized-error-handled");
+        })
+      );
+
+      // Test 403 FORBIDDEN - should terminate immediately  
+      yield* pluginRuntime.streamPlugin(
+        "test-plugin",
+        TEST_CONFIG,
+        {
+          procedure: "search" as const,
+          input: { query: "403-forbidden" },
+          state: null,
+        },
+        {
+          maxInvocations: 10
+        }
+      ).pipe(
+        Stream.runCollect,
+        Effect.catchAll((error: any) => {
+          expect(error.message).toContain("FORBIDDEN");
+          expect(error.retryable).toBe(false);
+          return Effect.succeed("forbidden-error-handled");
+        })
+      );
+
+      // Test 400 BAD_REQUEST - should terminate immediately
+      yield* pluginRuntime.streamPlugin(
+        "test-plugin",
+        TEST_CONFIG,
+        {
+          procedure: "search" as const,
+          input: { query: "400-bad-request" },
+          state: null,
+        },
+        {
+          maxInvocations: 10
+        }
+      ).pipe(
+        Stream.runCollect,
+        Effect.catchAll((error: any) => {
+          expect(error.message).toContain("BAD_REQUEST");
+          expect(error.retryable).toBe(false);
+          return Effect.succeed("bad-request-error-handled");
+        })
+      );
+
+      // If we reach here, all error handling worked correctly
+      return "all-non-retryable-errors-handled-correctly";
+    }).pipe(Effect.provide(testLayer), Effect.timeout("4 seconds"))
+  );
+
+  it.effect("should classify UNAUTHORIZED as PluginConfigurationError", () =>
+    Effect.gen(function* () {
+      const pluginRuntime = yield* PluginRuntime;
+
+      return yield* pluginRuntime.streamPlugin(
+        "test-plugin",
+        TEST_CONFIG,
+        {
+          procedure: "search" as const,
+          input: { query: "401-unauthorized" },
+          state: null,
+        }
+      ).pipe(
+        Stream.runCollect,
+        Effect.catchAll((error: any) => {
+          // Verify error classification
+          expect(error).toBeInstanceOf(Error);
+          expect(error.name).toBe("PluginConfigurationError");
+          expect(error.message).toContain("UNAUTHORIZED");
+          expect(error.retryable).toBe(false);
+          return Effect.succeed("error-classified-correctly");
+        })
+      );
+    }).pipe(Effect.provide(testLayer), Effect.timeout("4 seconds"))
+  );
+
+  it.effect("should mark RATE_LIMITED as retryable PluginExecutionError", () =>
+    Effect.gen(function* () {
+      const pluginRuntime = yield* PluginRuntime;
+
+      return yield* pluginRuntime.streamPlugin(
+        "test-plugin",
+        TEST_CONFIG,
+        {
+          procedure: "search" as const,
+          input: { query: "429-rate-limit" },
+          state: null,
+        }
+      ).pipe(
+        Stream.runCollect,
+        Effect.catchAll((error: any) => {
+          // Verify error classification for retryable errors
+          expect(error).toBeInstanceOf(Error);
+          expect(error.name).toBe("PluginExecutionError");
+          expect(error.message).toContain("RATE_LIMITED");
+          expect(error.retryable).toBe(true); // Key test - should be retryable
+          return Effect.succeed("retryable-error-classified-correctly");
+        })
+      );
+    }).pipe(Effect.provide(testLayer), Effect.timeout("4 seconds"))
+  );
 });

@@ -1,8 +1,19 @@
-import { createFetch } from '@better-fetch/fetch';
+import { BetterFetchOption, createFetch } from '@better-fetch/fetch';
 import { z } from 'zod';
 import type { MasaSearchMethod, MasaSourceType } from './schemas';
 
-// Response schemas for better-fetch validation
+export class MasaApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly context?: string
+  ) {
+    super(message);
+    this.name = 'MasaApiError';
+  }
+}
+
+// Response schemas
 const MasaJobResponseSchema = z.object({
   uuid: z.string().optional(),
   error: z.string().optional()
@@ -39,18 +50,9 @@ const MasaSearchResultSchema = z.object({
     username: z.string().optional(),
   }).optional(),
   updated_at: z.string().optional(),
-}).passthrough(); // Allow additional fields
+}).passthrough();
 
-export interface MasaJobResponse {
-  uuid: string;
-  error?: string;
-}
-
-export interface MasaJobStatusResponse {
-  status: string;
-  error?: string;
-}
-
+// Types
 export interface MasaSimilaritySearchOptions {
   query: string;
   sources?: string[];
@@ -60,28 +62,12 @@ export interface MasaSimilaritySearchOptions {
 }
 
 export interface MasaHybridSearchOptions {
-  similarity_query: {
-    query: string;
-    weight: number;
-  };
-  text_query: {
-    query: string;
-    weight: number;
-  };
+  similarity_query: { query: string; weight: number };
+  text_query: { query: string; weight: number };
   sources?: string[];
   keywords?: string[];
   keyword_operator?: 'and' | 'or';
   max_results?: number;
-}
-
-export interface MasaSearchJobPayload {
-  type: MasaSourceType;
-  arguments: {
-    type: MasaSearchMethod;
-    query: string;
-    max_results: number;
-    next_cursor?: string;
-  };
 }
 
 export interface MasaSearchResult {
@@ -113,40 +99,57 @@ export interface MasaSearchResult {
   [key: string]: unknown;
 }
 
-
 export class MasaClient {
-  private baseUrl: string;
-  private apiKey: string;
-  private timeout: number;
   private $fetch: ReturnType<typeof createFetch>;
 
-  constructor(baseUrl: string, apiKey: string, timeout = 30000) {
-    this.baseUrl = baseUrl;
-    this.apiKey = apiKey;
-    this.timeout = timeout;
-
-    if (!this.apiKey) {
-      console.warn("Masa API key was not provided to MasaClient. API calls will fail.");
-    }
-
-    // Create better-fetch instance with retry logic
+  constructor(
+    private baseUrl: string,
+    private apiKey: string,
+    private timeout = 30000
+  ) {
     this.$fetch = createFetch({
       baseURL: this.baseUrl,
-      retry: {
-        type: "exponential",
-        attempts: 3,
-        baseDelay: 1000,
-        maxDelay: 10000
-      },
-      timeout: this.timeout > 0 ? this.timeout : 30000 // Ensure valid timeout
+      retry: { type: "exponential", attempts: 3, baseDelay: 1000, maxDelay: 10000 },
+      timeout: this.timeout > 0 ? this.timeout : 30000,
+      plugins: [
+      ],
     });
+  }
+
+  // Generic request method - handles all common logic
+  private async request<T>(endpoint: string, options: {
+    method: 'GET' | 'POST';
+    body?: unknown;
+    schema: z.ZodSchema<T>;
+    context?: string;
+  }): Promise<T> {
+    const requestOptions: BetterFetchOption = {
+      method: options.method,
+      headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+      output: options.schema,
+    };
+
+    if (options.body) {
+      requestOptions.body = JSON.stringify(options.body);
+    }
+
+    const { data, error } = await this.$fetch(endpoint, requestOptions);
+
+    if (error) {
+      throw new MasaApiError(
+        error.message || error.statusText || 'Unknown API error',
+        error.status,
+        options.context
+      );
+    }
+
+    return data as T;
   }
 
   async healthCheck(): Promise<string> {
     return "OK";
   }
 
-  // Async job methods for live/historical search
   async submitSearchJob(
     sourceType: MasaSourceType,
     searchMethod: MasaSearchMethod,
@@ -154,190 +157,81 @@ export class MasaClient {
     maxResults: number,
     nextCursor?: string
   ): Promise<string> {
-
-    const payload: MasaSearchJobPayload = {
-      type: sourceType,
-      arguments: {
-        type: searchMethod,
-        query,
-        max_results: maxResults,
-        ...(nextCursor && { next_cursor: nextCursor }),
+    const data = await this.request('/search/live', {
+      method: 'POST',
+      body: {
+        type: sourceType,
+        arguments: { type: searchMethod, query, max_results: maxResults, ...(nextCursor && { next_cursor: nextCursor }) }
       },
-    };
+      schema: MasaJobResponseSchema,
+      context: 'Submit search job'
+    });
 
-    try {
-      const { data, error } = await this.$fetch('/search/live/twitter', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: payload,
-        output: MasaJobResponseSchema,
-      });
-
-      if (error) {
-        const errorMessage = typeof error === 'string' ? error : JSON.stringify(error);
-        throw new Error(`Masa API error: ${errorMessage}`);
-      }
-
-      if (data.error) {
-        throw new Error(`Masa API error: 400`);
-      }
-
-      if (!data.uuid) {
-        throw new Error('Masa API did not return a UUID for the submitted job.');
-      }
-
-      return data.uuid;
-    } catch (fetchError) {
-      // Handle HTTP errors (like 400, 500, etc.)
-      if (fetchError instanceof Error && fetchError.message.includes('400')) {
-        throw new Error('Masa API error: 400');
-      }
-      throw fetchError;
+    if (data.error) {
+      throw new MasaApiError(`Invalid request: ${data.error}`, 400, 'Submit search job');
     }
+
+    if (!data.uuid) {
+      throw new MasaApiError('API did not return a job UUID', 503, 'Submit search job');
+    }
+
+    return data.uuid;
   }
 
   async checkJobStatus(jobId: string): Promise<string> {
-
-    const { data, error } = await this.$fetch(`/search/live/twitter/status/${jobId}`, {
+    const data = await this.request(`/search/live/status/${jobId}`, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      output: MasaJobStatusResponseSchema,
+      schema: MasaJobStatusResponseSchema,
+      context: `Check job status for ${jobId}`
     });
 
-    if (error) {
-      const errorMessage = typeof error === 'string' ? error : JSON.stringify(error);
-      throw new Error(`Network/API Error: ${errorMessage}`);
-    }
-
     if (data.error) {
-      throw new Error(`Masa API Error: ${data.error}`);
+      throw new MasaApiError(`API error: ${data.error}`, 503, `Check job status for ${jobId}`);
     }
 
     if (!data.status) {
-      throw new Error('Masa API did not return a status for the job.');
+      throw new MasaApiError('API did not return job status', 503, `Check job status for ${jobId}`);
     }
 
-    return data.status;
+    // Normalize API status values to contract-expected values
+    let normalizedStatus = data.status;
+    if (data.status === 'done(saved)') {
+      normalizedStatus = 'done';
+    }
+
+    return normalizedStatus;
   }
 
   async getJobResults(jobId: string): Promise<MasaSearchResult[]> {
-
-    const { data, error } = await this.$fetch(`/search/live/twitter/result/${jobId}`, {
+    const data = await this.request(`/search/live/result/${jobId}`, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      output: z.array(MasaSearchResultSchema),
+      schema: z.array(MasaSearchResultSchema),
+      context: `Get job results for ${jobId}`
     });
 
-    if (error) {
-      const errorMessage = typeof error === 'string' ? error : JSON.stringify(error);
-      throw new Error(`Network/API Error: ${errorMessage}`);
-    }
-
-    const results = Array.isArray(data) ? data : [];
-    return results;
+    return Array.isArray(data) ? data : [];
   }
 
-  // Instant search methods
   async similaritySearch(options: MasaSimilaritySearchOptions): Promise<MasaSearchResult[]> {
-    const url = `${this.baseUrl}/search/similarity`;
-
-    const response = await fetch(url, {
+    const results = await this.request('/search/similarity', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(options),
-      signal: AbortSignal.timeout(this.timeout),
+      body: options,
+      schema: z.array(MasaSearchResultSchema),
+      context: 'Similarity search'
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Masa similarity search error: ${response.status} ${errorText}`);
-    }
-
-    const results: MasaSearchResult[] = await response.json();
     return Array.isArray(results) ? results : [];
   }
 
   async hybridSearch(options: MasaHybridSearchOptions): Promise<MasaSearchResult[]> {
-    const url = `${this.baseUrl}/search/hybrid`;
-
-    const response = await fetch(url, {
+    const results = await this.request('/search/hybrid', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(options),
-      signal: AbortSignal.timeout(this.timeout),
+      body: options,
+      schema: z.array(MasaSearchResultSchema),
+      context: 'Hybrid search'
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Masa hybrid search error: ${response.status} ${errorText}`);
-    }
-
-    const results: MasaSearchResult[] = await response.json();
     return Array.isArray(results) ? results : [];
   }
 
-  // Single item fetch by ID
-  async getById(sourceType: MasaSourceType, id: string): Promise<MasaSearchResult> {
-    // Use the getbyid search method
-    const jobId = await this.submitSearchJob(sourceType, 'getbyid', id, 1);
-
-    // Poll for completion
-    let status = 'submitted';
-    let attempts = 0;
-    const maxAttempts = 30; // 30 seconds max wait
-
-    while (status !== 'done' && status !== 'error' && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-      status = await this.checkJobStatus(jobId);
-      attempts++;
-    }
-
-    if (status === 'error') {
-      throw new Error(`Job failed for ID ${id}`);
-    }
-
-    if (status !== 'done') {
-      throw new Error(`Job timeout for ID ${id}`);
-    }
-
-    const results = await this.getJobResults(jobId);
-
-    if (results.length === 0) {
-      throw new Error(`No results found for ID ${id}`);
-    }
-
-    return results[0];
-  }
-
-  // Bulk fetch by IDs
-  async getBulk(sourceType: MasaSourceType, ids: string[]): Promise<MasaSearchResult[]> {
-    // For bulk operations, we'll need to make individual requests
-    // In a real implementation, you might batch these or use a different endpoint
-    const results: MasaSearchResult[] = [];
-
-    for (const id of ids) {
-      try {
-        const result = await this.getById(sourceType, id);
-        results.push(result);
-      } catch (error) {
-        console.warn(`Failed to fetch ID ${id}:`, error);
-        // Continue with other IDs
-      }
-    }
-
-    return results;
-  }
 }

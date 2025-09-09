@@ -1,17 +1,9 @@
 import { Duration, Effect, Stream } from "effect";
 import type { z } from "zod";
 import type { Contract, Plugin } from "../../plugin";
-import type { PluginRuntimeError } from "../errors";
+import { type PluginRuntimeError, toPluginRuntimeError } from "../errors";
 import type { InitializedPlugin } from "../types";
 import type { StreamingOptions, StreamState } from "./types";
-
-/**
- * Plugin execution result interface
- */
-interface PluginExecutionResult<TItem, TPluginState> {
-  items: TItem[];
-  nextState: TPluginState;
-}
 
 /**
  * Extract delay from plugin state (nextPollMs field)
@@ -83,7 +75,14 @@ export const createSourceStream = <
           console.log(`[STREAMING] About to execute plugin with input:`, JSON.stringify(pluginInput, null, 2));
           console.log(`[STREAMING] Plugin state:`, JSON.stringify(currentStreamState.pluginState, null, 2));
 
-          const rawResult = await Effect.runPromise(executePlugin(initializedPlugin, pluginInput));
+          const rawResult = await Effect.runPromise(
+            executePlugin(initializedPlugin, pluginInput).pipe(
+              Effect.catchAll((error) => {
+                return toPluginRuntimeError(error);
+              })
+            )
+          );
+
           console.log(`[STREAMING] Plugin execution completed`);
 
           // Transform raw plugin result to streaming format

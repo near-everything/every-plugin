@@ -17,7 +17,7 @@ const mockMasaResponses = {
         username: 'testuser',
         user_id: 'user-456',
         author: 'Test User',
-        tweet_id: 1234567890123456000,
+        tweet_id: 1234567890123456,
         likes: 5,
         public_metrics: {
           like_count: 5,
@@ -37,7 +37,7 @@ const mockMasaResponses = {
         username: 'aiexpert',
         user_id: 'user-789',
         author: 'AI Expert',
-        tweet_id: 1234567890123456001,
+        tweet_id: 1234567890123457,
         likes: 3,
         public_metrics: {
           like_count: 3,
@@ -59,7 +59,7 @@ const mockMasaResponses = {
         username: 'cryptouser',
         user_id: 'user-crypto',
         author: 'Crypto User',
-        tweet_id: 1234567890123456002,
+        tweet_id: 1234567890123458,
         likes: 10
       },
       updated_at: '2024-01-15T09:00:00Z'
@@ -75,7 +75,7 @@ const mockMasaResponses = {
         username: 'techwriter',
         user_id: 'user-tech',
         author: 'Tech Writer',
-        tweet_id: 1234567890123456003,
+        tweet_id: 1234567890123459,
         likes: 7
       },
       updated_at: '2024-01-15T08:30:00Z'

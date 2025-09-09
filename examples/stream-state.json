@@ -1,5 +1,6 @@
 {
-  "phase": "error",
-  "nextPollMs": null,
-  "errorMessage": "Masa API error: {\"error\":\"Unauthorized\",\"details\":\"Invalid API key\",\"status\":401,\"statusText\":\"Unauthorized\"}"
+  "phase": "live",
+  "searchMethod": "searchbyquery",
+  "totalItems": 100,
+  "jobId": "880659c6-f59e-43b1-b81f-cd661d408f6f"
 }

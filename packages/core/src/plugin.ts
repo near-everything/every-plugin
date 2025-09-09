@@ -1,7 +1,7 @@
 import type { ContractRouter, Meta } from "@orpc/server";
 import { Context, Effect } from "effect";
 import { z } from "zod";
-import type { ConfigurationError } from "./errors";
+import type { PluginConfigurationError } from "./errors";
 
 export type Contract = ContractRouter<Meta>;
 
@@ -155,7 +155,7 @@ export function createPluginOutputSchema<
 	contract: TContract,
 	stateSchema: TStateSchema,
 ) {
-	const contractEntries = Object.entries(contract as Record<string, any>);
+	const contractEntries = Object.entries(contract);
 
 	const procedureOutputSchemas = contractEntries.map(([_, procedureSpec]) => {
 		// Extract output schema from oRPC contract procedure
@@ -184,7 +184,7 @@ export interface Plugin<
 
 	initialize(
 		config?: z.infer<TConfigSchema>,
-	): Effect.Effect<void, ConfigurationError, PluginLoggerTag>;
+	): Effect.Effect<void, PluginConfigurationError, PluginLoggerTag>;
 
 	shutdown(): Effect.Effect<void, never, PluginLoggerTag>;
 
@@ -262,7 +262,7 @@ export abstract class SimplePlugin<
 	}
 
 	// Default implementations - runtime handles validation
-	initialize(config?: z.infer<TConfigSchema>): Effect.Effect<void, ConfigurationError, PluginLoggerTag> {
+	initialize(config?: z.infer<TConfigSchema>): Effect.Effect<void, PluginConfigurationError, PluginLoggerTag> {
 		return Effect.void;
 	}
 
@@ -275,7 +275,7 @@ export abstract class SimplePlugin<
 
 	// Default streamable detection
 	isStreamable(procedureName: string): boolean {
-		const contractEntries = Object.entries(this.contract as Record<string, any>);
+		const contractEntries = Object.entries(this.contract);
 		const procedure = contractEntries.find(([name]) => name === procedureName);
 		if (!procedure) return false;
 

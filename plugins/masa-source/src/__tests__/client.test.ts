@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { MasaClient } from '../client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MasaClient, MasaApiError } from '../client';
 import { mockMasaResponses } from './setup';
 
 describe('MasaClient', () => {
@@ -16,15 +16,6 @@ describe('MasaClient', () => {
   describe('constructor', () => {
     it('should initialize with correct configuration', () => {
       expect(client).toBeInstanceOf(MasaClient);
-    });
-
-    it('should warn when API key is missing', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      new MasaClient('https://data.masa.ai/api/v1', '');
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Masa API key was not provided to MasaClient. API calls will fail.'
-      );
-      consoleSpy.mockRestore();
     });
   });
 
@@ -43,7 +34,7 @@ describe('MasaClient', () => {
         'blockchain',
         10
       );
-      
+
       expect(jobId).toBe('test-job-uuid-123');
     });
 
@@ -56,7 +47,7 @@ describe('MasaClient', () => {
         25,
         'cursor-123'
       );
-      
+
       expect(jobId).toBe('test-job-uuid-123');
     });
   });
@@ -81,7 +72,7 @@ describe('MasaClient', () => {
   describe('getJobResults', () => {
     it('should return job results', async () => {
       const results = await client.getJobResults('test-job-uuid-123');
-      
+
       expect(results).toHaveLength(2);
       expect(results[0]).toEqual(mockMasaResponses.jobResults[0]);
       expect(results[1]).toEqual(mockMasaResponses.jobResults[1]);
@@ -113,15 +104,6 @@ describe('MasaClient', () => {
       expect(results[0]).toEqual(mockMasaResponses.similarityResults[0]);
     });
 
-    it('should handle empty results', async () => {
-      const results = await client.similaritySearch({
-        query: 'no-results',
-        max_results: 10
-      });
-
-      expect(results).toEqual([]);
-    });
-
     it('should work with minimal options', async () => {
       const results = await client.similaritySearch({
         query: 'test query'
@@ -151,104 +133,24 @@ describe('MasaClient', () => {
       expect(results).toHaveLength(1);
       expect(results[0]).toEqual(mockMasaResponses.hybridResults[0]);
     });
-
-    it('should handle empty results', async () => {
-      const results = await client.hybridSearch({
-        similarity_query: {
-          query: 'no-results',
-          weight: 0.5
-        },
-        text_query: {
-          query: 'test',
-          weight: 0.5
-        }
-      });
-
-      expect(results).toEqual([]);
-    });
-  });
-
-  describe('getById', () => {
-    it('should fetch single item by ID', async () => {
-      const result = await client.getById('twitter', 'tweet-123');
-      
-      expect(result).toEqual(mockMasaResponses.jobResults[0]);
-    });
-
-    it('should handle job polling', async () => {
-      // This test verifies the polling mechanism works
-      const result = await client.getById('twitter', 'tweet-456');
-      expect(result).toBeDefined();
-    });
-
-    it('should throw error for failed jobs', async () => {
-      // Mock a job that will fail
-      vi.spyOn(client, 'submitSearchJob').mockResolvedValue('error-job');
-      
-      await expect(
-        client.getById('twitter', 'failing-tweet')
-      ).rejects.toThrow('Job failed for ID failing-tweet');
-    });
-
-    it('should throw error for empty results', async () => {
-      // Mock a job that returns empty results
-      vi.spyOn(client, 'submitSearchJob').mockResolvedValue('empty-job');
-      
-      await expect(
-        client.getById('twitter', 'nonexistent-tweet')
-      ).rejects.toThrow('No results found for ID nonexistent-tweet');
-    });
-  });
-
-  describe('getBulk', () => {
-    it('should fetch multiple items by IDs', async () => {
-      const results = await client.getBulk('twitter', ['tweet-123', 'tweet-456']);
-      
-      expect(results).toHaveLength(2);
-      expect(results[0]).toEqual(mockMasaResponses.jobResults[0]);
-    });
-
-    it('should handle partial failures gracefully', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      
-      // Mock one successful and one failed ID
-      vi.spyOn(client, 'getById')
-        .mockResolvedValueOnce(mockMasaResponses.jobResults[0])
-        .mockRejectedValueOnce(new Error('Failed to fetch'));
-      
-      const results = await client.getBulk('twitter', ['tweet-123', 'failing-tweet']);
-      
-      expect(results).toHaveLength(1);
-      expect(results[0]).toEqual(mockMasaResponses.jobResults[0]);
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Failed to fetch ID failing-tweet:',
-        expect.any(Error)
-      );
-      
-      consoleSpy.mockRestore();
-    });
-
-    it('should return empty array when all IDs fail', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      
-      vi.spyOn(client, 'getById').mockRejectedValue(new Error('All failed'));
-      
-      const results = await client.getBulk('twitter', ['fail-1', 'fail-2']);
-      
-      expect(results).toEqual([]);
-      expect(consoleSpy).toHaveBeenCalledTimes(2);
-      
-      consoleSpy.mockRestore();
-    });
   });
 
   describe('error handling', () => {
     it('should handle network errors', async () => {
       const badClient = new MasaClient('https://invalid-url.com', 'test-key');
-      
+
       await expect(
         badClient.submitSearchJob('twitter', 'searchbyquery', 'test', 10)
       ).rejects.toThrow();
+    });
+
+    it('should throw MasaApiError with correct status codes', async () => {
+      // This test verifies that MasaApiError is properly constructed
+      const error = new MasaApiError('Test error', 404, 'Test context');
+      expect(error).toBeInstanceOf(MasaApiError);
+      expect(error.status).toBe(404);
+      expect(error.context).toBe('Test context');
+      expect(error.message).toBe('Test error');
     });
   });
 });

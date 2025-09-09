@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@better-fetch/fetch": "^1.1.18",
+    "@better-fetch/logger": "^1.1.18",
     "@orpc/contract": "^1.8.6"
   }
 }

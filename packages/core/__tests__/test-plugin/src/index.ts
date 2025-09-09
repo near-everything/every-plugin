@@ -1,14 +1,14 @@
 import { oc } from "@orpc/contract";
 import { implement } from "@orpc/server";
 import { Effect } from "effect";
+import { z } from "zod";
 import {
 	CommonPluginErrors,
-	ConfigurationError,
 	createConfigSchema,
 	createStateSchema,
+	PluginConfigurationError,
 	SimplePlugin
-} from "every-plugin";
-import { z } from "zod";
+} from "../../../src/index";
 import { SourceTemplateClient } from "./client";
 
 // Configuration schemas
@@ -91,10 +91,6 @@ export type SourceItem = z.infer<typeof sourceItemSchema>;
 
 // Add missing helper functions
 function generateHistoricalItems(query: string, limit?: number) {
-	// Handle special test cases
-	if (query === "empty-results" || limit === 0) {
-		return [];
-	}
 
 	const count = limit !== undefined ? Math.min(limit, 3) : 3;
 	return Array.from({ length: count }, (_, i) => ({
@@ -109,10 +105,6 @@ function generateHistoricalItems(query: string, limit?: number) {
 }
 
 function generateRealtimeItems(query: string, lastId: string, limit?: number) {
-	// Handle special test cases
-	if (query === "empty-results" || limit === 0) {
-		return [];
-	}
 
 	// For mixed-results, sometimes return empty to test stopWhenEmpty=false
 	if (query === "mixed-results" && Math.random() < 0.5) {
@@ -154,7 +146,7 @@ export class SourceTemplatePlugin extends SimplePlugin<
 		const self = this;
 		return Effect.gen(function* () {
 			if (!config?.secrets?.apiKey) {
-				return yield* Effect.fail(new ConfigurationError("API key is required"));
+				return yield* Effect.fail(new PluginConfigurationError({ message: "API key is required", retryable: false }));
 			}
 
 			// Initialize SourceTemplate client
@@ -166,7 +158,7 @@ export class SourceTemplatePlugin extends SimplePlugin<
 			// Test connection
 			yield* Effect.tryPromise({
 				try: () => self.client!.healthCheck(),
-				catch: (error) => new ConfigurationError(`Health check failed: ${error instanceof Error ? error.message : String(error)}`)
+				catch: (error) => new PluginConfigurationError({ message: `Health check failed: ${error instanceof Error ? error.message : String(error)}`, retryable: true })
 			});
 		});
 	}
@@ -226,10 +218,56 @@ export class SourceTemplatePlugin extends SimplePlugin<
 			};
 		});
 
-		const search = os.use(stateMiddleware).search.handler(async ({ input, context }) => {
+		const search = os.use(stateMiddleware).search.handler(async ({ input, context, errors }) => {
 			const state = context.state;
 
 			// Handle error test cases
+			if (input.query === "401-unauthorized") {
+				throw errors.UNAUTHORIZED({
+					message: "Invalid API key",
+					data: { apiKeyProvided: true, authType: 'apiKey' }
+				});
+			}
+
+			if (input.query === "403-forbidden") {
+				throw errors.FORBIDDEN({
+					message: "Access denied to resource",
+					data: { requiredPermissions: ['read:data'], action: 'search' }
+				});
+			}
+
+			if (input.query === "400-bad-request") {
+				throw errors.BAD_REQUEST({
+					message: "Invalid query parameters",
+					data: {
+						invalidFields: ['query'],
+						validationErrors: [{ field: 'query', message: 'Query cannot be empty', code: 'REQUIRED' }]
+					}
+				});
+			}
+
+			if (input.query === "429-rate-limit") {
+				throw errors.RATE_LIMITED({
+					message: "Too many requests",
+					data: {
+						retryAfter: 60,
+						remainingRequests: 0,
+						limitType: 'requests'
+					}
+				});
+			}
+
+			if (input.query === "503-service-unavailable") {
+				throw errors.SERVICE_UNAVAILABLE({
+					message: "Service temporarily unavailable",
+					data: {
+						retryAfter: 30,
+						maintenanceWindow: false
+					}
+				});
+			}
+
+			// Keep some legacy error state patterns for backward compatibility testing
 			if (input.query === "trigger-error-state") {
 				return {
 					items: [],
@@ -237,102 +275,7 @@ export class SourceTemplatePlugin extends SimplePlugin<
 						nextPollMs: null, // Signal termination
 						phase: "error",
 						errorMessage: "Non-retryable error detected in plugin state",
-						errorType: "ConfigurationError",
-					}
-				};
-			}
-
-			if (input.query === "trigger-config-error") {
-				return {
-					items: [],
-					nextState: {
-						nextPollMs: null,
-						phase: "error",
-						errorMessage: "Invalid API configuration",
-						errorType: "ConfigurationError",
-					}
-				};
-			}
-
-			if (input.query === "trigger-non-retryable-execution-error") {
-				return {
-					items: [],
-					nextState: {
-						nextPollMs: null,
-						phase: "error",
-						errorMessage: "Non-retryable execution error",
-						errorType: "PluginExecutionError",
-						retryable: false,
-					}
-				};
-			}
-
-			if (input.query === "401-unauthorized") {
-				return {
-					items: [],
-					nextState: {
-						nextPollMs: null,
-						phase: "error",
-						errorMessage: "401 Unauthorized - Invalid API key",
-						errorType: "ConfigurationError",
-						httpStatus: 401,
-					}
-				};
-			}
-
-			if (input.query === "429-rate-limit") {
-				// First call: return rate limit error
-				if (!state || state.phase !== "retry") {
-					return {
-						items: [],
-						nextState: {
-							nextPollMs: 100, // Retry after delay
-							phase: "retry",
-							errorMessage: "429 Rate Limit - Too many requests",
-							errorType: "PluginExecutionError",
-							retryable: true,
-							httpStatus: 429,
-							retryCount: 1,
-						}
-					};
-				}
-				// Second call: succeed after retry
-				if (state.phase === "retry") {
-					const items = generateHistoricalItems("rate-limit-recovered", input.limit);
-					return {
-						items,
-						nextState: {
-							nextPollMs: null, // Terminate after successful retry
-							phase: "done",
-						}
-					};
-				}
-			}
-
-			if (input.query === "trigger-recoverable-error") {
-				// Simulate recoverable error that eventually succeeds
-				if (!state || state.phase !== "recovered") {
-					return {
-						items: [],
-						nextState: {
-							nextPollMs: 50,
-							phase: "recovered",
-							errorMessage: "Temporary service unavailable",
-							errorType: "PluginExecutionError",
-							retryable: true,
-							httpStatus: 503,
-						}
-					};
-				}
-				// After recovery, return normal results
-				const items = generateHistoricalItems("recovered-data", input.limit);
-				return {
-					items,
-					nextState: {
-						nextPollMs: 50,
-						phase: "realtime",
-						jobId: `recovered_${Date.now()}`,
-						lastId: items.length > 0 ? items[items.length - 1].externalId : undefined,
+						errorType: "PluginConfigurationError",
 					}
 				};
 			}

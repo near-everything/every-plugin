@@ -5,10 +5,12 @@ import { PluginRuntime } from "every-plugin";
 import { createTestLayer, type TestPluginMap } from "every-plugin/testing";
 import { beforeEach, describe, vi } from "vitest";
 import { MasaClient } from "../client";
+import { JobManager } from "../job-manager";
 import MasaSourcePlugin from "../index";
 
-// Mock the MasaClient
+// Mock the MasaClient and JobManager
 vi.mock("../client");
+vi.mock("../job-manager");
 
 // Test registry for masa-source plugin tests
 const TEST_REGISTRY: PluginRegistry = {
@@ -52,7 +54,7 @@ describe("Masa Source Plugin Tests", () => {
     // Track job status calls to simulate progression
     const jobStatusCalls = new Map<string, number>();
 
-    // Setup default mock implementations
+    // Setup MasaClient mock - only methods that actually exist
     const mockClient = {
       healthCheck: vi.fn().mockResolvedValue("OK"),
       submitSearchJob: vi.fn().mockImplementation((sourceType, searchMethod, query, maxResults) => {
@@ -127,32 +129,6 @@ describe("Masa Source Plugin Tests", () => {
           }
         ]);
       }),
-      getById: vi.fn().mockImplementation((sourceType, id) => {
-        return Promise.resolve({
-          id: id,
-          source: "twitter",
-          content: `Mock content for ${id}`,
-          metadata: {
-            author: "mock_user",
-            username: "mock_user",
-            created_at: new Date().toISOString(),
-            tweet_id: 123456789,
-          }
-        });
-      }),
-      getBulk: vi.fn().mockImplementation((sourceType: any, ids: string[]) => {
-        return Promise.resolve(ids.map((id: string) => ({
-          id: id,
-          source: "twitter",
-          content: `Mock bulk content for ${id}`,
-          metadata: {
-            author: "mock_user",
-            username: "mock_user",
-            created_at: new Date().toISOString(),
-            tweet_id: 123456789,
-          }
-        })));
-      }),
       similaritySearch: vi.fn().mockImplementation((options: any) => {
         return Promise.resolve([
           {
@@ -185,7 +161,55 @@ describe("Masa Source Plugin Tests", () => {
       }),
     };
 
+    // Setup JobManager mock - methods that exist on JobManager
+    const mockJobManager = {
+      getById: vi.fn().mockImplementation((sourceType, id) => {
+        return Promise.resolve({
+          id: id,
+          source: "twitter",
+          content: `Mock content for ${id}`,
+          metadata: {
+            author: "mock_user",
+            username: "mock_user",
+            created_at: new Date().toISOString(),
+            tweet_id: 123456789,
+          }
+        });
+      }),
+      getBulk: vi.fn().mockImplementation((sourceType: any, ids: string[]) => {
+        return Promise.resolve(ids.map((id: string) => ({
+          id: id,
+          source: "twitter",
+          content: `Mock bulk content for ${id}`,
+          metadata: {
+            author: "mock_user",
+            username: "mock_user",
+            created_at: new Date().toISOString(),
+            tweet_id: 123456789,
+          }
+        })));
+      }),
+      executeJobWorkflow: vi.fn().mockImplementation((sourceType, searchMethod, query, maxResults, processFn) => {
+        const mockResults = [
+          {
+            id: `workflow-${Date.now()}`,
+            source: "twitter",
+            content: `Mock workflow result for ${query}`,
+            metadata: {
+              author: query || "mock_user",
+              username: query || "mock_user",
+              user_id: "12345",
+              created_at: new Date().toISOString(),
+              tweet_id: 123456789,
+            }
+          }
+        ];
+        return Promise.resolve(processFn(mockResults));
+      }),
+    };
+
     (MasaClient as any).mockImplementation(() => mockClient);
+    (JobManager as any).mockImplementation(() => mockJobManager);
   });
 
   it.effect("should execute getById procedure", () =>

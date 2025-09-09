@@ -1,17 +1,9 @@
-// Plugin execution errors
-export class PluginExecutionError extends Error {
-	constructor(
-		message: string,
-		public readonly retryable: boolean = true,
-	) {
-		super(message);
-		this.name = "PluginExecutionError";
-	}
-}
+import { Data } from "effect";
 
-export class ConfigurationError extends PluginExecutionError {
-	constructor(message: string) {
-		super(message, false); // Configuration errors are not retryable
-		this.name = "ConfigurationError";
-	}
+export class PluginConfigurationError extends Data.TaggedError("PluginConfigurationError")<{
+	readonly message: string;
+	readonly retryable: boolean;
+	readonly cause?: Error;
+}> {
+	override get name() { return "PluginConfigurationError"; }
 }

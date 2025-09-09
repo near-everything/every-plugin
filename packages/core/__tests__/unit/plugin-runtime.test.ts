@@ -1,6 +1,6 @@
+import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import { it, expect } from "@effect/vitest";
 import type { PluginRegistry } from "../../src/plugin";
 import { PluginRuntime } from "../../src/runtime";
 import { createTestLayer, type TestPluginMap } from "../../src/testing";
