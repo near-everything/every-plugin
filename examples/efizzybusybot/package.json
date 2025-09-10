@@ -1,0 +1,26 @@
+{
+	"name": "@examples/curatedotfun",
+	"private": true,
+	"scripts": {
+		"start": "bun run main.ts",
+		"dev": "bun run --watch main.ts",
+		"worker": "bun run workers/submission.worker.ts",
+		"worker:dev": "bun run --watch workers/submission.worker.ts",
+		"inspect": "bun run inspect-db.ts",
+		"db:generate": "drizzle-kit generate",
+		"db:migrate": "drizzle-kit migrate",
+		"db:studio": "drizzle-kit studio"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.2.21",
+		"drizzle-kit": "^0.31.4"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"drizzle-orm": "^0.44.5",
+		"effect": "^3.17.13",
+		"every-plugin": "link:every-plugin"
+	}
+}

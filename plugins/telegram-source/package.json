@@ -1,0 +1,42 @@
+{
+  "name": "@curatedotfun/telegram-source",
+  "version": "0.0.1",
+  "description": "Telegram source plugin for curate.fun",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "peerDependencies": {
+    "every-plugin": "^0.1.0",
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "@curatedotfun/utils": "^0.0.2",
+    "@effect/vitest": "^0.25.1",
+    "@module-federation/node": "^2.7.15",
+    "@module-federation/runtime-core": "^0.18.3",
+    "@orpc/server": "^1.8.6",
+    "@rspack/cli": "^1.5.2",
+    "@rspack/core": "^1.5.2",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "dotenv": "^17.2.2",
+    "effect": "^3.17.13",
+    "every-plugin": "link:every-plugin",
+    "msw": "^2.3.0",
+    "vitest": "^1.6.0",
+    "zod": "^4.1.5"
+  },
+  "scripts": {
+    "build": "rspack build && tsc -p tsconfig.build.json",
+    "dev": "rspack serve",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@better-fetch/fetch": "^1.1.18",
+    "@better-fetch/logger": "^1.1.18",
+    "@orpc/contract": "^1.8.6",
+    "telegraf": "^4.16.3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1757543968405,
+      "tag": "0000_stale_susan_delgado",
+      "breakpoints": true
+    }
+  ]
+}
