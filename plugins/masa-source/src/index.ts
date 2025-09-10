@@ -127,7 +127,7 @@ const handleMasaError = (error: unknown, errors: any): never => {
 // Helper function to convert Masa API results to plugin format
 function convertMasaResultToSourceItem(masaResult: MasaSearchResult): SourceItem {
   // Helper to convert snowflake ID to timestamp for fallback
-  const snowflakeToTimestamp = (id: string): string => {
+  const snowflakeToTimestamp = (id: striYng): string => {
     const TWITTER_EPOCH = 1288834974657n;
     const snowflake = BigInt(id);
     const timestamp = Number((snowflake >> 22n) + TWITTER_EPOCH);
