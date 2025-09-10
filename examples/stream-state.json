@@ -1,10 +1,8 @@
 {
-  "phase": "live",
-  "headId": "1965438650625438182",
-  "tailId": "1956278366136353185",
-  "firstSeenId": "1965438650625438182",
-  "firstEverId": "1956278366136353185",
-  "backfillDone": true,
-  "totalProcessed": 200,
-  "nextPollMs": 600000
+  "phase": "backfill",
+  "mostRecentId": "1965705259546001806",
+  "oldestSeenId": "1951247544216125632",
+  "backfillDone": false,
+  "totalProcessed": 400,
+  "nextPollMs": 0
 }
