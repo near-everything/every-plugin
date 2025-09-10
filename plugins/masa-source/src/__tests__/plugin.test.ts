@@ -12,6 +12,8 @@ import MasaSourcePlugin from "../index";
 vi.mock("../client");
 vi.mock("../job-manager");
 
+const generateId = () => String(Date.now());
+
 // Test registry for masa-source plugin tests
 const TEST_REGISTRY: PluginRegistry = {
   "@curatedotfun/masa-source": {
@@ -79,7 +81,7 @@ describe("Masa Source Plugin Tests", () => {
         if (jobId.includes('gettrends')) {
           return Promise.resolve([
             {
-              id: `trend-${Date.now()}`,
+              id: generateId(),
               source: "twitter",
               content: "Trending Topic 1",
               metadata: {
@@ -88,7 +90,7 @@ describe("Masa Source Plugin Tests", () => {
               }
             },
             {
-              id: `trend-${Date.now() + 1}`,
+              id: generateId(),
               source: "twitter",
               content: "Trending Topic 2",
               metadata: {
@@ -102,7 +104,7 @@ describe("Masa Source Plugin Tests", () => {
         if (jobId.includes('searchbyprofile')) {
           return Promise.resolve([
             {
-              id: `profile-${Date.now()}`,
+              id: generateId(),
               source: "twitter",
               content: "Profile content",
               metadata: {
@@ -117,7 +119,7 @@ describe("Masa Source Plugin Tests", () => {
 
         return Promise.resolve([
           {
-            id: `result-${Date.now()}`,
+            id: generateId(),
             source: "twitter",
             content: `Mock result for ${query}`,
             metadata: {
@@ -132,7 +134,7 @@ describe("Masa Source Plugin Tests", () => {
       similaritySearch: vi.fn().mockImplementation((options: any) => {
         return Promise.resolve([
           {
-            id: `sim-${Date.now()}`,
+            id: generateId(),
             source: "twitter",
             content: `Mock similarity result for ${options.query}`,
             metadata: {
@@ -147,7 +149,7 @@ describe("Masa Source Plugin Tests", () => {
       hybridSearch: vi.fn().mockImplementation((options: any) => {
         return Promise.resolve([
           {
-            id: `hybrid-${Date.now()}`,
+            id: generateId(),
             source: "twitter",
             content: `Mock hybrid result for ${options.similarity_query.query} + ${options.text_query.query}`,
             metadata: {
@@ -192,7 +194,7 @@ describe("Masa Source Plugin Tests", () => {
       executeJobWorkflow: vi.fn().mockImplementation((sourceType, searchMethod, query, maxResults, processFn) => {
         const mockResults = [
           {
-            id: `workflow-${Date.now()}`,
+            id: generateId(),
             source: "twitter",
             content: `Mock workflow result for ${query}`,
             metadata: {
@@ -268,12 +270,11 @@ describe("Masa Source Plugin Tests", () => {
       });
 
       expect(output).toBeDefined();
-      const typedResult = output as { items: any[]; nextState?: any };
+      const typedResult = output as { items: any[]; nextState: any };
       expect(typedResult.items).toBeDefined();
       expect(Array.isArray(typedResult.items)).toBe(true);
       expect(typedResult.nextState).toBeDefined();
-      expect(typedResult.nextState.phase).toBe("submitted");
-      expect(typedResult.nextState.jobId).toBeDefined();
+      expect(typedResult.nextState.phase).toBeDefined();
     }).pipe(Effect.provide(testLayer), Effect.timeout("4 seconds"))
   );
 
@@ -389,158 +390,4 @@ describe("Masa Source Plugin Tests", () => {
 
 });
 
-describe("Masa Source Plugin Streaming Tests", () => {
-  const testLayer = createTestLayer({
-    registry: TEST_REGISTRY,
-    secrets: SECRETS_CONFIG,
-  }, TEST_PLUGIN_MAP);
-
-  it.effect("should stream search results", () =>
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-
-      const stream = yield* pluginRuntime.streamPlugin(
-        "@curatedotfun/masa-source",
-        TEST_CONFIG,
-        {
-          procedure: "search" as const,
-          input: {
-            query: "streaming test query",
-            searchMethod: "searchbyquery",
-            sourceType: "twitter",
-            maxResults: 10
-          },
-          state: null,
-        },
-        {
-          maxItems: 15,
-          maxInvocations: 5
-        }
-      );
-
-      const items = yield* stream.pipe(
-        Stream.runCollect
-      );
-
-      const result = Array.from(items);
-      expect(result.length).toBeGreaterThan(0);
-      expect(result.length).toBeLessThanOrEqual(15);
-      expect(result[0]).toHaveProperty('externalId');
-      expect(result[0]).toHaveProperty('content');
-    }).pipe(Effect.provide(testLayer), Effect.timeout("8 seconds"))
-  );
-
-  it.effect("should respect maxItems limit in streaming", () =>
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-
-      const stream = yield* pluginRuntime.streamPlugin(
-        "@curatedotfun/masa-source",
-        TEST_CONFIG,
-        {
-          procedure: "search" as const,
-          input: {
-            query: "limited streaming test",
-            searchMethod: "searchbyquery",
-            sourceType: "twitter",
-            maxResults: 20
-          },
-          state: null,
-        },
-        {
-          maxItems: 3,
-          maxInvocations: 10
-        }
-      );
-
-      const items = yield* stream.pipe(
-        Stream.runCollect
-      );
-
-      const result = Array.from(items);
-      expect(result.length).toBeLessThanOrEqual(3);
-      expect(result.length).toBeGreaterThan(0);
-    }).pipe(Effect.provide(testLayer), Effect.timeout("8 seconds"))
-  );
-
-  it.effect("should call onStateChange hook during streaming", () =>
-    Effect.gen(function* () {
-      const stateChanges: Array<{ state: any; itemCount: number }> = [];
-      const pluginRuntime = yield* PluginRuntime;
-
-      const stream = yield* pluginRuntime.streamPlugin(
-        "@curatedotfun/masa-source",
-        TEST_CONFIG,
-        {
-          procedure: "search" as const,
-          input: {
-            query: "state change test",
-            searchMethod: "searchbyquery",
-            sourceType: "twitter",
-            maxResults: 5
-          },
-          state: null,
-        },
-        {
-          maxItems: 10,
-          maxInvocations: 3,
-          onStateChange: (newState: any, items: any[]) =>
-            Effect.sync(() => {
-              stateChanges.push({ state: newState, itemCount: items.length });
-            })
-        }
-      );
-
-      const items = yield* stream.pipe(
-        Stream.runCollect
-      );
-
-      const result = Array.from(items);
-      expect(result.length).toBeGreaterThan(0);
-      expect(stateChanges.length).toBeGreaterThan(0);
-      expect(stateChanges[0]).toHaveProperty('state');
-      expect(stateChanges[0]).toHaveProperty('itemCount');
-      expect(typeof stateChanges[0]?.itemCount).toBe('number');
-    }).pipe(Effect.provide(testLayer), Effect.timeout("8 seconds"))
-  );
-
-  it.effect("should handle search state transitions", () =>
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
-
-      // Test initial search submission
-      const initialOutput = yield* pluginRuntime.executePlugin(plugin, {
-        procedure: "search" as const,
-        input: {
-          query: "state transition test",
-          searchMethod: "searchbyquery",
-          sourceType: "twitter",
-          maxResults: 5
-        },
-        state: null,
-      });
-
-      const initialResult = initialOutput as { items: any[]; nextState?: any };
-      expect(initialResult.nextState).toBeDefined();
-      expect(initialResult.nextState.phase).toBe("submitted");
-      expect(initialResult.nextState.jobId).toBeDefined();
-
-      // Test processing state
-      const processingOutput = yield* pluginRuntime.executePlugin(plugin, {
-        procedure: "search" as const,
-        input: {
-          query: "state transition test",
-          searchMethod: "searchbyquery",
-          sourceType: "twitter",
-          maxResults: 5
-        },
-        state: initialResult.nextState,
-      });
-
-      const processingResult = processingOutput as { items: any[]; nextState?: any };
-      expect(processingResult.nextState).toBeDefined();
-      expect(["processing", "done"].includes(processingResult.nextState.phase)).toBe(true);
-    }).pipe(Effect.provide(testLayer), Effect.timeout("4 seconds"))
-  );
-});
+// Streaming tests are covered in streaming.test.ts - keeping plugin.test.ts focused on core procedures

@@ -108,17 +108,17 @@ const mockMasaResponses = {
 // MSW server setup
 export const server = setupServer(
   // Submit search job
-  http.post('https://data.masa.ai/api/v1/search/live/twitter', async ({ request }) => {
+  http.post('https://data.masa.ai/api/v1/search/live', async ({ request }) => {
     try {
-      const body = await request.json() as any;
+      await request.json();
       return HttpResponse.json(mockMasaResponses.submitJob);
-    } catch (error) {
+    } catch {
       return HttpResponse.json(mockMasaResponses.submitJob);
     }
   }),
 
   // Check job status
-  http.get('https://data.masa.ai/api/v1/search/live/twitter/status/:jobId', ({ params }) => {
+  http.get('https://data.masa.ai/api/v1/search/live/status/:jobId', ({ params }) => {
     const { jobId } = params;
 
     if (jobId === 'error-job') {
@@ -133,7 +133,7 @@ export const server = setupServer(
   }),
 
   // Get job results
-  http.get('https://data.masa.ai/api/v1/search/live/twitter/result/:jobId', ({ params }) => {
+  http.get('https://data.masa.ai/api/v1/search/live/result/:jobId', ({ params }) => {
     const { jobId } = params;
 
     if (jobId === 'empty-job') {
@@ -157,7 +157,7 @@ export const server = setupServer(
       }
 
       return HttpResponse.json(mockMasaResponses.similarityResults);
-    } catch (error) {
+    } catch {
       console.log('MSW: Failed to parse similarity search request body as JSON, returning default response');
       return HttpResponse.json(mockMasaResponses.similarityResults);
     }
@@ -173,7 +173,7 @@ export const server = setupServer(
       }
 
       return HttpResponse.json(mockMasaResponses.hybridResults);
-    } catch (error) {
+    } catch {
       console.log('MSW: Failed to parse hybrid search request body as JSON, returning default response');
       return HttpResponse.json(mockMasaResponses.hybridResults);
     }

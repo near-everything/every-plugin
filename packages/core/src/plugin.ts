@@ -140,8 +140,10 @@ export function createPluginInputSchema<
 		});
 
 		// Only add state field for streamable procedures
+		// Allow null state for initial calls to streamable procedures
+		const stateInputSchema = stateSchema.nullable();
 		return isStreamable
-			? baseSchema.extend({ state: stateSchema })
+			? baseSchema.extend({ state: stateInputSchema })
 			: baseSchema;
 	});
 
@@ -247,11 +249,8 @@ export abstract class SimplePlugin<
 	abstract readonly type: PluginType;
 	abstract readonly contract: TContract;
 	abstract readonly configSchema: TConfigSchema;
-
-	readonly stateSchema = z.null() as unknown as TStateSchema;
-
-
-
+	abstract readonly stateSchema: TStateSchema;
+	
 	// Auto-generated schemas
 	get inputSchema() {
 		return createPluginInputSchema(this.contract, this.stateSchema);

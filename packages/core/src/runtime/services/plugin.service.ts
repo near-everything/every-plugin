@@ -426,9 +426,10 @@ export class PluginService extends Effect.Tag("PluginService")<
 							);
 						}
 
-						// Validate initial state
+						// Validate initial state - allow null for initial calls
+						const nullableStateSchema = initializedPlugin.plugin.stateSchema.nullable();
 						yield* validate(
-							initializedPlugin.plugin.stateSchema,
+							nullableStateSchema,
 							input.state,
 							initializedPlugin.plugin.id,
 							"state",

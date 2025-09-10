@@ -1,6 +1,10 @@
 {
   "phase": "live",
-  "searchMethod": "searchbyquery",
-  "totalItems": 100,
-  "jobId": "880659c6-f59e-43b1-b81f-cd661d408f6f"
+  "headId": "1965438650625438182",
+  "tailId": "1956278366136353185",
+  "firstSeenId": "1965438650625438182",
+  "firstEverId": "1956278366136353185",
+  "backfillDone": true,
+  "totalProcessed": 200,
+  "nextPollMs": 600000
 }

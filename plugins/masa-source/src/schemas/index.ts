@@ -38,6 +38,16 @@ const MasaSearchMethodSchema = z.enum([
   'getspace'
 ]);
 
+// State schema for streaming operations - clean three-phase design
+export const stateSchema = z.object({
+  phase: z.enum(['initial', 'backfill', 'live']),
+  mostRecentId: z.string().optional(), // newest processed id (for live since_id)
+  oldestSeenId: z.string().optional(), // oldest processed id (for backfill max_id)
+  backfillDone: z.boolean().default(false),
+  totalProcessed: z.number().default(0),
+  nextPollMs: z.number().nullable().optional(), // For streaming: null = terminate, number = delay
+});
+
 // Contract definition for the Masa source plugin
 export const masaContract = {
   // Core job operations for async search
@@ -46,7 +56,7 @@ export const masaContract = {
       sourceType: MasaSourceTypeSchema.optional().default('twitter'),
       searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
       query: z.string(),
-      maxResults: z.number().min(1).max(500).optional().default(10),
+      maxResults: z.number().min(1).optional(),
       nextCursor: z.string().optional(),
     }))
     .output(z.object({
@@ -165,6 +175,23 @@ export const masaContract = {
       }))
     }))
     .errors(CommonPluginErrors),
+
+  search: oc
+    .input(z.object({
+      query: z.string(),
+      maxResults: z.number().min(1).optional(),
+      budgetMs: z.number().min(5000).max(300000).optional().default(60000),
+      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
+      searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
+      livePollMs: z.number().min(1000).max(3600000).optional().default(60000), // 1 second, 1 minute default
+      backfillPageSize: z.number().min(1).max(500).optional().default(100),
+      livePageSize: z.number().min(1).max(100).optional().default(50),
+    }))
+    .output(z.object({
+      items: z.array(sourceItemSchema),
+      nextState: stateSchema
+    }))
+    .errors(CommonPluginErrors).meta({ "streamable": "true" }) 
 };
 
 // Export types for use in implementation
@@ -172,6 +199,7 @@ export type MasaContract = typeof masaContract;
 export type SourceItem = z.infer<typeof sourceItemSchema>;
 export type MasaSourceType = z.infer<typeof MasaSourceTypeSchema>;
 export type MasaSearchMethod = z.infer<typeof MasaSearchMethodSchema>;
+export type StreamState = z.infer<typeof stateSchema>;
 
 // Config schema with variables and secrets
 export const MasaSourceConfigSchema = createConfigSchema(
