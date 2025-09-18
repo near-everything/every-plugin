@@ -21,6 +21,6 @@
 	"dependencies": {
 		"drizzle-orm": "^0.44.5",
 		"effect": "^3.17.13",
-		"every-plugin": "link:every-plugin"
+		"every-plugin": "0.1.2"
 	}
 }
