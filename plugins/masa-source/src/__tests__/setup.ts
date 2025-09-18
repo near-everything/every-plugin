@@ -108,7 +108,7 @@ const mockMasaResponses = {
 // MSW server setup
 export const server = setupServer(
   // Submit search job
-  http.post('https://data.masa.ai/api/v1/search/live', async ({ request }) => {
+  http.post('https://data.gopher-ai.com/api/v1/search/live', async ({ request }) => {
     try {
       await request.json();
       return HttpResponse.json(mockMasaResponses.submitJob);
@@ -118,7 +118,7 @@ export const server = setupServer(
   }),
 
   // Check job status
-  http.get('https://data.masa.ai/api/v1/search/live/status/:jobId', ({ params }) => {
+  http.get('https://data.gopher-ai.com/api/v1/search/live/status/:jobId', ({ params }) => {
     const { jobId } = params;
 
     if (jobId === 'error-job') {
@@ -133,7 +133,7 @@ export const server = setupServer(
   }),
 
   // Get job results
-  http.get('https://data.masa.ai/api/v1/search/live/result/:jobId', ({ params }) => {
+  http.get('https://data.gopher-ai.com/api/v1/search/live/result/:jobId', ({ params }) => {
     const { jobId } = params;
 
     if (jobId === 'empty-job') {
@@ -148,7 +148,7 @@ export const server = setupServer(
   }),
 
   // Similarity search
-  http.post('https://data.masa.ai/api/v1/search/similarity', async ({ request }) => {
+  http.post('https://data.gopher-ai.com/api/v1/search/similarity', async ({ request }) => {
     try {
       const body = await request.json() as any;
 
@@ -164,7 +164,7 @@ export const server = setupServer(
   }),
 
   // Hybrid search
-  http.post('https://data.masa.ai/api/v1/search/hybrid', async ({ request }) => {
+  http.post('https://data.gopher-ai.com/api/v1/search/hybrid', async ({ request }) => {
     try {
       const body = await request.json() as any;
 

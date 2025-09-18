@@ -1,5 +1,6 @@
 const path = require("path");
 const { rspack } = require("@rspack/core");
+const { withZephyr } = require("zephyr-rspack-plugin");
 
 const pkg = require("./package.json");
 
@@ -24,7 +25,7 @@ function getPluginInfo() {
 
 const pluginInfo = getPluginInfo();
 
-module.exports = {
+module.exports = withZephyr()({
   entry: "./src/index",
   mode: process.env.NODE_ENV === "development" ? "development" : "production",
   target: "async-node",
@@ -96,4 +97,4 @@ module.exports = {
       },
     }),
   ],
-};
+});

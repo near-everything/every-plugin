@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // Items table - adapted for Telegram messages
 export const items = sqliteTable("items", {
@@ -8,29 +8,29 @@ export const items = sqliteTable("items", {
   platform: text("platform").notNull().$type<'telegram'>().default('telegram'),
   content: text("content").notNull(),
   contentType: text("content_type"), // 'message', 'photo', 'video', etc.
-  
+
   // Telegram-specific fields
   chatId: text("chat_id").notNull(), // Telegram chat ID
   messageId: integer("message_id").notNull(), // Telegram message ID
   chatType: text("chat_type").$type<'private' | 'group' | 'supergroup' | 'channel'>(),
   chatTitle: text("chat_title"), // Group/channel title
   chatUsername: text("chat_username"), // Group/channel username
-  
+
   // Author information
   originalAuthorId: text("original_author_id"), // Telegram user ID
   originalAuthorUsername: text("original_author_username"), // @username
   originalAuthorDisplayName: text("original_author_display_name"), // First + Last name
-  
+
   // Message metadata
   isCommand: integer("is_command", { mode: "boolean" }).default(false), // Bot command
   isMentioned: integer("is_mentioned", { mode: "boolean" }).default(false), // Bot was mentioned/tagged
   replyToMessageId: integer("reply_to_message_id"), // If replying to another message
   forwardFromUserId: text("forward_from_user_id"), // If forwarded
-  
+
   // Timestamps
   createdAt: text("created_at"), // Original message timestamp
   ingestedAt: text("ingested_at").default(sql`CURRENT_TIMESTAMP`),
-  
+
   // URLs and raw data
   url: text("url"), // Telegram message URL (if available)
   rawData: text("raw_data"), // Full Telegram update JSON

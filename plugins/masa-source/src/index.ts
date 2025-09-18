@@ -127,7 +127,7 @@ const handleMasaError = (error: unknown, errors: any): never => {
 // Helper function to convert Masa API results to plugin format
 function convertMasaResultToSourceItem(masaResult: MasaSearchResult): SourceItem {
   // Helper to convert snowflake ID to timestamp for fallback
-  const snowflakeToTimestamp = (id: striYng): string => {
+  const snowflakeToTimestamp = (id: string): string => {
     const TWITTER_EPOCH = 1288834974657n;
     const snowflake = BigInt(id);
     const timestamp = Number((snowflake >> 22n) + TWITTER_EPOCH);
@@ -188,7 +188,7 @@ export class MasaSourcePlugin extends SimplePlugin<
     return Effect.gen(function* () {
       const logger = yield* PluginLoggerTag;
 
-      const baseUrl = config.variables?.baseUrl as string || "https://data.masa.ai/api/v1";
+      const baseUrl = config.variables?.baseUrl as string || "https://data.gopher-ai.com/api/v1";
       self.client = new MasaClient(
         baseUrl,
         config.secrets.apiKey,

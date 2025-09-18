@@ -205,7 +205,7 @@ export type StreamState = z.infer<typeof stateSchema>;
 export const MasaSourceConfigSchema = createConfigSchema(
   // Variables (non-sensitive config)
   z.object({
-    baseUrl: z.url().optional().default("https://data.masa.ai/api/v1"),
+    baseUrl: z.url().optional().default("https://data.gopher-ai.com/api/v1"),
     timeout: z.number().optional().default(30000),
     defaultMaxResults: z.number().min(1).max(500).optional().default(10),
   }),

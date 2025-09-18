@@ -11,7 +11,7 @@ const BASE_QUERY = "@curatedotfun";
 const runtime = createPluginRuntime({
   registry: {
     "@curatedotfun/masa-source": {
-      remoteUrl: "http://localhost:3013/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-3--curatedotfun-masa-source-every-pl-3ad528063-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },
@@ -148,7 +148,7 @@ const program = Effect.gen(function* () {
   const stream = yield* pluginRuntime.streamPlugin(
     "@curatedotfun/masa-source",
     {
-      variables: { baseUrl: "https://data.masa.ai/api/v1" },
+      variables: { baseUrl: "https://data.gopher-ai.com/api/v1" },
       secrets: { apiKey: "{{MASA_API_KEY}}" }
     },
     {

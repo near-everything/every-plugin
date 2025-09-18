@@ -103,7 +103,14 @@ export const createSourceStream = <
 
           // Call state change hook if provided
           if (options.onStateChange) {
-            await Effect.runPromise(options.onStateChange(nextPluginState as TPluginState, items));
+            await Effect.runPromise(
+              options.onStateChange(nextPluginState as TPluginState, items).pipe(
+                Effect.catchAll((error) => {
+                  console.warn(`[STREAMING] onStateChange failed:`, error);
+                  return Effect.void;
+                })
+              )
+            );
           }
 
           // Emit items immediately (before any delays)

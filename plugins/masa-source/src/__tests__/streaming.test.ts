@@ -24,7 +24,7 @@ const TEST_REGISTRY: PluginRegistry = {
 
 const TEST_CONFIG = {
   variables: {
-    baseUrl: "https://data.masa.ai/api/v1",
+    baseUrl: "https://data.gopher-ai.com/api/v1",
     timeout: 30000,
   },
   secrets: {

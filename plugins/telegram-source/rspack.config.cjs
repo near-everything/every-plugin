@@ -1,5 +1,6 @@
-const path = require("path");
+const path = require("node:path");
 const { rspack } = require("@rspack/core");
+const { withZephyr } = require("zephyr-rspack-plugin");
 
 const pkg = require("./package.json");
 
@@ -7,9 +8,9 @@ const pkg = require("./package.json");
 function getNormalizedRemoteName(name) {
   return name
     .toLowerCase()
-    .replace(/^@/, '')  // Remove leading @
-    .replace(/\//g, '_'); // Replace / with _
-    // Keep hyphens as-is
+    .replace(/^@/, "") // Remove leading @
+    .replace(/\//g, "_"); // Replace / with _
+  // Keep hyphens as-is
 }
 
 function getPluginInfo() {
@@ -24,7 +25,7 @@ function getPluginInfo() {
 
 const pluginInfo = getPluginInfo();
 
-module.exports = {
+module.exports = withZephyr()({
   entry: "./src/index",
   mode: process.env.NODE_ENV === "development" ? "development" : "production",
   target: "async-node",
@@ -92,8 +93,8 @@ module.exports = {
           singleton: true,
           requiredVersion: false,
           strictVersion: false,
-        }
+        },
       },
     }),
   ],
-};
+});

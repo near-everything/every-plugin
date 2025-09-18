@@ -18,5 +18,5 @@ export interface StreamingOptions<TItem = unknown, TPluginState = unknown> {
   stopWhenEmpty?: boolean;
   
   // State change hook for persistence and observability
-  onStateChange?: (newPluginState: TPluginState, items: TItem[]) => Effect.Effect<void>;
+  onStateChange?: (newPluginState: TPluginState, items: TItem[]) => Effect.Effect<void, Error>;
 }

@@ -24,6 +24,7 @@
     "every-plugin": "link:every-plugin",
     "msw": "^2.3.0",
     "vitest": "^1.6.0",
+    "zephyr-rspack-plugin": "^0.0.59",
     "zod": "^4.1.5"
   },
   "scripts": {

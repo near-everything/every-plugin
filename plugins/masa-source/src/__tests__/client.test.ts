@@ -7,7 +7,7 @@ describe('MasaClient', () => {
 
   beforeEach(() => {
     client = new MasaClient(
-      'https://data.masa.ai/api/v1',
+      'https://data.gopher-ai.com/api/v1',
       'test-api-key',
       5000 // 5 second timeout for tests
     );

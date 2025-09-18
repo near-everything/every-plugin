@@ -1,6 +1,6 @@
 # Masa Source Plugin for curate.fun
 
-The Masa Source plugin enables comprehensive content ingestion from Twitter/X using the [Masa Data API](https://data.masa.ai/). It provides both real-time streaming and instant search capabilities through a modern oRPC-based architecture.
+The Masa Source plugin enables comprehensive content ingestion from Twitter/X using the [Masa Data API](https://data.gopher-ai.com/). It provides both real-time streaming and instant search capabilities through a modern oRPC-based architecture.
 
 ## 🚀 Features
 
@@ -58,7 +58,7 @@ Configure the plugin in your feed sources:
           "plugin": "@curatedotfun/masa-source",
           "config": {
             "variables": {
-              "baseUrl": "https://data.masa.ai/api/v1", // Optional, default shown
+              "baseUrl": "https://data.gopher-ai.com/api/v1", // Optional, default shown
               "timeout": 30000, // Optional, 30 seconds default
               "defaultMaxResults": 10 // Optional, default shown
             },
@@ -73,7 +73,7 @@ Configure the plugin in your feed sources:
 }
 ```
 
-> **Note:** Set `MASA_API_KEY` as an environment variable. Get your API key from the [Masa Data API Dashboard](https://data.masa.ai/).
+> **Note:** Set `MASA_API_KEY` as an environment variable. Get your API key from the [Masa Data API Dashboard](https://data.gopher-ai.com/).
 
 ## 📋 Available Procedures
 

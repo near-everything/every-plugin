@@ -12,7 +12,7 @@ const BOT_TOKEN = Bun.env.TELEGRAM_BOT_TOKEN || "your-bot-token-here";
 const runtime = createPluginRuntime({
   registry: {
     "@curatedotfun/telegram-source": {
-      remoteUrl: "http://localhost:3014/remoteEntry.js", // Update when plugin is deployed
+      remoteUrl: "https://elliot-braem-1--curatedotfun-telegram-source-ever-62551c899-ze.zephyrcloud.app/remoteEntry.js", // Update when plugin is deployed
       type: "source"
     }
   },
