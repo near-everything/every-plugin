@@ -1,59 +1,76 @@
 {
-	"name": "every-plugin",
-	"version": "0.1.2",
-	"main": "dist/index.js",
-	"types": "dist/index.d.ts",
-	"exports": {
-		".": {
-			"types": "./dist/index.d.ts",
-			"default": "./dist/index.js"
-		},
-		"./runtime": {
-			"types": "./dist/runtime/index.d.ts",
-			"default": "./dist/runtime/index.js"
-		},
-		"./testing": {
-			"types": "./dist/testing/index.d.ts",
-			"default": "./dist/testing/index.js"
-		}
-	},
-	"files": [
-		"dist"
-	],
-	"scripts": {
-		"build": "tsc -b",
-		"test": "vitest run --config vitest.unit.config.ts",
-		"test:unit": "vitest run --config vitest.unit.config.ts",
-		"test:integration": "npm run test:build-plugin && vitest run --config vitest.integration.config.ts",
-		"test:all": "npm run test:unit && npm run test:integration",
-		"test:watch": "vitest --config vitest.unit.config.ts --watch",
-		"test:watch:integration": "vitest --config vitest.integration.config.ts --watch",
-		"test:ui": "vitest --ui",
-		"test:build-plugin": "cd __tests__/test-plugin && NODE_ENV=test npm run build"
-	},
-	"peerDependencies": {
-		"typescript": "^5.0.0"
-	},
-	"devDependencies": {
-		"@effect/language-service": "^0.38.1",
-		"@effect/vitest": "^0.25.1",
-		"@rspack/cli": "^1.5.2",
-		"@rspack/core": "^1.5.2",
-		"@types/bun": "^1.2.21",
-		"@types/node": "^24.3.1",
-		"@vitest/ui": "3.2.4",
-		"bun-types": "^1.2.21",
-		"sirv": "^3.0.2",
-		"vitest": "^3.2.4"
-	},
-	"dependencies": {
-		"@better-fetch/fetch": "^1.1.18",
-		"@module-federation/enhanced": "^0.18.3",
-		"@module-federation/node": "^2.7.15",
-		"@module-federation/runtime-core": "^0.18.3",
-		"@orpc/contract": "^1.8.6",
-		"@orpc/server": "^1.8.6",
-		"effect": "^3.17.13",
-		"zod": "^4.1.5"
-	}
+  "name": "every-plugin",
+  "version": "0.1.3",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --config vitest.unit.config.ts",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "npm run test:build-plugin && vitest run --config vitest.integration.config.ts",
+    "test:all": "npm run test:unit && npm run test:integration",
+    "test:watch": "vitest --config vitest.unit.config.ts --watch",
+    "test:watch:integration": "vitest --config vitest.integration.config.ts --watch",
+    "test:ui": "vitest --ui",
+    "test:build-plugin": "cd __tests__/test-plugin && NODE_ENV=test npm run build"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.38.1",
+    "@effect/vitest": "^0.25.1",
+    "@rspack/cli": "^1.5.2",
+    "@rspack/core": "^1.5.2",
+    "@types/bun": "^1.2.21",
+    "@types/node": "^24.3.1",
+    "@vitest/ui": "3.2.4",
+    "bun-types": "^1.2.21",
+    "sirv": "^3.0.2",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@better-fetch/fetch": "^1.1.18",
+    "@module-federation/enhanced": "^0.18.3",
+    "@module-federation/node": "^2.7.15",
+    "@module-federation/runtime-core": "^0.18.3",
+    "@orpc/contract": "^1.8.6",
+    "@orpc/server": "^1.8.6",
+    "effect": "^3.17.13",
+    "zod": "^4.1.5"
+  },
+  "keywords": [
+    "plugin",
+		"module-federation",
+		"orpc",
+		"zod",
+		"typescript"
+  ],
+  "author": "everything.near",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/near-everything/every-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/near-everything/every-plugin/issues"
+  },
+  "homepage": "https://plugin.everything.dev"
 }
