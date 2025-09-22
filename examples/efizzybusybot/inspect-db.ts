@@ -82,7 +82,7 @@ const inspectDatabase = Effect.gen(function* () {
   console.log("💡 Tips:");
   console.log("   - Set TELEGRAM_CHAT_ID to inspect a specific chat");
   console.log("   - Set TELEGRAM_USER to inspect a specific user's messages");
-  console.log("   - Use database.sqlite with any SQLite client for detailed queries");
+  console.log("   - Use database.db with any SQLite client for detailed queries");
   console.log("   - Check processing_queue table for pending bot commands");
 });
 

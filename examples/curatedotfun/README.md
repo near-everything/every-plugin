@@ -36,7 +36,7 @@ bun run dev
 
 This will:
 - Stream @curatedotfun mentions from Masa
-- Store all items in `database.sqlite`
+- Store all items in `database.db`
 - Detect !submit commands and add them to processing queue
 - Handle duplicates automatically
 - Resume from last position on restart
@@ -67,7 +67,7 @@ This will:
 ├── schemas/database.ts        # Database schema definitions
 ├── services/db.service.ts     # Database operations with Effect.TS
 ├── workers/submission.worker.ts # Background processing worker
-└── database.sqlite           # SQLite database (auto-created)
+└── database.db           # SQLite database (auto-created)
 ```
 
 ## Next Steps

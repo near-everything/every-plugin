@@ -248,7 +248,7 @@ export class TelegramSourcePlugin extends SimplePlugin<
           console.log("[DEBUG] TelegramSourcePlugin.initialize() - Starting polling mode");
 
           // Use proper Effect.promise for bot.launch
-          yield* Effect.promise(() => self.bot!.launch({ dropPendingUpdates: true })).pipe(
+          yield* Effect.promise(() => self.bot!.launch({ dropPendingUpdates: false, allowedUpdates: ["message"] })).pipe(
             Effect.catchAll((error: any) => {
               console.log(`[DEBUG] TelegramSourcePlugin.initialize() - bot.launch() error: ${error}`);
               return Effect.fail(new PluginConfigurationError({
@@ -293,7 +293,6 @@ export class TelegramSourcePlugin extends SimplePlugin<
   createRouter() {
     const os = implement(telegramContract).$context<{ state: StreamState | null }>();
 
-    // Main search handler - the only method needed for streaming
     const search = os.search.handler(async ({ input, context, errors }) => {
       if (!this.bot) throw new Error("Plugin not initialized");
       const self = this;

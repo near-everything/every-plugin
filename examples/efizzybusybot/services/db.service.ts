@@ -48,7 +48,7 @@ export const DatabaseServiceLive = Layer.effect(
   DatabaseService,
   Effect.gen(function* () {
     // Initialize SQLite database
-    const sqlite = new Database("database.sqlite");
+    const sqlite = new Database("database.db");
     const db = drizzle(sqlite);
 
     migrate(db, { migrationsFolder: './drizzle' });
