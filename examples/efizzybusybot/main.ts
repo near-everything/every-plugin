@@ -1,155 +1,155 @@
 #!/usr/bin/env bun
 
-import { Effect, Logger, LogLevel, Stream } from "effect";
+import type { AnyRouter } from "@orpc/server";
+import { RPCHandler } from "@orpc/server/fetch";
+import { Context, Effect, Layer, Logger, LogLevel, Stream } from "effect";
 import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
-import type { NewChat, NewItem, NewUser } from "./schemas/database";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger as honoLogger } from "hono/logger";
+import type { SourceItem } from "../../plugins/telegram-source/src/schemas";
+import type { NewItem } from "./schemas/database";
 import { DatabaseService, DatabaseServiceLive } from "./services/db.service";
 
-// Configuration constants
-const TARGET_CHAT_ID = Bun.env.TELEGRAM_CHAT_ID; // Optional: monitor specific chat
+const TARGET_CHAT_ID = Bun.env.TELEGRAM_CHAT_ID;
 const BOT_TOKEN = Bun.env.TELEGRAM_BOT_TOKEN || "your-bot-token-here";
+const WEBHOOK_DOMAIN = Bun.env.WEBHOOK_DOMAIN; // Optional - if not set, use polling mode
+const WEBHOOK_TOKEN = Bun.env.WEBHOOK_TOKEN || "your-webhook-token-here"; // Optional webhook secret token
+const HTTP_PORT = parseInt(Bun.env.HTTP_PORT || "4000");
+
+// Determine if we should use webhooks or polling
+const useWebhooks = !!WEBHOOK_DOMAIN;
 
 const runtime = createPluginRuntime({
   registry: {
     "@curatedotfun/telegram-source": {
-      remoteUrl: "https://elliot-braem-4--curatedotfun-telegram-source-ever-ab7d92536-ze.zephyrcloud.app/remoteEntry.js", // Update when plugin is deployed
+      remoteUrl: "https://elliot-braem-9--curatedotfun-telegram-source-ever-043bf02a1-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },
   secrets: {
-    TELEGRAM_BOT_TOKEN: BOT_TOKEN
+    TELEGRAM_BOT_TOKEN: BOT_TOKEN,
+    TELEGRAM_WEBHOOK_TOKEN: WEBHOOK_TOKEN
   }
 });
 
-// Helper to detect bot commands in content
-const detectBotCommands = (content: string): string[] => {
-  const commands: string[] = [];
-  if (content.toLowerCase().includes("!submit")) commands.push("submit");
-  if (content.startsWith("/")) commands.push("command");
-  return commands;
-};
+// TelegramPlugin service tag for dependency injection
+export class TelegramPlugin extends Context.Tag("TelegramPlugin")<
+  TelegramPlugin,
+  any // InitializedPlugin type - using any for now to avoid complex typing
+>() {}
 
-// Helper to extract chat information from Telegram message
-const extractChatInfo = (item: any): NewChat | null => {
-  const message = item.raw?.message;
-  if (!message) return null;
+// Layer that provides the initialized Telegram plugin
+const TelegramPluginLive = Layer.effect(
+  TelegramPlugin,
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    // Initialize the plugin once with the configuration
+    const initializedPlugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", {
+      variables: useWebhooks ? {
+        domain: WEBHOOK_DOMAIN,
+      } : {},
+      secrets: {
+        botToken: "{{TELEGRAM_BOT_TOKEN}}",
+        ...(useWebhooks && WEBHOOK_TOKEN && { webhookToken: "{{TELEGRAM_WEBHOOK_TOKEN}}" })
+      }
+    });
+    
+    return initializedPlugin;
+  })
+);
 
+const convertToDbItem = (item: SourceItem): NewItem => {
   return {
-    chatId: message.chat.id.toString(),
-    chatType: message.chat.type,
-    title: message.chat.title,
-    username: message.chat.username,
-    description: message.chat.description,
-    memberCount: message.chat.member_count,
-    lastMessageAt: item.createdAt,
-  };
-};
-
-// Helper to extract user information from Telegram message
-const extractUserInfo = (item: any): NewUser | null => {
-  const message = item.raw?.message;
-  if (!message?.from) return null;
-
-  const user = message.from;
-  return {
-    userId: user.id.toString(),
-    username: user.username,
-    firstName: user.first_name,
-    lastName: user.last_name,
-    displayName: `${user.first_name}${user.last_name ? ` ${user.last_name}` : ''}`,
-    languageCode: user.language_code,
-    isBot: user.is_bot,
-    lastMessageAt: item.createdAt,
-    messageCount: 1, // Will be updated by upsert logic
-  };
-};
-
-// Convert Telegram plugin item to database item
-const convertToDbItem = (item: any): NewItem => {
-  const message = item.raw?.message;
-  const commands = detectBotCommands(item.content);
-
-  return {
-    externalId: item.externalId,
+    externalId: item.id,
     platform: 'telegram',
     content: item.content,
-    contentType: item.contentType || 'message',
+    contentType: item.contentType,
 
-    // Telegram-specific fields
-    chatId: message?.chat.id.toString(),
-    messageId: message?.message_id,
-    chatType: message?.chat.type,
-    chatTitle: message?.chat.title,
-    chatUsername: message?.chat.username,
+    chatId: item.chatId,
+    messageId: item.messageId,
+    chatType: item.chatType,
+    chatTitle: 'title' in item.message.chat ? item.message.chat.title : undefined,
+    chatUsername: 'username' in item.message.chat ? item.message.chat.username : undefined,
 
-    // Author information
-    originalAuthorId: message?.from?.id.toString(),
-    originalAuthorUsername: message?.from?.username,
-    originalAuthorDisplayName: item.authors?.[0]?.displayName,
+    originalAuthorId: item.author?.id,
+    originalAuthorUsername: item.author?.username,
+    originalAuthorDisplayName: item.author?.displayName,
 
-    // Message metadata
-    isCommand: commands.length > 0,
-    isMentioned: item.isMentioned || false,
-    replyToMessageId: message?.reply_to_message?.message_id,
-    forwardFromUserId: message?.forward_from?.id.toString(),
+    isCommand: item.isCommand,
+    replyToMessageId: 'reply_to_message' in item.message ? item.message.reply_to_message?.message_id : undefined,
+    forwardFromUserId: 'forward_from' in item.message ? (item.message.forward_from as any)?.id?.toString() : undefined,
 
-    // Timestamps
     createdAt: item.createdAt,
     url: item.url,
     rawData: JSON.stringify(item.raw),
   };
 };
 
-// Enhanced item processing with database storage and metadata tracking
-const processItem = (item: any, itemNumber: number) =>
+const processItemWithReply = (item: SourceItem, itemNumber: number) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
+    const telegramPlugin = yield* TelegramPlugin;
 
-    // Extract and upsert chat information
-    const chatInfo = extractChatInfo(item);
-    if (chatInfo) {
-      yield* db.upsertChat(chatInfo);
-    }
-
-    // Extract and upsert user information
-    const userInfo = extractUserInfo(item);
-    if (userInfo) {
-      yield* db.upsertUser(userInfo);
-    }
-
-    // Convert and insert message item into database
+    // Store the item directly
     const dbItem = convertToDbItem(item);
     const itemId = yield* db.insertItem(dbItem);
 
     if (itemId === 0) {
-      // Duplicate item, skip processing
-      console.log(`${itemNumber}. Duplicate message skipped: ${item.externalId}`);
+      console.log(`${itemNumber}. Duplicate message skipped: ${item.id}`);
       return;
     }
 
-    // Check for bot commands and enqueue for processing
-    const commands = detectBotCommands(item.content);
-    for (const command of commands) {
-      yield* db.enqueueProcessing(itemId, command as any);
-      console.log(`🤖 Queued ${command} command for processing: ${item.externalId}`);
+    // Queue commands if this is a command message
+    if (item.isCommand) {
+      yield* db.enqueueProcessing(itemId, "command" as any);
+      console.log(`🤖 Queued command for processing: ${item.id}`);
     }
 
-    // Console output for monitoring
-    const messageId = item.externalId || 'unknown';
-    const timestamp = item.createdAt || new Date().toISOString();
-    const username = item.authors?.[0]?.username || item.authors?.[0]?.displayName || 'unknown';
+    // Check for custom commands
+    if (item.content.toLowerCase().includes("!submit")) {
+      yield* db.enqueueProcessing(itemId, "submit" as any);
+      console.log(`🤖 Queued submit command for processing: ${item.id}`);
+    }
+
+    const messageId = item.id;
+    const timestamp = item.createdAt;
+    const username = item.author?.username || item.author?.displayName || 'unknown';
     const chatTitle = dbItem.chatTitle ? ` in "${dbItem.chatTitle}"` : '';
-    const commandIndicator = commands.length > 0 ? ' 🤖' : '';
+    const commandIndicator = item.isCommand ? ' 🤖' : '';
 
     console.log(`${itemNumber}. @${username} (${messageId}) - ${timestamp}${chatTitle}${commandIndicator}`);
+
+    // Send immediate reply using the plugin's sendMessage procedure
+    if (item.chatId) {
+      const pluginRuntime = yield* PluginRuntime;
+      const replyText = `Hello @${username}! I received your message: "${item.content.substring(0, 50)}${item.content.length > 50 ? '...' : ''}"`;
+
+      yield* pluginRuntime.executePlugin(
+        telegramPlugin,
+        {
+          procedure: "sendMessage",
+          input: {
+            chatId: item.chatId,
+            text: replyText,
+            replyToMessageId: item.messageId,
+          }
+        }
+      ).pipe(
+        Effect.catchAll((error) => {
+          console.error(`Failed to send reply: ${error}`);
+          return Effect.void;
+        })
+      );
+    }
   });
 
-// State persistence using database (adapted for Telegram's update_id system)
 const saveState = (state: any) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
     yield* db.saveStreamState({
-      phase: state.phase,
+      phase: 'monitoring',
       lastUpdateId: state.lastUpdateId,
       totalProcessed: state.totalProcessed,
       nextPollMs: state.nextPollMs,
@@ -164,19 +164,68 @@ const loadState = () =>
 
     if (!state) return null;
 
-    // Convert database state back to plugin state format
     return {
-      phase: state.phase,
-      lastUpdateId: state.lastUpdateId,
       totalProcessed: state.totalProcessed,
+      lastUpdateId: state.lastUpdateId,
       nextPollMs: state.nextPollMs,
       chatId: state.chatId,
     };
   });
 
-// Main streaming program with Telegram bot integration
+// Create HTTP server with plugin router integration
+const createHttpServer: Effect.Effect<any, Error, DatabaseService | PluginRuntime | TelegramPlugin> =
+  Effect.gen(function* () {
+    const telegramPlugin = yield* TelegramPlugin;
+
+    const app = new Hono();
+
+    // Add middleware
+    app.use(honoLogger());
+    app.use("/*", cors({
+      origin: "*",
+      allowMethods: ["GET", "POST", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"],
+    }));
+
+    // Health check
+    app.get("/", (c) => c.json({
+      status: "ok",
+      service: "efizzybusybot",
+      timestamp: new Date().toISOString()
+    }));
+
+    const router = telegramPlugin.plugin.createRouter();
+    const handler = new RPCHandler(router as AnyRouter);
+
+    // Expose plugin procedures via HTTP (including webhook)
+    app.use("/telegram/*", async (c, next) => {
+      const { matched, response } = await handler.handle(c.req.raw, {
+        prefix: "/telegram",
+        context: { state: null } // Provide context for streaming procedures
+      });
+
+      if (matched) {
+        return c.newResponse(response.body, response);
+      }
+      await next();
+    });
+
+    // Start HTTP server
+    console.log(`🌐 Starting HTTP API server on port ${HTTP_PORT}...`);
+
+    const server = Bun.serve({
+      port: HTTP_PORT,
+      fetch: app.fetch,
+    });
+
+    console.log(`✅ HTTP API server running on http://localhost:${HTTP_PORT}`);
+    console.log(`📡 Plugin procedures available at: http://localhost:${HTTP_PORT}/telegram/*`);
+    console.log(`🔗 Telegram webhook endpoint: http://localhost:${HTTP_PORT}/telegram/webhook`);
+
+    return server;
+  });
+
 const program = Effect.gen(function* () {
-  // Install signal handlers for graceful shutdown
   const shutdown = () => {
     console.log('\n🛑 Shutting down Telegram bot gracefully...');
     runtime.runPromise(Effect.gen(function* () {
@@ -188,9 +237,8 @@ const program = Effect.gen(function* () {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  console.log('🤖 Starting Telegram bot with database storage...\n');
+  console.log('🤖 Starting Telegram bot with webhook and immediate replies...\n');
 
-  // Load initial state from database
   const initialState = yield* loadState();
 
   if (initialState) {
@@ -199,43 +247,33 @@ const program = Effect.gen(function* () {
     console.log('📂 Starting fresh message collection');
   }
 
-  // Create streaming pipeline for Telegram messages
   const pluginRuntime = yield* PluginRuntime;
+  const telegramPlugin = yield* TelegramPlugin;
+
+  // Start HTTP server
+  yield* createHttpServer;
 
   const stream = yield* pluginRuntime.streamPlugin(
-    "@curatedotfun/telegram-source",
+    telegramPlugin,
     {
-      variables: {
-        timeout: 30000,
-        // baseUrl: "https://your-webhook-url.com", // Uncomment for webhook mode
-      },
-      secrets: { botToken: "{{TELEGRAM_BOT_TOKEN}}" }
-    },
-    {
-      procedure: "search",
+      procedure: "listen",
       input: {
-        chatId: TARGET_CHAT_ID, // Optional: monitor specific chat
-        maxResults: 10000, // High limit for long-running collection
-        budgetMs: 60000, // 1 minute timeout per batch
-        livePollMs: 30000, // Poll every 30 seconds
-        includeCommands: true, // Include bot commands
-        textOnly: false, // Include media messages with captions
+        chatId: TARGET_CHAT_ID,
+        maxResults: 100,
+        budgetMs: 30000,
+        includeCommands: true,
+        textOnly: false,
       },
       state: initialState,
     },
     {
-      maxInvocations: 1000, // High limit for long-running stream
-      onStateChange: (newState: any, items: any[]) =>
+      maxInvocations: 1000,
+      onStateChange: (newState: any, items: SourceItem[]) =>
         Effect.gen(function* () {
-          // Log batch info and save state to database
           if (items.length > 0) {
-            const phase = newState.phase || 'unknown';
-            const emoji = phase === 'initial' ? '🚀' :
-              phase === 'collecting' ? '📥' :
-                phase === 'monitoring' ? '👁️' : '📨';
             const chatInfo = newState.chatId ? ` (chat: ${newState.chatId})` : '';
-            console.log(`${emoji} Processing ${items.length} messages (${newState.totalProcessed || 0} total, phase: ${phase})${chatInfo}`);
-          } else if (newState.phase === 'monitoring') {
+            console.log(`📥 Processing ${items.length} messages (${newState.totalProcessed || 0} total)${chatInfo}`);
+          } else {
             console.log('⏰ No new messages, monitoring for updates...');
           }
 
@@ -244,13 +282,12 @@ const program = Effect.gen(function* () {
     }
   );
 
-  // Process each message individually from the stream
   let itemCount = 0;
   yield* stream.pipe(
-    Stream.tap((item: any) =>
+    Stream.tap((item: SourceItem) =>
       Effect.gen(function* () {
         itemCount++;
-        yield* processItem(item, itemCount);
+        yield* processItemWithReply(item, itemCount);
       })
     ),
     Stream.runDrain
@@ -258,13 +295,17 @@ const program = Effect.gen(function* () {
 
 }).pipe(
   Effect.provide(Logger.minimumLogLevel(LogLevel.Info)),
+  Effect.provide(TelegramPluginLive),
   Effect.provide(DatabaseServiceLive),
   Effect.provide(runtime)
 );
 
-// Run the program
-console.log('🔧 Make sure to set TELEGRAM_BOT_TOKEN environment variable');
-console.log('🔧 Optionally set TELEGRAM_CHAT_ID to monitor a specific chat');
+console.log('🔧 Make sure to set these environment variables:');
+console.log('🔧 TELEGRAM_BOT_TOKEN - Your bot token from @BotFather');
+console.log('🔧 WEBHOOK_DOMAIN - Your public domain (e.g., "yourdomain.com")');
+console.log('🔧 HTTP_PORT - Port for HTTP server (default: 4000)');
+console.log('🔧 WEBHOOK_SECRET_TOKEN - Optional: secret token for webhook security');
+console.log('🔧 TELEGRAM_CHAT_ID - Optional: specific chat to monitor');
 console.log('🔧 Bot must be added to groups/channels to see messages\n');
 
 await runtime.runPromise(program);

@@ -4,12 +4,12 @@ import { PluginConfigurationError, PluginLoggerTag, SimplePlugin } from "every-p
 import { MasaApiError, MasaClient, type MasaSearchResult } from "./client";
 import { JobManager } from "./job-manager";
 import {
-  masaContract,
   type MasaSourceConfig,
   MasaSourceConfigSchema,
+  masaContract,
   type SourceItem,
-  stateSchema,
-  type StreamState
+  type StreamState, 
+  stateSchema
 } from "./schemas";
 
 
@@ -34,13 +34,13 @@ const ResumeStrategy = {
     state.phase === 'live' && state.mostRecentId !== undefined,
 
   shouldContinueBackfill: (state: StreamState, input: any): boolean =>
-    state.oldestSeenId !== undefined && 
+    state.oldestSeenId !== undefined &&
     (!input.maxResults || (state.totalProcessed || 0) < input.maxResults),
 
   getResumePhase: (state: StreamState, input: any): 'live' | 'backfill' | 'hybrid' => {
     const hasNewContent = ResumeStrategy.shouldCheckForNewContent(state);
     const canBackfill = ResumeStrategy.shouldContinueBackfill(state, input);
-    
+
     if (hasNewContent && canBackfill) return 'hybrid';
     if (hasNewContent) return 'live';
     if (canBackfill) return 'backfill';
@@ -51,7 +51,7 @@ const ResumeStrategy = {
 // Query builders for different scenarios
 const buildQuery = (baseQuery: string, state: StreamState | null, searchPhase?: 'live' | 'backfill'): string => {
   let query = baseQuery;
-  
+
   if (searchPhase === 'live' && state?.mostRecentId) {
     query += ` since_id:${state.mostRecentId}`;
   } else if (searchPhase === 'backfill' && state?.oldestSeenId) {
@@ -66,7 +66,7 @@ const buildQuery = (baseQuery: string, state: StreamState | null, searchPhase?: 
       query += ` since_id:${state.mostRecentId}`;
     }
   }
-  
+
   return query;
 };
 
@@ -404,11 +404,11 @@ export class MasaSourcePlugin extends SimplePlugin<
           // Resume from existing state
           currentState = { ...existingState };
           const resumePhase = ResumeStrategy.getResumePhase(currentState, input);
-          
+
           // For hybrid resume, prioritize checking for new content first
           searchPhase = resumePhase === 'hybrid' ? 'live' : resumePhase;
           pageSize = searchPhase === 'live' ? LIVE_PAGE_SIZE : BACKFILL_PAGE_SIZE;
-          
+
           console.log(`[Search] Resuming from phase: ${currentState.phase}, strategy: ${resumePhase}, searching: ${searchPhase}`);
         } else {
           // Fresh search
@@ -459,7 +459,7 @@ export class MasaSourcePlugin extends SimplePlugin<
         console.log(`[Search] Retrieved ${items.length} items`);
 
         // Check if we've hit the maxResults limit (only applies to backfill, not live polling)
-        const hasReachedLimit = searchPhase === 'backfill' && 
+        const hasReachedLimit = searchPhase === 'backfill' &&
           input.maxResults !== undefined &&
           (currentState.totalProcessed + items.length) >= input.maxResults;
 
@@ -489,19 +489,19 @@ export class MasaSourcePlugin extends SimplePlugin<
           } else {
             // Update oldestSeenId for backfill search
             nextState.oldestSeenId = minId;
-            
+
             if (!nextState.mostRecentId) {
               // First time seeing content, set mostRecentId
               nextState.mostRecentId = maxId;
             }
-            
+
             // Determine next phase
             if (currentState.phase === 'initial') {
               nextState.phase = StateTransitions.fromInitial(finalItems);
             } else {
               nextState.phase = StateTransitions.fromBackfill(finalItems, hasReachedLimit);
             }
-            
+
             nextState.nextPollMs = nextState.phase === 'live' ? input.livePollMs : 0;
             nextState.backfillDone = nextState.phase === 'live';
           }

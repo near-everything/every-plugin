@@ -13,14 +13,18 @@
 	},
 	"devDependencies": {
 		"@types/bun": "^1.2.21",
-		"drizzle-kit": "^0.31.4"
+		"better-sqlite3": "^12.2.0",
+		"drizzle-kit": "^0.31.4",
+		"telegraf": "^4.16.3"
 	},
 	"peerDependencies": {
 		"typescript": "^5"
 	},
 	"dependencies": {
+		"@orpc/server": "^1.8.9",
 		"drizzle-orm": "^0.44.5",
-		"effect": "^3.17.13",
-		"every-plugin": "0.1.2"
+		"effect": "^3.17.14",
+		"every-plugin": "link:every-plugin",
+		"hono": "^4.9.8"
 	}
 }

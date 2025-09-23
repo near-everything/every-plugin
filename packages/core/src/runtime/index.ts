@@ -1,13 +1,13 @@
 import { Effect, Layer, ManagedRuntime, type Stream } from "effect";
 import type { z } from "zod";
-import { Contract, type Plugin, type PluginLogger, PluginLoggerTag } from "../plugin";
-import { PluginRuntimeError } from "./errors";
+import { type PluginLogger, PluginLoggerTag } from "../plugin";
+import type { PluginRuntimeError } from "./errors";
 import {
 	ModuleFederationService,
 	PluginService,
 	SecretsService,
 } from "./services";
-import { type StreamingOptions } from "./streaming";
+import type { StreamingOptions } from "./streaming";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
@@ -57,15 +57,12 @@ export interface IPluginRuntime {
 		config: z.infer<T["configSchema"]>,
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
 	readonly streamPlugin: <
-		T extends Plugin<Contract>,
-		TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
+		T extends AnyPlugin,
 		TItem = unknown,
-		TPluginState extends z.infer<T["stateSchema"]> = z.infer<T["stateSchema"]>
 	>(
-		pluginId: string,
-		config: z.infer<T["configSchema"]>,
-		input: TInput,
-		options?: StreamingOptions<TItem, TPluginState>
+		initializedPlugin: InitializedPlugin<T>,
+		input: z.infer<T["inputSchema"]>,
+		options?: StreamingOptions<TItem, z.infer<T["stateSchema"]>>
 	) => Effect.Effect<Stream.Stream<TItem, PluginRuntimeError>, PluginRuntimeError>;
 	readonly shutdown: () => Effect.Effect<void, never, never>;
 }
@@ -89,21 +86,8 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 					initializePlugin: pluginService.initializePlugin,
 					executePlugin: pluginService.executePlugin,
 
-					usePlugin: <T extends AnyPlugin>(
-						pluginId: string,
-						config: z.infer<T["configSchema"]>,
-					) => pluginService.usePlugin<T>(pluginId, config),
-					streamPlugin: <
-						T extends Plugin<Contract>,
-						TInput extends z.infer<T["inputSchema"]> = z.infer<T["inputSchema"]>,
-						TItem = unknown,
-						TPluginState extends z.infer<T["stateSchema"]> = z.infer<T["stateSchema"]>
-					>(
-						pluginId: string,
-						config: z.infer<T["configSchema"]>,
-						input: TInput,
-						options?: StreamingOptions<TItem, TPluginState>
-					) => pluginService.streamPlugin<T, TInput, TItem, TPluginState>(pluginId, config, input, options),
+					usePlugin: pluginService.usePlugin,
+					streamPlugin: pluginService.streamPlugin,
 					shutdown: () => pluginService.cleanup(),
 				};
 			}),

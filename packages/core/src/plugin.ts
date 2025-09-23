@@ -1,9 +1,10 @@
-import type { ContractRouter, Meta } from "@orpc/server";
+import { AnyContractRouter } from "@orpc/contract";
+import type { AnyRouter } from "@orpc/server";
 import { Context, Effect } from "effect";
 import { z } from "zod";
 import type { PluginConfigurationError } from "./errors";
 
-export type Contract = ContractRouter<Meta>;
+export type Contract = AnyContractRouter;
 
 export function createConfigSchema<
 	V extends z.ZodTypeAny,
@@ -190,7 +191,7 @@ export interface Plugin<
 
 	shutdown(): Effect.Effect<void, never, PluginLoggerTag>;
 
-	createRouter(): Contract
+	createRouter(): AnyRouter
 
 	isStreamable(procedureName: string): boolean;
 }
@@ -250,7 +251,7 @@ export abstract class SimplePlugin<
 	abstract readonly contract: TContract;
 	abstract readonly configSchema: TConfigSchema;
 	abstract readonly stateSchema: TStateSchema;
-	
+
 	// Auto-generated schemas
 	get inputSchema() {
 		return createPluginInputSchema(this.contract, this.stateSchema);
@@ -266,7 +267,7 @@ export abstract class SimplePlugin<
 	}
 
 	// Plugin implements this to return pure oRPC router following oRPC docs pattern
-	abstract createRouter(): Contract
+	abstract createRouter(): AnyRouter
 
 	shutdown(): Effect.Effect<void, never, PluginLoggerTag> {
 		return Effect.void;

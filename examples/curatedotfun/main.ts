@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Duration, Effect, Logger, LogLevel, Stream } from "effect";
+import { Effect, Logger, LogLevel, Stream } from "effect";
 import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
 import type { NewItem } from "./schemas/database";
 import { DatabaseService, DatabaseServiceLive } from "./services/db.service";

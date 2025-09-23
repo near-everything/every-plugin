@@ -1,10 +1,10 @@
 import { implement } from "@orpc/server";
-import { Duration, Effect, Fiber, Scope } from "effect";
+import { Effect, Fiber } from "effect";
 import { PluginConfigurationError, PluginLoggerTag, SimplePlugin } from "every-plugin";
 import { Telegraf } from "telegraf";
 import type { Update } from "telegraf/types";
 import {
-  type SourceItem,
+  SourceItem,
   stateSchema,
   type StreamState,
   telegramContract,
@@ -12,21 +12,8 @@ import {
   TelegramSourceConfigSchema
 } from "./schemas";
 
-// Constants
-const POLLING_LIMIT = 100;
+const MAX_QUEUE_SIZE = 1000;
 
-// State transitions adapted for Telegram's real-time nature
-const StateTransitions = {
-  fromInitial: (items: SourceItem[]): 'collecting' | 'monitoring' =>
-    items.length > 0 ? 'collecting' : 'monitoring',
-
-  fromCollecting: (items: SourceItem[], hasReachedLimit: boolean): 'collecting' | 'monitoring' =>
-    items.length < POLLING_LIMIT || hasReachedLimit ? 'monitoring' : 'collecting',
-
-  fromMonitoring: (): 'monitoring' => 'monitoring'
-};
-
-// Helper to convert Telegram API errors to oRPC errors
 const handleTelegramError = (error: unknown, errors: any): never => {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
@@ -67,87 +54,114 @@ const handleTelegramError = (error: unknown, errors: any): never => {
     }
   }
 
-  // Default to service unavailable
   throw errors.SERVICE_UNAVAILABLE({
     message: error instanceof Error ? error.message : 'Unknown Telegram API error',
     data: { provider: 'telegram' }
   });
 };
 
-// Helper function to detect bot mentions
-function detectBotMention(message: any, botInfo: any): boolean {
-  if (!message || !botInfo) return false;
-
-  // Check if replying to bot's message
-  if (message.reply_to_message?.from?.id === botInfo.id) {
-    return true;
-  }
-
-  // Check for @botusername mentions in text
-  if (message.text?.includes(`@${botInfo.username}`)) {
-    return true;
-  }
-
-  // Check entities for mentions
-  if (message.entities) {
-    return message.entities.some((entity: any) =>
-      entity.type === 'mention' &&
-      message.text.substring(entity.offset, entity.offset + entity.length) === `@${botInfo.username}`
-    );
-  }
-
-  return false;
+// Extract message from any update type
+function getMessageFromUpdate(update: Update) {
+  return ('message' in update && update.message) ||
+         ('edited_message' in update && update.edited_message) ||
+         ('channel_post' in update && update.channel_post) ||
+         ('edited_channel_post' in update && update.edited_channel_post) ||
+         null;
 }
 
-// Helper function to convert Telegram updates to plugin format
-function convertTelegramUpdateToSourceItem(update: Update, botInfo?: any): SourceItem | null {
-  // Only process message updates for now
-  if (!('message' in update) || !update.message) {
-    return null;
+// Simple filtering helper functions for raw Telegram updates
+function updateMatchesChat(update: Update, chatId: string): boolean {
+  const message = getMessageFromUpdate(update);
+  return message ? message.chat.id.toString() === chatId : false;
+}
+
+function updateHasText(update: Update): boolean {
+  const message = getMessageFromUpdate(update);
+  return message ? (('text' in message && !!message.text) || ('caption' in message && !!message.caption)) : false;
+}
+
+function updateIsCommand(update: Update): boolean {
+  const message = getMessageFromUpdate(update);
+  return message && 'text' in message && message.text ? message.text.startsWith('/') : false;
+}
+
+function isMessageUpdate(update: Update): boolean {
+  return !!getMessageFromUpdate(update);
+}
+
+function detectMediaType(message: any): 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' {
+  if (message.photo) return 'image';
+  if (message.video || message.video_note) return 'video';
+  if (message.audio || message.voice) return 'audio';
+  if (message.sticker) return 'sticker';
+  if (message.document) return 'file';
+  return 'text';
+}
+
+function hasMediaContent(message: any): boolean {
+  return !!(message.photo || message.video || message.video_note || 
+           message.audio || message.voice || message.sticker || 
+           message.document);
+}
+
+function generateTelegramUrl(message: any): string | undefined {
+  if (message.chat.type === 'private') return undefined;
+  
+  if ('username' in message.chat && message.chat.username) {
+    return `https://t.me/${message.chat.username}/${message.message_id}`;
   }
+  
+  return `https://t.me/c/${Math.abs(message.chat.id)}/${message.message_id}`;
+}
 
-  const message = update.message;
+function convertUpdateToSourceItem(update: Update): SourceItem | null {
+  const message = getMessageFromUpdate(update);
+  if (!message) return null;
 
-  // Extract text content - handle different message types properly
-  let content = '[Non-text message]';
+  // Extract content
+  let content = '';
+  let contentType: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' = 'text';
+  
   if ('text' in message && message.text) {
     content = message.text;
+    contentType = 'text';
   } else if ('caption' in message && message.caption) {
     content = message.caption;
+    contentType = detectMediaType(message);
+  } else if (hasMediaContent(message)) {
+    content = '[Media message]';
+    contentType = detectMediaType(message);
+  } else {
+    content = '[System message]';
+    contentType = 'text';
   }
 
-  // Detect bot mentions
-  const isMentioned = botInfo ? detectBotMention(message, botInfo) : false;
-
-  // Generate Telegram URL (works for public groups/channels)
-  const generateTelegramUrl = (chatId: number, messageId: number): string | undefined => {
-    // For private chats, we can't generate a meaningful URL
-    if (message.chat.type === 'private') {
-      return undefined;
-    }
-
-    // For groups/channels, try to construct URL
-    if ('username' in message.chat && message.chat.username) {
-      return `https://t.me/${message.chat.username}/${messageId}`;
-    }
-
-    // For groups without username, use the chat ID format (may not always work)
-    return `https://t.me/c/${Math.abs(chatId)}/${messageId}`;
-  };
-
   return {
-    externalId: `${message.chat.id}-${message.message_id}`,
+    // Clean fields
+    id: `${message.chat.id}-${message.message_id}`,
     content,
-    contentType: "message",
+    contentType,
     createdAt: new Date(message.date * 1000).toISOString(),
-    url: generateTelegramUrl(message.chat.id, message.message_id),
-    authors: message.from ? [{
+    url: generateTelegramUrl(message),
+    
+    // Author
+    author: message.from ? {
       id: message.from.id.toString(),
       username: message.from.username,
       displayName: `${message.from.first_name}${message.from.last_name ? ` ${message.from.last_name}` : ''}`,
-    }] : undefined,
-    isMentioned, // NEW: Bot mention detection
+    } : undefined,
+    
+    // Telegram conveniences
+    chatId: message.chat.id.toString(),
+    messageId: message.message_id,
+    isCommand: content.startsWith('/'),
+    isReply: !!(message as any).reply_to_message,
+    hasMedia: hasMediaContent(message),
+    chatType: message.chat.type,
+    
+    // Full access
     raw: update,
+    message,
   };
 }
 
@@ -165,34 +179,36 @@ export class TelegramSourcePlugin extends SimplePlugin<
   static readonly contract = telegramContract;
 
   private bot: Telegraf | null = null;
-  private isWebhookMode = false;
   private updateQueue: Update[] = [];
-  private botInfo: any = null;
-  private botFiber: Fiber.Fiber<void, Error> | null = null;
+  private botFiber: Fiber.RuntimeFiber<void, PluginConfigurationError> | null = null;
+  private isWebhookMode = false;
+
+  private addToQueue(update: Update) {
+    if (this.updateQueue.length >= MAX_QUEUE_SIZE) {
+      this.updateQueue.shift();
+    }
+    this.updateQueue.push(update);
+  }
 
   initialize(config?: TelegramSourceConfig): Effect.Effect<void, PluginConfigurationError, PluginLoggerTag> {
     const self = this;
     return Effect.gen(function* () {
-      console.log("[DEBUG] TelegramSourcePlugin.initialize() - START");
       const logger = yield* PluginLoggerTag;
 
       if (!config?.secrets?.botToken) {
-        console.log("[DEBUG] TelegramSourcePlugin.initialize() - FAIL: No bot token");
         return yield* Effect.fail(new PluginConfigurationError({
           message: "Telegram bot token is required",
           retryable: false
         }));
       }
 
-      console.log("[DEBUG] TelegramSourcePlugin.initialize() - Creating Telegraf bot");
-      // Initialize Telegraf bot
-      self.bot = new Telegraf(config.secrets.botToken);
-      self.isWebhookMode = !!config.variables?.baseUrl;
-      console.log(`[DEBUG] TelegramSourcePlugin.initialize() - Bot created, webhook mode: ${self.isWebhookMode}`);
+      // Determine mode based on domain presence
+      self.isWebhookMode = !!config?.variables?.domain;
 
-      console.log("[DEBUG] TelegramSourcePlugin.initialize() - Getting bot info");
-      // Get bot info for mention detection
-      self.botInfo = yield* Effect.tryPromise({
+      self.bot = new Telegraf(config.secrets.botToken);
+
+      // Validate bot token
+      yield* Effect.tryPromise({
         try: () => self.bot!.telegram.getMe(),
         catch: (error) => new PluginConfigurationError({
           message: `Bot token validation failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -200,228 +216,129 @@ export class TelegramSourcePlugin extends SimplePlugin<
           cause: error instanceof Error ? error : new Error(String(error))
         })
       });
-      console.log(`[DEBUG] TelegramSourcePlugin.initialize() - Bot info retrieved: @${self.botInfo.username}`);
 
-      console.log("[DEBUG] TelegramSourcePlugin.initialize() - Setting up middleware");
       // Set up middleware to capture all updates
       self.bot.use(async (ctx, next) => {
-        console.log(`[DEBUG] Bot middleware triggered - Update ID: ${ctx.update.update_id}, Queue size before: ${self.updateQueue.length}`);
-        // Add update to our queue for streaming
-        self.updateQueue.push(ctx.update);
-        console.log(`[DEBUG] Bot middleware - Update added to queue, Queue size after: ${self.updateQueue.length}`);
+        self.addToQueue(ctx.update);
         await next();
-        console.log(`[DEBUG] Bot middleware - Processing complete for update ${ctx.update.update_id}`);
       });
-      console.log("[DEBUG] TelegramSourcePlugin.initialize() - Middleware registered");
 
-      console.log("[DEBUG] TelegramSourcePlugin.initialize() - Starting bot as supervised fiber");
+      if (self.isWebhookMode) {
+        // Webhook mode setup
+        const webhookUrl = `${config.variables!.domain}/telegram/webhook`;
+        yield* Effect.tryPromise({
+          try: () => self.bot!.telegram.setWebhook(webhookUrl, {
+            secret_token: config.secrets?.webhookToken,
+          }),
+          catch: (error) => new PluginConfigurationError({
+            message: `Webhook registration failed: ${error instanceof Error ? error.message : String(error)}`,
+            retryable: true,
+            cause: error instanceof Error ? error : new Error(String(error))
+          })
+        });
 
-      // Create bot management effect that runs until interrupted
-      const botEffect = Effect.gen(function* () {
-        console.log("[DEBUG] TelegramSourcePlugin.initialize() - Starting bot management");
-
-        if (self.isWebhookMode) {
-          console.log("[DEBUG] TelegramSourcePlugin.initialize() - Starting webhook mode");
-          const webhookUrl = `${config.variables!.baseUrl}${config.variables?.webhookPath || '/telegram-webhook'}`;
-
+        yield* logger.logDebug("Telegram webhook registered", {
+          pluginId: self.id,
+          webhookUrl,
+          mode: 'webhook'
+        });
+      } else {
+        // Polling mode setup
+        const botEffect = Effect.gen(function* () {
           yield* Effect.tryPromise({
-            try: () => self.bot!.launch({
-              webhook: {
-                domain: new URL(webhookUrl).hostname,
-                port: parseInt(new URL(webhookUrl).port) || 443,
-                path: new URL(webhookUrl).pathname,
-              }
+            try: () => self.bot!.launch({ 
+              dropPendingUpdates: false,
+              allowedUpdates: ["message", "edited_message", "channel_post", "edited_channel_post"]
             }),
             catch: (error) => new PluginConfigurationError({
-              message: `Webhook launch failed: ${error instanceof Error ? error.message : String(error)}`,
+              message: `Bot launch failed: ${error instanceof Error ? error.message : String(error)}`,
               retryable: true,
               cause: error instanceof Error ? error : new Error(String(error))
             })
           });
-          console.log(`[DEBUG] TelegramSourcePlugin.initialize() - Webhook launched successfully: ${webhookUrl}`);
 
-          yield* logger.logDebug("Telegram webhook launched", {
-            pluginId: self.id,
-            webhookUrl
-          });
-        } else {
-          console.log("[DEBUG] TelegramSourcePlugin.initialize() - Starting polling mode");
+          // Keep the bot alive until interrupted
+          yield* Effect.never;
+        });
 
-          // Use proper Effect.promise for bot.launch
-          yield* Effect.promise(() => self.bot!.launch({ dropPendingUpdates: false, allowedUpdates: ["message"] })).pipe(
-            Effect.catchAll((error: any) => {
-              console.log(`[DEBUG] TelegramSourcePlugin.initialize() - bot.launch() error: ${error}`);
-              return Effect.fail(new PluginConfigurationError({
-                message: `Bot launch failed: ${error instanceof Error ? error.message : String(error)}`,
-                retryable: true,
-                cause: error instanceof Error ? error : new Error(String(error))
-              }));
+        // Start bot as supervised background fiber
+        self.botFiber = yield* Effect.fork(
+          botEffect.pipe(
+            Effect.catchAll((error) => {
+              return logger.logError("Bot fiber crashed", error, { pluginId: self.id });
             })
-          );
-          console.log("[DEBUG] TelegramSourcePlugin.initialize() - Bot launched successfully");
+          )
+        );
 
-          yield* logger.logDebug("Telegram polling launched", {
-            pluginId: self.id
-          });
-        }
-
-        // Keep the bot alive until the fiber is interrupted
-        console.log("[DEBUG] TelegramSourcePlugin.initialize() - Bot running, waiting for interruption");
-        yield* Effect.never;
-      });
-
-      // Start bot as supervised background fiber with proper error handling
-      console.log("[DEBUG] TelegramSourcePlugin.initialize() - Starting bot fiber");
-      self.botFiber = yield* Effect.fork(
-        botEffect.pipe(
-          Effect.catchAll((error) => {
-            console.log(`[DEBUG] Bot fiber error: ${error}`);
-            return logger.logError("Bot fiber crashed", error, { pluginId: self.id });
-          })
-        )
-      );
-      console.log("[DEBUG] TelegramSourcePlugin.initialize() - Bot fiber started successfully");
-
-      console.log("[DEBUG] TelegramSourcePlugin.initialize() - SUCCESS - Plugin initialized");
-      yield* logger.logDebug("Telegram source plugin initialized successfully", {
-        pluginId: self.id,
-        mode: self.isWebhookMode ? 'webhook' : 'polling'
-      });
+        yield* logger.logDebug("Telegram polling started", {
+          pluginId: self.id,
+          mode: 'polling'
+        });
+      }
     });
   }
 
   createRouter() {
     const os = implement(telegramContract).$context<{ state: StreamState | null }>();
 
-    const search = os.search.handler(async ({ input, context, errors }) => {
+    const webhook = os.webhook.handler(async ({ input }) => {
       if (!this.bot) throw new Error("Plugin not initialized");
-      const self = this;
+
+      // Add the update directly to queue
+      this.addToQueue(input as Update);
+
+      return { processed: true };
+    });
+
+    const listen = os.listen.handler(async ({ input, context, errors }) => {
+      if (!this.bot) throw new Error("Plugin not initialized");
 
       try {
-        // Determine if we're resuming or starting fresh
-        const existingState = context?.state;
-        const isResume = existingState && existingState.phase !== 'initial';
+        const currentState = context?.state;
+        const availableUpdates = this.updateQueue.splice(0, input.maxResults || 100);
 
-        let currentState: StreamState;
-        let searchPhase: 'collecting' | 'monitoring';
+        const filteredUpdates: Update[] = [];
 
-        if (isResume) {
-          // Resume from existing state
-          currentState = { ...existingState };
-          searchPhase = currentState.phase === 'collecting' ? 'collecting' : 'monitoring';
-
-          console.log(`[Telegram Search] Resuming from phase: ${currentState.phase}`);
-        } else {
-          // Fresh search
-          currentState = {
-            phase: 'initial',
-            totalProcessed: 0,
-            chatId: input.chatId,
-          };
-          searchPhase = 'collecting'; // Start collecting messages
-          console.log(`[Telegram Search] Starting fresh search, maxResults: ${input.maxResults}`);
-        }
-
-        // Process updates from our internal queue (populated by bot.launch middleware)
-        const searchEffect = Effect.succeed(() => {
-          const allItems: SourceItem[] = [];
-          let newLastUpdateId = currentState.lastUpdateId;
-
-          // Drain updates from our queue
-          const availableUpdates = self.updateQueue.splice(0, input.maxResults || POLLING_LIMIT);
-
-          console.log(`[Telegram Search] Processing ${availableUpdates.length} updates from queue`);
-
-          const processedItems: SourceItem[] = [];
-
-          for (const update of availableUpdates) {
-            // Filter by chatId if specified
-            if (input.chatId && 'message' in update && update.message) {
-              if (update.message.chat.id.toString() !== input.chatId) {
-                continue;
-              }
-            }
-
-            // Filter by text-only if specified
-            if (input.textOnly && 'message' in update && update.message) {
-              const hasText = 'text' in update.message && update.message.text;
-              const hasCaption = 'caption' in update.message && update.message.caption;
-              if (!hasText && !hasCaption) {
-                continue;
-              }
-            }
-
-            // Filter out commands if not included
-            if (!input.includeCommands && 'message' in update && update.message) {
-              if ('text' in update.message && update.message.text && update.message.text.startsWith('/')) {
-                continue;
-              }
-            }
-
-            const item = convertTelegramUpdateToSourceItem(update, self.botInfo);
-            if (item) {
-              processedItems.push(item);
-            }
-
-            // Track the latest update_id
-            if (newLastUpdateId === undefined || update.update_id > newLastUpdateId) {
-              newLastUpdateId = update.update_id;
-            }
+        for (const update of availableUpdates) {
+          // Skip non-message updates
+          if (!isMessageUpdate(update)) {
+            continue;
           }
 
-          allItems.push(...processedItems);
+          // Filter by chat ID
+          if (input.chatId && !updateMatchesChat(update, input.chatId)) {
+            continue;
+          }
 
-          console.log(`[Telegram Search] Processed batch: ${processedItems.length} items, total: ${allItems.length}`);
+          // Filter text-only messages
+          if (input.textOnly && !updateHasText(update)) {
+            continue;
+          }
 
-          return { items: allItems, newLastUpdateId };
-        }).pipe(Effect.map(fn => fn()));
+          // Filter commands
+          if (!input.includeCommands && updateIsCommand(update)) {
+            continue;
+          }
 
-        const searchResult = await Effect.runPromise(
-          searchEffect.pipe(
-            Effect.timeout(Duration.millis(input.budgetMs)),
-            Effect.catchTag("TimeoutException", () =>
-              Effect.fail(new Error('Search budget exceeded - increase budgetMs parameter'))
-            )
-          )
-        );
+          filteredUpdates.push(update);
+        }
 
-        const { items, newLastUpdateId } = searchResult;
+        // Convert filtered updates to SourceItems
+        const sourceItems = filteredUpdates
+          .map(convertUpdateToSourceItem)
+          .filter((item): item is SourceItem => item !== null);
 
-        // Truncate items if we exceed maxResults
-        const finalItems = input.maxResults && items.length > input.maxResults
-          ? items.slice(0, input.maxResults)
-          : items;
+        const nextPollMs = sourceItems.length > 0 ? 100 : 2000;
 
-        // Check if we've hit the maxResults limit
-        const hasReachedLimit = input.maxResults !== undefined && finalItems.length >= input.maxResults;
-
-        // Update state based on current context
         const nextState: StreamState = {
-          totalProcessed: currentState.totalProcessed + finalItems.length,
-          phase: currentState.phase,
-          nextPollMs: input.livePollMs,
-          lastUpdateId: newLastUpdateId || currentState.lastUpdateId,
-          chatId: input.chatId || currentState.chatId,
+          totalProcessed: (currentState?.totalProcessed || 0) + sourceItems.length,
+          lastUpdateId: availableUpdates.length > 0 ? availableUpdates[availableUpdates.length - 1].update_id : currentState?.lastUpdateId,
+          nextPollMs,
+          chatId: input.chatId || currentState?.chatId,
         };
 
-        if (finalItems.length > 0) {
-          // Determine next phase
-          if (currentState.phase === 'initial') {
-            nextState.phase = StateTransitions.fromInitial(finalItems);
-          } else if (currentState.phase === 'collecting') {
-            nextState.phase = StateTransitions.fromCollecting(finalItems, hasReachedLimit);
-          } else {
-            nextState.phase = StateTransitions.fromMonitoring();
-          }
-        } else {
-          // No items returned, switch to monitoring
-          nextState.phase = 'monitoring';
-        }
-
-        console.log(`[Telegram Search] Next phase: ${nextState.phase}, nextPollMs: ${nextState.nextPollMs}`);
-
         return {
-          items: finalItems,
+          items: sourceItems,
           nextState
         };
 
@@ -430,23 +347,44 @@ export class TelegramSourcePlugin extends SimplePlugin<
       }
     });
 
+    const sendMessage = os.sendMessage.handler(async ({ input, errors }) => {
+      if (!this.bot) throw new Error("Plugin not initialized");
+
+      try {
+        const result = await this.bot.telegram.sendMessage(
+          input.chatId,
+          input.text,
+          {
+            reply_parameters: input.replyToMessageId ? { message_id: input.replyToMessageId } : undefined,
+            parse_mode: input.parseMode,
+          }
+        );
+
+        return {
+          messageId: result.message_id,
+          success: true,
+          chatId: input.chatId,
+        };
+      } catch (error) {
+        return handleTelegramError(error, errors);
+      }
+    });
+
     return os.router({
-      search,
+      webhook,
+      listen,
+      sendMessage,
     });
   }
 
   shutdown(): Effect.Effect<void, never, PluginLoggerTag> {
     const self = this;
     return Effect.gen(function* () {
-      console.log("[DEBUG] TelegramSourcePlugin.shutdown() - START");
       const logger = yield* PluginLoggerTag;
 
-      // Interrupt the bot fiber if it exists
       if (self.botFiber) {
-        console.log("[DEBUG] TelegramSourcePlugin.shutdown() - Interrupting bot fiber");
         yield* Fiber.interrupt(self.botFiber).pipe(
           Effect.catchAll((error: any) => {
-            console.log(`[DEBUG] TelegramSourcePlugin.shutdown() - Fiber interrupt error: ${error}`);
             return logger.logWarning("Failed to interrupt bot fiber cleanly", {
               pluginId: self.id,
               error: error instanceof Error ? error.message : String(error)
@@ -454,22 +392,15 @@ export class TelegramSourcePlugin extends SimplePlugin<
           })
         );
         self.botFiber = null;
-        console.log("[DEBUG] TelegramSourcePlugin.shutdown() - Bot fiber interrupted");
       }
 
-      // Clean up bot instance
       if (self.bot) {
-        console.log("[DEBUG] TelegramSourcePlugin.shutdown() - Stopping bot");
-        self.bot!.stop('SIGTERM');
+        self.bot.stop('SIGTERM');
         self.bot = null;
-        console.log("[DEBUG] TelegramSourcePlugin.shutdown() - Bot stopped");
       }
 
-      // Clear update queue
       self.updateQueue = [];
-      self.botInfo = null;
 
-      console.log("[DEBUG] TelegramSourcePlugin.shutdown() - SUCCESS");
       yield* logger.logDebug("Telegram source plugin shutdown completed", {
         pluginId: self.id
       });

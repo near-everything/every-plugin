@@ -26,7 +26,7 @@ export interface PluginConstructor {
 }
 
 export interface PluginInstance<T extends AnyPlugin = AnyPlugin> {
-	readonly plugin: T;
+	readonly plugin: T; // TODO: rename to instance
 	readonly metadata: {
 		readonly pluginId: string;
 		readonly version?: string;
@@ -36,7 +36,7 @@ export interface PluginInstance<T extends AnyPlugin = AnyPlugin> {
 }
 
 export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
-	readonly plugin: T
+	readonly plugin: T; // TODO: rename to instance
 	readonly metadata: {
 		readonly pluginId: string;
 		readonly version?: string;
