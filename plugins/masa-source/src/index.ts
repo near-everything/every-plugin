@@ -280,6 +280,24 @@ export class MasaSourcePlugin extends SimplePlugin<
       }
     });
 
+    const getReplies = os.getReplies.handler(async ({ input, errors }) => {
+      if (!this.jobManager) throw new Error("Plugin not initialized");
+
+      try {
+        const masaResults = await this.jobManager.executeJobWorkflow(
+          input.sourceType,
+          'getreplies',
+          input.conversationId,
+          input.maxResults || 20,
+          (results) => results
+        );
+        const replies = masaResults.map(convertMasaResultToSourceItem);
+        return { replies };
+      } catch (error) {
+        return handleMasaError(error, errors);
+      }
+    });
+
     const similaritySearch = os.similaritySearch.handler(async ({ input, errors }) => {
       if (!this.client) throw new Error("Plugin not initialized");
 
@@ -542,6 +560,7 @@ export class MasaSourcePlugin extends SimplePlugin<
       checkJobStatus,
       getJobResults,
       getById,
+      getReplies,
       getBulk,
       similaritySearch,
       hybridSearch,

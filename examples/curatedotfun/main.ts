@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Effect, Logger, LogLevel, Stream } from "effect";
+import { Context, Effect, Layer, Logger, LogLevel, Stream } from "effect";
 import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
 import type { NewItem } from "./schemas/database";
 import { DatabaseService, DatabaseServiceLive } from "./services/db.service";
@@ -8,10 +8,10 @@ import { DatabaseService, DatabaseServiceLive } from "./services/db.service";
 // Configuration constants
 const BASE_QUERY = "@curatedotfun";
 
-const runtime = createPluginRuntime({
+export const runtime = createPluginRuntime({
   registry: {
     "@curatedotfun/masa-source": {
-      remoteUrl: "https://elliot-braem-3--curatedotfun-masa-source-every-pl-3ad528063-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-11--curatedotfun-masa-source-every-p-70dcb0f28-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },
@@ -19,6 +19,28 @@ const runtime = createPluginRuntime({
     MASA_API_KEY: Bun.env.MASA_API_KEY || "your-masa-api-key-here"
   }
 });
+
+// MasaPlugin service tag for dependency injection
+export class MasaPlugin extends Context.Tag("MasaPlugin")<
+  MasaPlugin,
+  any // InitializedPlugin type - using any for now to avoid complex typing
+>() {}
+
+// Layer that provides the initialized Masa plugin
+export const MasaPluginLive = Layer.effect(
+  MasaPlugin,
+  Effect.gen(function* () {
+    const pluginRuntime = yield* PluginRuntime;
+    
+    // Initialize the plugin once with the configuration
+    const initializedPlugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", {
+      variables: { baseUrl: "https://data.gopher-ai.com/api/v1" },
+      secrets: { apiKey: "{{MASA_API_KEY}}" }
+    });
+    
+    return initializedPlugin;
+  })
+);
 
 // Helper to extract curator username from content mentioning @curatedotfun
 const extractCuratorUsername = (item: any): string | undefined => {
@@ -144,13 +166,10 @@ const program = Effect.gen(function* () {
 
   // Create streaming pipeline that handles both historical and live phases
   const pluginRuntime = yield* PluginRuntime;
+  const masaPlugin = yield* MasaPlugin;
 
   const stream = yield* pluginRuntime.streamPlugin(
-    "@curatedotfun/masa-source",
-    {
-      variables: { baseUrl: "https://data.gopher-ai.com/api/v1" },
-      secrets: { apiKey: "{{MASA_API_KEY}}" }
-    },
+    masaPlugin,
     {
       procedure: "search",
       input: {
@@ -194,6 +213,7 @@ const program = Effect.gen(function* () {
 
 }).pipe(
   Effect.provide(Logger.minimumLogLevel(LogLevel.Info)),
+  Effect.provide(MasaPluginLive),
   Effect.provide(DatabaseServiceLive),
   Effect.provide(runtime)
 );

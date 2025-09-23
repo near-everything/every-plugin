@@ -19,7 +19,7 @@ const sourceItemSchema = z.object({
 });
 
 // Masa-specific enums and types
-const MasaSourceTypeSchema = z.enum(['twitter-credential', 'twitter-api', 'twitter']);
+const MasaSourceTypeSchema = z.enum(['twitter', 'tiktok', 'reddit']);
 const MasaSearchMethodSchema = z.enum([
   'searchbyquery',
   'searchbyfullarchive', 
@@ -104,11 +104,23 @@ export const masaContract = {
     }))
     .errors(CommonPluginErrors),
 
+  // Get replies to a specific tweet/conversation
+  getReplies: oc
+    .input(z.object({
+      conversationId: z.string(),
+      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
+      maxResults: z.number().min(1).max(100).optional().default(20),
+    }))
+    .output(z.object({
+      replies: z.array(sourceItemSchema),
+    }))
+    .errors(CommonPluginErrors),
+
   // Instant similarity search (vector-based)
   similaritySearch: oc
     .input(z.object({
       query: z.string(),
-      sources: z.array(z.enum(['twitter', 'web', 'tiktok'])).optional(),
+      sources: z.array(MasaSourceTypeSchema).optional(),
       keywords: z.array(z.string()).optional(),
       keywordOperator: z.enum(['and', 'or']).optional().default('and'),
       maxResults: z.number().min(1).max(100).optional().default(10),
@@ -129,7 +141,7 @@ export const masaContract = {
         query: z.string(),
         weight: z.number().min(0).max(1),
       }),
-      sources: z.array(z.enum(['twitter', 'web', 'tiktok'])).optional(),
+      sources: z.array(MasaSourceTypeSchema).optional(),
       keywords: z.array(z.string()).optional(),
       keywordOperator: z.enum(['and', 'or']).optional().default('and'),
       maxResults: z.number().min(1).max(100).optional().default(10),
