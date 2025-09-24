@@ -1,14 +1,24 @@
 #!/usr/bin/env bun
 
 import { Context, Effect, Layer, Logger, LogLevel, Stream } from "effect";
-import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+import { createPluginRuntime, type PluginOf, type InitializedPlugin } from "every-plugin/runtime";
+import { Hono } from "hono";
+import { RPCHandler } from "@orpc/server/fetch";
+import type { AnyRouter } from "@orpc/server";
+import type { MasaBinding } from '../../plugins/masa-source/src/types';
 import type { NewItem } from "./schemas/database";
 import { DatabaseService, DatabaseServiceLive } from "./services/db.service";
 
 // Configuration constants
 const BASE_QUERY = "@curatedotfun";
+const HTTP_PORT = parseInt(Bun.env.HTTP_PORT || "4001", 10);
 
-export const runtime = createPluginRuntime({
+// Typed registry bindings using generated types
+type IRegistry = {
+  "@curatedotfun/masa-source": MasaBinding
+};
+
+export const { runtime, PluginRuntime } = createPluginRuntime<IRegistry>({
   registry: {
     "@curatedotfun/masa-source": {
       remoteUrl: "https://elliot-braem-11--curatedotfun-masa-source-every-p-70dcb0f28-ze.zephyrcloud.app/remoteEntry.js",
@@ -20,10 +30,10 @@ export const runtime = createPluginRuntime({
   }
 });
 
-// MasaPlugin service tag for dependency injection
+// MasaPlugin service tag with precise typing
 export class MasaPlugin extends Context.Tag("MasaPlugin")<
   MasaPlugin,
-  any // InitializedPlugin type - using any for now to avoid complex typing
+  InitializedPlugin<PluginOf<IRegistry["@curatedotfun/masa-source"]>>
 >() {}
 
 // Layer that provides the initialized Masa plugin
@@ -31,16 +41,56 @@ export const MasaPluginLive = Layer.effect(
   MasaPlugin,
   Effect.gen(function* () {
     const pluginRuntime = yield* PluginRuntime;
-    
+
     // Initialize the plugin once with the configuration
     const initializedPlugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", {
       variables: { baseUrl: "https://data.gopher-ai.com/api/v1" },
       secrets: { apiKey: "{{MASA_API_KEY}}" }
     });
-    
+
     return initializedPlugin;
   })
 );
+
+// HTTP server exposing plugin routers
+const createHttpServer = Effect.gen(function* () {
+  const masa = yield* MasaPlugin;
+  const app = new Hono();
+
+  // Expose Masa plugin router
+  const masaRouter = masa.plugin.createRouter();
+  const masaHandler = new RPCHandler(masaRouter as AnyRouter);
+
+  app.use("/masa/*", async (c, next) => {
+    const { matched, response } = await masaHandler.handle(c.req.raw, {
+      prefix: "/masa",
+      context: { state: null }
+    });
+
+    if (matched) {
+      return c.newResponse(response.body, response);
+    }
+    await next();
+  });
+
+  // Health check
+  app.get("/", (c) => c.json({
+    status: "ok",
+    service: "curatedotfun",
+    timestamp: new Date().toISOString()
+  }));
+
+  // Start HTTP server
+  const server = Bun.serve({
+    port: HTTP_PORT,
+    fetch: app.fetch,
+  });
+
+  console.log(`🌐 HTTP API server running on http://localhost:${HTTP_PORT}`);
+  console.log(`📡 Masa router available at: http://localhost:${HTTP_PORT}/masa/*`);
+
+  return server;
+});
 
 // Helper to extract curator username from content mentioning @curatedotfun
 const extractCuratorUsername = (item: any): string | undefined => {

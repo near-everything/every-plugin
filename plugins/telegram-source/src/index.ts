@@ -4,7 +4,7 @@ import { PluginConfigurationError, PluginLoggerTag, SimplePlugin } from "every-p
 import { Telegraf } from "telegraf";
 import type { Update } from "telegraf/types";
 import {
-  SourceItem,
+  type SourceItem,
   stateSchema,
   type StreamState,
   telegramContract,

@@ -1,13 +1,11 @@
-import { oc } from "@orpc/contract";
+import { oc, ORPCError } from "@orpc/contract";
 import { implement } from "@orpc/server";
-import { Effect } from "effect";
 import { z } from "zod";
 import {
 	CommonPluginErrors,
 	createConfigSchema,
-	createStateSchema,
+	createPlugin,
 	PluginConfigurationError,
-	SimplePlugin
 } from "../../../src/index";
 import { SourceTemplateClient } from "./client";
 
@@ -24,15 +22,8 @@ const SecretsSchema = z.object({
 const SourceTemplateConfigSchema = createConfigSchema(VariablesSchema, SecretsSchema);
 type SourceTemplateConfig = z.infer<typeof SourceTemplateConfigSchema>;
 
-// State schema for pagination (used in contract-based input generation)
-export const StateSchema = createStateSchema(
-	z.object({
-		phase: z.string(),
-		status: z.string().optional(),
-		jobId: z.string().optional(),
-		lastId: z.string().optional(),
-	})
-).nullable();
+// Export for use in tests
+export { SourceTemplateConfigSchema };
 
 // Source item schema that plugins return
 const sourceItemSchema = z.object({
@@ -50,9 +41,9 @@ const sourceItemSchema = z.object({
 	raw: z.unknown(), // Original API response
 });
 
-// Contract definition for the source plugin
+// Contract definition for the test plugin
 export const sourceContract = oc.router({
-	// Single item fetch by ID
+	// Basic single item fetch
 	getById: oc
 		.input(z.object({
 			id: z.string()
@@ -62,19 +53,7 @@ export const sourceContract = oc.router({
 		}))
 		.errors(CommonPluginErrors),
 
-	// Streamable search operation
-	search: oc
-		.input(z.object({
-			query: z.string(),
-			limit: z.number().optional(),
-		}))
-		.output(z.object({
-			items: z.array(sourceItemSchema),
-			nextState: StateSchema
-		}))
-		.errors(CommonPluginErrors),
-
-	// Bulk fetch operation
+	// Basic bulk fetch
 	getBulk: oc
 		.input(z.object({
 			ids: z.array(z.string()),
@@ -83,300 +62,246 @@ export const sourceContract = oc.router({
 			items: z.array(sourceItemSchema),
 		}))
 		.errors(CommonPluginErrors),
+
+	// Simple streaming - returns fixed number of items
+	simpleStream: oc
+		.input(z.object({
+			count: z.number().min(1).max(10).default(3),
+			prefix: z.string().default("item"),
+		}))
+		.errors(CommonPluginErrors),
+
+	// Empty stream - returns no items
+	emptyStream: oc
+		.input(z.object({
+			reason: z.string().optional(),
+		}))
+		.errors(CommonPluginErrors),
+
+	// Error testing procedures
+	throwUnauthorized: oc
+		.input(z.object({}))
+		.output(z.object({ message: z.string() }))
+		.errors(CommonPluginErrors),
+
+	throwForbidden: oc
+		.input(z.object({}))
+		.output(z.object({ message: z.string() }))
+		.errors(CommonPluginErrors),
+
+	throwRateLimit: oc
+		.input(z.object({}))
+		.output(z.object({ message: z.string() }))
+		.errors(CommonPluginErrors),
+
+	throwServiceUnavailable: oc
+		.input(z.object({}))
+		.output(z.object({ message: z.string() }))
+		.errors(CommonPluginErrors),
+
+	// Config validation testing
+	requiresSpecialConfig: oc
+		.input(z.object({
+			checkValue: z.string(),
+		}))
+		.output(z.object({
+			configValue: z.string(),
+			inputValue: z.string(),
+		}))
+		.errors(CommonPluginErrors),
 });
 
 // Export types for use in implementation
 export type SourceContract = typeof sourceContract;
 export type SourceItem = z.infer<typeof sourceItemSchema>;
 
-// Add missing helper functions
-function generateHistoricalItems(query: string, limit?: number) {
-
-	const count = limit !== undefined ? Math.min(limit, 3) : 3;
-	return Array.from({ length: count }, (_, i) => ({
-		externalId: `hist_${query}_${i}`,
-		content: `Historical ${query} item ${i}`,
+// Helper to create consistent test items
+function createTestItem(id: string, prefix: string = "item"): SourceItem {
+	return {
+		externalId: id,
+		content: `${prefix} content for ${id}`,
 		contentType: "post",
 		createdAt: new Date().toISOString(),
-		url: `https://example.com/hist/${i}`,
-		authors: [{ username: "hist_user", displayName: "Historical User" }],
-		raw: { type: "historical", index: i, query }
-	}));
+		url: `https://example.com/posts/${id}`,
+		authors: [{
+			username: "test_user",
+			displayName: "Test User",
+		}],
+		raw: { id, prefix, type: "test" },
+	};
 }
 
-function generateRealtimeItems(query: string, lastId: string, limit?: number) {
+// Streaming state type for procedure inputs
+export const StreamingStateSchema = z.object({
+	phase: z.string(),
+	status: z.string().optional(),
+	jobId: z.string().optional(),
+	lastId: z.string().optional(),
+}).nullable();
 
-	// For mixed-results, sometimes return empty to test stopWhenEmpty=false
-	if (query === "mixed-results" && Math.random() < 0.5) {
-		return [];
-	}
+export type StreamingState = z.infer<typeof StreamingStateSchema>;
 
-	// Return 0-2 random items to simulate real-time activity
-	const maxCount = limit !== undefined ? Math.min(limit, 2) : 2;
-	const count = Math.floor(Math.random() * (maxCount + 1));
-	return Array.from({ length: count }, (_, i) => ({
-		externalId: `rt_${query}_${Date.now()}_${i}`,
-		content: `Real-time ${query} item ${i}`,
-		contentType: "post",
-		createdAt: new Date().toISOString(),
-		url: `https://example.com/realtime/${i}`,
-		authors: [{ username: "rt_user", displayName: "Real-time User" }],
-		raw: { type: "realtime", index: i, query, lastId }
-	}));
-}
-
-export class SourceTemplatePlugin extends SimplePlugin<
+// Create the test plugin
+const TestPlugin = createPlugin<
 	typeof sourceContract,
 	typeof SourceTemplateConfigSchema,
-	typeof StateSchema
-> {
-	readonly id = "test-plugin" as const;
-	readonly type = "source" as const; // this is where the open api spec of the contract should be stored, asset
-	readonly contract = sourceContract;
-	readonly configSchema = SourceTemplateConfigSchema;
-	override readonly stateSchema = StateSchema;
-
-	// Export contract for client consumption
-	static readonly contract = sourceContract;
-
-	private client: SourceTemplateClient | null = null;
-
-	// Initialize the client - called by runtime after validation
-	override initialize(config?: SourceTemplateConfig) {
-		const self = this;
-		return Effect.gen(function* () {
-			if (!config?.secrets?.apiKey) {
-				return yield* Effect.fail(new PluginConfigurationError({ message: "API key is required", retryable: false }));
-			}
-
-			// Initialize SourceTemplate client
-			self.client = new SourceTemplateClient(
-				config.variables?.baseUrl || "http://localhost:1337",
-				config.secrets.apiKey,
-			);
-
-			// Test connection
-			yield* Effect.tryPromise({
-				try: () => self.client!.healthCheck(),
-				catch: (error) => new PluginConfigurationError({ message: `Health check failed: ${error instanceof Error ? error.message : String(error)}`, retryable: true })
+	{ client: SourceTemplateClient; baseUrl: string }
+>({
+	id: "test-plugin",
+	type: "source",
+	contract: sourceContract,
+	configSchema: SourceTemplateConfigSchema,
+	initialize: async (config: SourceTemplateConfig) => {
+		// Test config validation
+		if (!config?.secrets?.apiKey) {
+			throw new PluginConfigurationError({
+				message: "API key is required",
+				retryable: false
 			});
-		});
-	}
+		}
 
-	override shutdown() {
-		this.client = null;
-		return Effect.void;
-	}
-
-	// Create pure oRPC router following oRPC docs pattern
-	createRouter() {
-		const self = this;
-
-		const os = implement(sourceContract)
-			.$context<{ state?: z.infer<typeof StateSchema> }>();
-
-		const stateMiddleware = os
-			.middleware(async ({ context, next }) => {
-				console.log(`[TEST-PLUGIN] Middleware called with context:`, JSON.stringify(context, null, 2));
-				const result = await next({
-					context: {
-						state: context.state
-					}
-				});
-				console.log(`[TEST-PLUGIN] Middleware completed`);
-				return result;
+		// Test special config requirements
+		if (config.secrets.apiKey === "invalid-key") {
+			throw new PluginConfigurationError({
+				message: "Invalid API key format",
+				retryable: false
 			});
+		}
 
+		// Initialize client
+		const client = new SourceTemplateClient(
+			config.variables?.baseUrl || "http://localhost:1337",
+			config.secrets.apiKey,
+		);
 
-		// Define individual procedure handlers
+		// Test connection (can throw for testing)
+		if (config.secrets.apiKey === "connection-fail") {
+			throw new Error("Failed to connect to service");
+		}
+
+		await client.healthCheck();
+
+		// Return context object - this gets passed to createRouter
+		return {
+			client,
+			baseUrl: config.variables?.baseUrl || "http://localhost:1337"
+		};
+	},
+	createRouter: (context: { client: SourceTemplateClient; baseUrl: string }) => {
+		const os = implement(sourceContract).$context<{ client: SourceTemplateClient; baseUrl: string }>();
+
+		// Basic single item fetch
 		const getById = os.getById.handler(async ({ input }) => {
-			if (!self.client) {
+			if (!context.client) {
 				throw new Error("Plugin not initialized");
 			}
 
-			// Mock single item fetch
-			const mockItem = {
-				apiId: input.id,
-				title: `Item ${input.id}`,
-				content: `Content for item ${input.id}`,
-				timestamp: new Date().toISOString(),
-			};
-
 			return {
-				item: {
-					externalId: mockItem.apiId,
-					content: mockItem.content,
-					contentType: "post",
-					createdAt: mockItem.timestamp,
-					url: `https://example.com/posts/${mockItem.apiId}`,
-					authors: [{
-						username: "mock_user",
-						displayName: "Mock User",
-					}],
-					raw: mockItem,
-				},
+				item: createTestItem(input.id, "single"),
 			};
 		});
 
-		const search = os.use(stateMiddleware).search.handler(async ({ input, context, errors }) => {
-			const state = context.state;
-
-			// Handle error test cases
-			if (input.query === "401-unauthorized") {
-				throw errors.UNAUTHORIZED({
-					message: "Invalid API key",
-					data: { apiKeyProvided: true, authType: 'apiKey' }
-				});
-			}
-
-			if (input.query === "403-forbidden") {
-				throw errors.FORBIDDEN({
-					message: "Access denied to resource",
-					data: { requiredPermissions: ['read:data'], action: 'search' }
-				});
-			}
-
-			if (input.query === "400-bad-request") {
-				throw errors.BAD_REQUEST({
-					message: "Invalid query parameters",
-					data: {
-						invalidFields: ['query'],
-						validationErrors: [{ field: 'query', message: 'Query cannot be empty', code: 'REQUIRED' }]
-					}
-				});
-			}
-
-			if (input.query === "429-rate-limit") {
-				throw errors.RATE_LIMITED({
-					message: "Too many requests",
-					data: {
-						retryAfter: 60,
-						remainingRequests: 0,
-						limitType: 'requests'
-					}
-				});
-			}
-
-			if (input.query === "503-service-unavailable") {
-				throw errors.SERVICE_UNAVAILABLE({
-					message: "Service temporarily unavailable",
-					data: {
-						retryAfter: 30,
-						maintenanceWindow: false
-					}
-				});
-			}
-
-			// Keep some legacy error state patterns for backward compatibility testing
-			if (input.query === "trigger-error-state") {
-				return {
-					items: [],
-					nextState: {
-						nextPollMs: null, // Signal termination
-						phase: "error",
-						errorMessage: "Non-retryable error detected in plugin state",
-						errorType: "PluginConfigurationError",
-					}
-				};
-			}
-
-			// Phase 1: Initial call - return immediate results and set up for streaming
-			if (!state) {
-				console.log(`[TEST-PLUGIN] Initial call for query: ${input.query}, limit: ${input.limit}`);
-				const initialItems = generateHistoricalItems(input.query, input.limit);
-				return {
-					items: initialItems, // Return items immediately for single-call compatibility
-					nextState: {
-						nextPollMs: 50, // Short delay for testing
-						phase: "historical",
-						jobId: `hist_${Date.now()}`,
-						lastId: initialItems.length > 0 ? initialItems[initialItems.length - 1].externalId : undefined,
-					}
-				};
-			}
-
-			// Phase 2: Historical data collection (simulate catching up)
-			if (state.phase === "historical") {
-				console.log(`[TEST-PLUGIN] Historical phase`);
-				const historicalItems = generateHistoricalItems(input.query, input.limit);
-				return {
-					items: historicalItems,
-					nextState: {
-						nextPollMs: 50, // Short delay for testing
-						phase: "realtime",
-						jobId: state.jobId,
-						lastId: historicalItems.length > 0 ? historicalItems[historicalItems.length - 1].externalId : state.lastId,
-					}
-				};
-			}
-
-			// Phase 3: Real-time polling (simulate ongoing data) - runs forever
-			if (state.phase === "realtime") {
-				console.log(`[TEST-PLUGIN] Realtime phase`);
-				const newItems = generateRealtimeItems(input.query, state.lastId || "", input.limit);
-
-				// Continue indefinitely - let maxInvocations stop the stream
-				return {
-					items: newItems,
-					nextState: {
-						nextPollMs: 50, // Short delay for testing
-						phase: "realtime",
-						jobId: state.jobId,
-						lastId: newItems.length > 0 ? newItems[newItems.length - 1].externalId : state.lastId,
-					}
-				};
-			}
-
-			// Fallback - should not reach here in normal operation
-			console.log(`[TEST-PLUGIN] Fallback case, phase: ${state?.phase}`);
-			return {
-				items: [],
-				nextState: {
-					nextPollMs: 50,
-					phase: "realtime",
-					jobId: state?.jobId || `fallback_${Date.now()}`,
-					lastId: state?.lastId,
-				}
-			};
-		});
-
+		// Basic bulk fetch
 		const getBulk = os.getBulk.handler(async ({ input }) => {
-			if (!self.client) {
+			if (!context.client) {
 				throw new Error("Plugin not initialized");
 			}
 
-			// Mock bulk fetch
-			const mockItems = input.ids.map(id => ({
-				apiId: id,
-				title: `Bulk item ${id}`,
-				content: `Bulk content for item ${id}`,
-				timestamp: new Date().toISOString(),
-			}));
-
 			return {
-				items: mockItems.map(item => ({
-					externalId: item.apiId,
-					content: item.content,
-					contentType: "post",
-					createdAt: item.timestamp,
-					url: `https://example.com/posts/${item.apiId}`,
-					authors: [{
-						username: "mock_user",
-						displayName: "Mock User",
-					}],
-					raw: item,
-				})),
+				items: input.ids.map(id => createTestItem(id, "bulk")),
 			};
 		});
 
-		// Return pure oRPC router following oRPC docs pattern
+		// Simple predictable streaming
+		const simpleStream = os.simpleStream.handler(async function* ({ input }) {
+			for (let i = 0; i < input.count; i++) {
+				const item = createTestItem(`${input.prefix}_${i}`, input.prefix);
+
+				yield {
+					item,
+					state: {
+						nextPollMs: null, // Terminate after this batch
+						phase: "simple",
+						jobId: `simple_${Date.now()}`,
+						lastId: item.externalId,
+					},
+					metadata: {
+						itemIndex: i,
+						timestamp: Date.now(),
+					}
+				};
+
+				// Small delay for testing
+				await new Promise(resolve => setTimeout(resolve, 5));
+			}
+		});
+
+		// Empty stream for testing
+		const emptyStream = os.emptyStream.handler(async function* ({ input }) {
+			// Log the reason but don't yield anything
+			console.log(`[TEST-PLUGIN] Empty stream requested: ${input.reason || 'no reason'}`);
+			// Generator ends immediately - no yields
+			// biome-ignore lint/correctness/noConstantCondition: test case
+			if (false) yield;
+		});
+
+		// Error testing procedures
+		const throwUnauthorized = os.throwUnauthorized.handler(async ({ errors }) => {
+			throw errors.UNAUTHORIZED({
+				message: "Test unauthorized error",
+				data: { apiKeyProvided: true, authType: 'apiKey' as const }
+			});
+		});
+
+		const throwForbidden = os.throwForbidden.handler(async ({ errors }) => {
+			throw errors.FORBIDDEN({
+				message: "Test forbidden error",
+				data: { requiredPermissions: ['read:data'], action: 'test' }
+			});
+		});
+
+		const throwRateLimit = os.throwRateLimit.handler(async ({ errors }) => {
+			throw errors.RATE_LIMITED({
+				message: "Test rate limit error",
+				data: {
+					retryAfter: 60,
+					remainingRequests: 0,
+					limitType: 'requests' as const
+				}
+			});
+		});
+
+		const throwServiceUnavailable = os.throwServiceUnavailable.handler(async ({ errors }) => {
+			throw errors.SERVICE_UNAVAILABLE({
+				message: "Test service unavailable error",
+				data: {
+					retryAfter: 30,
+					maintenanceWindow: false
+				}
+			});
+		});
+
+		// Config validation testing
+		const requiresSpecialConfig = os.requiresSpecialConfig.handler(async ({ input }) => {
+			return {
+				configValue: context.baseUrl,
+				inputValue: input.checkValue,
+			};
+		});
+
+		// Return the oRPC router
 		return os.router({
 			getById,
-			search,
 			getBulk,
+			simpleStream,
+			emptyStream,
+			throwUnauthorized,
+			throwForbidden,
+			throwRateLimit,
+			throwServiceUnavailable,
+			requiresSpecialConfig,
 		});
 	}
+});
 
-}
-
-export default SourceTemplatePlugin;
+export default TestPlugin;

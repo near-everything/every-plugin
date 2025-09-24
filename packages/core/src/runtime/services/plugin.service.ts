@@ -1,20 +1,17 @@
-import type { AnySchema, ErrorMap, Meta } from "@orpc/contract";
-import { call, type Context as OContext, type Procedure } from "@orpc/server";
-import { Cache, Duration, Effect, Hash, Layer, Schedule, type Stream } from "effect";
-import type { z } from "zod";
-import { PluginLoggerTag, type PluginRegistry } from "../../plugin";
+import { Cache, Context, Duration, Effect, Hash, Layer, Ref } from "effect";
 import { PluginRuntimeError } from "../errors";
-import { createSourceStream, type StreamingOptions } from "../streaming";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
 	PluginConstructor,
 	PluginInstance,
+	PluginRegistry,
 	SecretsConfig,
 } from "../types";
+import { PluginLifecycleService } from "./plugin-lifecycle.service";
+import { PluginLoaderService } from "./plugin-loader.service";
+import type { z } from "zod";
 import { validate } from "../validation";
-import { ModuleFederationService } from "./module-federation.service";
-import { SecretsService } from "./secrets.service";
 
 export interface IPluginService {
 	readonly loadPlugin: (
@@ -25,231 +22,42 @@ export interface IPluginService {
 	) => Effect.Effect<PluginInstance<T>, PluginRuntimeError>;
 	readonly initializePlugin: <T extends AnyPlugin>(
 		pluginInstance: PluginInstance<T>,
-		config: unknown,
+		config: z.infer<T["configSchema"]>,
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
-	readonly executePlugin: <T extends AnyPlugin>(
-		initializedPlugin: InitializedPlugin<T>,
-		input: z.infer<T["inputSchema"]>,
-	) => Effect.Effect<z.infer<T["outputSchema"]>, PluginRuntimeError>;
 	readonly usePlugin: <T extends AnyPlugin>(
 		pluginId: string,
-		config: unknown,
+		config: z.infer<T["configSchema"]>,
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
-	readonly streamPlugin: <
-		T extends AnyPlugin,
-		TItem = unknown,
-	>(
-		initializedPlugin: InitializedPlugin<T>,
-		input: z.infer<T["inputSchema"]>,
-		options?: StreamingOptions<TItem, z.infer<T["stateSchema"]>>
-	) => Effect.Effect<Stream.Stream<TItem, PluginRuntimeError>, PluginRuntimeError>;
 	readonly shutdownPlugin: (plugin: InitializedPlugin<AnyPlugin>) => Effect.Effect<void, PluginRuntimeError>;
-	readonly clearCache: () => Effect.Effect<void, never>;
 	readonly cleanup: () => Effect.Effect<void, never>;
 }
 
-export class PluginService extends Effect.Tag("PluginService")<
+export class PluginService extends Context.Tag("PluginService")<
 	PluginService,
 	IPluginService
 >() {
 	static Live = (registry: PluginRegistry, secrets: SecretsConfig) =>
-		Layer.effect(
+		Layer.scoped(
 			PluginService,
 			Effect.gen(function* () {
-				const moduleFederationService = yield* ModuleFederationService;
-				const secretsService = yield* SecretsService;
-				const logger = yield* PluginLoggerTag;
+				// Inject all specialized services via Context.Tag
+				const loader = yield* PluginLoaderService;
+				const lifecycle = yield* PluginLifecycleService;
 
-				const activePlugins = new Set<InitializedPlugin<AnyPlugin>>();
-
-				const retrySchedule = Schedule.exponential(Duration.millis(100)).pipe(
-					Schedule.compose(Schedule.recurs(2)),
-				);
-
-				const resolveUrl = (baseUrl: string, version?: string): string =>
-					version && version !== "latest"
-						? baseUrl.replace("@latest", `@${version}`)
-						: baseUrl;
-
-				// Implementation functions
-				const loadPluginImpl = (pluginId: string) =>
-					Effect.gen(function* () {
-						const metadata = registry[pluginId];
-						if (!metadata) {
-							return yield* Effect.fail(
-								new PluginRuntimeError({
-									pluginId,
-									operation: "load-plugin",
-									cause: new Error(
-										`Plugin ${pluginId} not found in registry`,
-									),
-									retryable: false,
-								}),
-							);
-						}
-
-						const url = resolveUrl(metadata.remoteUrl);
-
-						// Register and load the remote constructor
-						yield* moduleFederationService.registerRemote(pluginId, url).pipe(
-							Effect.mapError((error) =>
-								new PluginRuntimeError({
-									pluginId,
-									operation: "register-remote",
-									cause: error.cause,
-									retryable: true,
-								})
-							)
-						);
-						logger.logDebug(`Trying to load ${pluginId}:${url}`)
-						const ctor = yield* moduleFederationService.loadRemoteConstructor(pluginId, url).pipe(
-							Effect.mapError((error) =>
-								new PluginRuntimeError({
-									pluginId,
-									operation: "load-remote",
-									cause: error.cause,
-									retryable: false
-								})
-							)
-						);
-
-						return {
-							ctor,
-							metadata: {
-								pluginId,
-								version: metadata.version,
-								description: metadata.description,
-								type: metadata.type,
-							},
-						} satisfies PluginConstructor;
-					});
-
-				const instantiatePluginImpl = <T extends AnyPlugin>(
-					pluginConstructor: PluginConstructor,
-				) =>
-					Effect.gen(function* () {
-						const instance = yield* Effect.try({
-							try: () => new pluginConstructor.ctor() as T,
-							catch: (error): PluginRuntimeError =>
-								new PluginRuntimeError({
-									pluginId: pluginConstructor.metadata.pluginId,
-									operation: "instantiate-plugin",
-									cause:
-										error instanceof Error ? error : new Error(String(error)),
-									retryable: false,
-								}),
-						});
-
-						// Validate plugin ID matches
-						if (instance.id !== pluginConstructor.metadata.pluginId) {
-							return yield* Effect.fail(
-								new PluginRuntimeError({
-									pluginId: pluginConstructor.metadata.pluginId,
-									operation: "validate-plugin-id",
-									cause: new Error(
-										`Plugin ID mismatch: expected ${pluginConstructor.metadata.pluginId}, got ${instance.id}`,
-									),
-									retryable: false,
-								}),
-							);
-						}
-
-						return {
-							plugin: instance,
-							metadata: pluginConstructor.metadata,
-						} satisfies PluginInstance<T>;
-					});
-
-				const initializePluginImpl = <T extends AnyPlugin>(
-					pluginInstance: PluginInstance<T>,
-					config: unknown,
-				) =>
-					Effect.gen(function* () {
-						const { plugin } = pluginInstance;
-
-						// Validate raw config using plugin's Zod schema
-						const validatedConfig = yield* validate(
-							plugin.configSchema,
-							config,
-							plugin.id,
-							"config",
-						).pipe(
-							Effect.mapError(
-								(validationError): PluginRuntimeError =>
-									new PluginRuntimeError({
-										pluginId: plugin.id,
-										operation: "validate-config",
-										cause: validationError.zodError,
-										retryable: false,
-									}),
-							),
-						);
-
-						// Hydrate secrets
-						const hydratedConfig = yield* secretsService.hydrateSecrets(
-							validatedConfig,
-							secrets,
-						);
-
-						// Validate hydrated config
-						const finalConfig = yield* validate(
-							plugin.configSchema,
-							hydratedConfig,
-							plugin.id,
-							"config",
-						).pipe(
-							Effect.mapError(
-								(validationError): PluginRuntimeError =>
-									new PluginRuntimeError({
-										pluginId: plugin.id,
-										operation: "validate-hydrated-config",
-										cause: validationError.zodError,
-										retryable: false,
-									}),
-							),
-						);
-
-						// Initialize plugin with retry logic
-						const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
-						yield* plugin.initialize(finalConfig).pipe(
-							Effect.mapError(
-								(error): PluginRuntimeError =>
-									new PluginRuntimeError({
-										pluginId: plugin.id,
-										operation: "initialize-plugin",
-										cause: error,
-										retryable: error.retryable ?? false,
-									}),
-							),
-							Effect.retry(
-								retrySchedule.pipe(
-									Schedule.whileInput(
-										(error: PluginRuntimeError) => error.retryable,
-									),
-								),
-							),
-							Effect.provide(pluginLayer),
-						);
-
-						const initializedPlugin = {
-							plugin,
-							metadata: pluginInstance.metadata,
-							config: finalConfig as any, // TODO: config type
-						} satisfies InitializedPlugin<T>;
-
-						activePlugins.add(initializedPlugin as InitializedPlugin<AnyPlugin>);
-
-						return initializedPlugin;
-					});
-
-				// Cache functionality
+				// Cache setup helpers
 				const generateConfigHash = (config: unknown): string => {
 					return Hash.structure(config as object).toString();
 				};
 
-				// Store original config by hash for cache lookup
-				const configByHash = new Map<string, unknown>();
+				const generateCacheKey = (pluginId: string, config: unknown): string => {
+					const configHash = generateConfigHash(config);
+					return `${pluginId}:${configHash}`;
+				};
 
+				// Store original config by hash for cache lookup
+				const configByHash = yield* Ref.make(new Map<string, unknown>());
+
+				// Cache with lookup function
 				const cache = yield* Cache.make<
 					string, // Key format: "pluginId:configHash"
 					InitializedPlugin<AnyPlugin>,
@@ -262,251 +70,97 @@ export class PluginService extends Effect.Tag("PluginService")<
 
 						if (!pluginId || !configHash) {
 							return Effect.fail(new PluginRuntimeError({
+								pluginId: pluginId || "unknown",
 								operation: "cache-lookup",
 								cause: new Error(`Invalid cache key format: ${cacheKey}`),
 								retryable: false,
 							}));
 						}
 
-						const config = configByHash.get(configHash);
-
-						if (!config) {
-							return Effect.fail(new PluginRuntimeError({
-								operation: "cache-lookup",
-								cause: new Error(`No config found for hash: ${configHash}`),
-								retryable: false,
-							}));
-						}
-
 						return Effect.gen(function* () {
-							const ctor = yield* loadPluginImpl(pluginId);
-							const instance = yield* instantiatePluginImpl(ctor);
-							return yield* initializePluginImpl(instance, config);
+							const configMap = yield* Ref.get(configByHash);
+							const config = configMap.get(configHash);
+
+							if (!config) {
+								return yield* Effect.fail(new PluginRuntimeError({
+									pluginId,
+									operation: "cache-lookup",
+									cause: new Error(`No config found for hash: ${configHash}`),
+									retryable: false,
+								}));
+							}
+
+							// Load, instantiate plugin to get schema for validation
+							const ctor = yield* loader.loadPlugin(pluginId);
+							const instance = yield* loader.instantiatePlugin(ctor);
+
+							// Re-validate cached config against plugin's schema to ensure type safety
+							const validatedConfig = yield* validate(
+								instance.plugin.configSchema,
+								config,
+								pluginId,
+								"config",
+							).pipe(
+								Effect.mapError((validationError) =>
+									new PluginRuntimeError({
+										pluginId,
+										operation: "validate-config",
+										cause: validationError.zodError,
+										retryable: false,
+									}),
+								),
+							);
+
+							// Initialize with properly validated config
+							const initialized = yield* loader.initializePlugin(instance, validatedConfig);
+
+							// Register for lifecycle management on first creation
+							yield* lifecycle.register(initialized);
+
+							return initialized;
 						});
 					},
 				});
 
-
-				const usePluginImpl = <T extends AnyPlugin>(
-					pluginId: string,
-					config: unknown,
-				): Effect.Effect<InitializedPlugin<T>, PluginRuntimeError> => {
-					const configHash = generateConfigHash(config);
-					const cacheKey = `${pluginId}:${configHash}`;
-
-					// Store config for cache lookup
-					configByHash.set(configHash, config);
-
-					return cache.get(cacheKey).pipe(
-						Effect.map(plugin => plugin as InitializedPlugin<T>)
-					);
-				};
-
-				// Extract executePlugin implementation for reuse
-				const executePluginImpl = <T extends AnyPlugin>(
-					initializedPlugin: InitializedPlugin<T>,
-					input: z.infer<T["inputSchema"]>,
-				): Effect.Effect<z.infer<T["outputSchema"]>, PluginRuntimeError> =>
-					Effect.gen(function* () {
-						const { plugin } = initializedPlugin;
-
-						// Validate input
-						const validatedInput = yield* validate(
-							plugin.inputSchema,
-							input,
-							plugin.id,
-							"input",
-						).pipe(
-							Effect.mapError(
-								(validationError): PluginRuntimeError => {
-									return new PluginRuntimeError({
-										pluginId: plugin.id,
-										operation: "validate-input",
-										cause: validationError.zodError,
-										retryable: false,
-									});
-								},
-							),
-						);
-
-						// Get oRPC router and call procedure directly
-						const router = plugin.createRouter();
-						const procedureName = (validatedInput as z.infer<T["inputSchema"]>).procedure as string;
-
-						if (!(procedureName in router)) {
-							return yield* Effect.fail(
-								new PluginRuntimeError({
-									pluginId: plugin.id,
-									operation: "execute-plugin",
-									cause: new Error(`Unknown procedure: ${procedureName}`),
-									retryable: false,
-								})
-							);
-						}
-
-						const context = 'state' in validatedInput ? { state: validatedInput.state } : {};
-						const output = yield* Effect.tryPromise({
-							try: () => {
-								const procedure = router[procedureName as keyof typeof router] as Procedure<OContext, OContext, AnySchema, AnySchema, ErrorMap, Meta>;;
-
-								if (!procedure) {
-									throw new Error(`Procedure ${procedureName} not found in router`);
-								}
-
-								// Use oRPC call utility as per docs
-								return call(procedure, validatedInput.input, { context });
-							},
-							catch: (error): PluginRuntimeError =>
-								new PluginRuntimeError({
-									pluginId: plugin.id,
-									operation: "execute-plugin",
-									cause: error instanceof Error ? error : new Error(String(error)),
-									retryable: true,
-								}),
-						}).pipe(
-							Effect.retry(
-								retrySchedule.pipe(
-									Schedule.whileInput(
-										(error: PluginRuntimeError) => error.retryable,
-									),
-								),
-							),
-						);
-
-						return output as z.infer<T["outputSchema"]>;
-					});
-
 				return {
-					loadPlugin: loadPluginImpl,
-					instantiatePlugin: instantiatePluginImpl,
-					initializePlugin: initializePluginImpl,
-					executePlugin: executePluginImpl,
-					usePlugin: usePluginImpl,
-					streamPlugin: <
-						T extends AnyPlugin,
-						TItem = unknown,
-					>(
-						initializedPlugin: InitializedPlugin<T>,
-						input: z.infer<T["inputSchema"]>,
-						options?: StreamingOptions<TItem, z.infer<T["stateSchema"]>>
-					): Effect.Effect<Stream.Stream<TItem, PluginRuntimeError>, PluginRuntimeError> => Effect.gen(function* () {
-						const { plugin } = initializedPlugin;
+					// Delegate to specialized services
+					loadPlugin: loader.loadPlugin,
+					instantiatePlugin: loader.instantiatePlugin,
+					initializePlugin: loader.initializePlugin,
+					usePlugin: <T extends AnyPlugin>(pluginId: string, config: z.infer<T["configSchema"]>) =>
+						Effect.gen(function* () {
+							const cacheKey = generateCacheKey(pluginId, config);
+							const configHash = generateConfigHash(config);
 
-						// Check if procedure is streamable and validate state
-						const procedureName = (input as { procedure: string }).procedure;
-						const isStreamable = plugin.isStreamable(procedureName);
-
-						if (!isStreamable) {
-							return yield* Effect.fail(
-								new PluginRuntimeError({
-									pluginId: plugin.id,
-									operation: "stream-plugin-validate",
-									cause: new Error(`Procedure ${procedureName} is not streamable`),
-									retryable: false,
-								})
+							// Store config for potential cache lookup
+							yield* Ref.update(configByHash, map =>
+								new Map(map).set(configHash, config)
 							);
-						}
 
-						// Check stateSchema exists for streamable procedures
-						if (!('stateSchema' in plugin) || !plugin.stateSchema) {
-							return yield* Effect.fail(
-								new PluginRuntimeError({
-									pluginId: plugin.id,
-									operation: "validate-state",
-									cause: new Error(`Streamable plugin ${plugin.id} must have a stateSchema`),
-									retryable: false,
-								})
-							);
-						}
+							// Get from cache (will trigger lookup on miss)
+							const initialized = yield* cache.get(cacheKey);
 
-						// Validate initial state - allow null for initial calls
-						const nullableStateSchema = plugin.stateSchema.nullable();
-						yield* validate(
-							nullableStateSchema,
-							input.state,
-							plugin.id,
-							"state",
-						).pipe(
-							Effect.mapError(
-								(validationError): PluginRuntimeError =>
-									new PluginRuntimeError({
-										pluginId: plugin.id,
-										operation: "validate-state",
-										cause: validationError.zodError,
-										retryable: false,
-									})
-							),
-						);
-
-						// Create and return the stream
-						return createSourceStream<T, z.infer<T["inputSchema"]>, TItem, z.infer<T["stateSchema"]>>(
-							initializedPlugin,
-							executePluginImpl,
-							input,
-							options
-						);
-					}),
+							return initialized as InitializedPlugin<T>;
+						}),
 					shutdownPlugin: (plugin: InitializedPlugin<AnyPlugin>) =>
 						Effect.gen(function* () {
-							const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
-
-							// Remove from active plugins
-							activePlugins.delete(plugin);
-
-							// Try to invalidate from cache if it exists there
-							const configHash = generateConfigHash(plugin.config);
-							const cacheKey = `${plugin.plugin.id}:${configHash}`;
-
-							yield* cache.invalidate(cacheKey).pipe(
-								Effect.catchAll(() => Effect.void) // Ignore if not in cache
-							);
-
-							// Clean up config hash
-							configByHash.delete(configHash);
+							// Unregister from lifecycle tracking
+							yield* lifecycle.unregister(plugin);
 
 							// Shutdown the plugin
-							yield* plugin.plugin.shutdown().pipe(
-								Effect.mapError((error): PluginRuntimeError =>
-									new PluginRuntimeError({
-										pluginId: plugin.plugin.id,
-										operation: "shutdown-plugin",
-										cause: error,
-										retryable: false,
-									})
-								),
-								Effect.provide(pluginLayer)
-							);
+							yield* lifecycle.shutdown(plugin);
 						}),
-					clearCache: () =>
-						Effect.sync(() => {
-							configByHash.clear();
-						}),
-					cleanup: () =>
-						Effect.gen(function* () {
-							const pluginLayer = Layer.succeed(PluginLoggerTag, logger);
-
-							// Call shutdown on all active plugins
-							for (const initializedPlugin of activePlugins) {
-								yield* initializedPlugin.plugin.shutdown().pipe(
-									Effect.catchAll((error) => {
-										// Log shutdown errors but don't fail the cleanup
-										return logger.logError(
-											`Failed to shutdown plugin ${initializedPlugin.plugin.id}`,
-											error,
-											{ pluginId: initializedPlugin.plugin.id }
-										);
-									}),
-									Effect.provide(pluginLayer)
-								);
-							}
-
-							// Clear the active plugins set
-							activePlugins.clear();
-							// Clear cache
-							configByHash.clear();
-						}),
+					cleanup: lifecycle.cleanup,
 				};
 			}),
+		).pipe(
+			// Provide all service dependencies using Layer composition
+			Layer.provide(
+				Layer.mergeAll(
+					PluginLoaderService.Live(registry, secrets),
+					PluginLifecycleService.Live,
+				),
+			),
 		);
 }
 

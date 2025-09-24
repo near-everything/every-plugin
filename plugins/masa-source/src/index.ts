@@ -1,6 +1,5 @@
 import { implement } from "@orpc/server";
-import { Duration, Effect } from "effect";
-import { PluginConfigurationError, PluginLoggerTag, SimplePlugin } from "every-plugin";
+import { createPlugin, PluginConfigurationError } from "every-plugin";
 import { MasaApiError, MasaClient, type MasaSearchResult } from "./client";
 import { JobManager } from "./job-manager";
 import {
@@ -8,8 +7,6 @@ import {
   MasaSourceConfigSchema,
   masaContract,
   type SourceItem,
-  type StreamState, 
-  stateSchema
 } from "./schemas";
 
 

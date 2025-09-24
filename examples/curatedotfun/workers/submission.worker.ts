@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 
 import { Duration, Effect, Logger, LogLevel } from "effect";
-import { PluginRuntime } from "every-plugin/runtime";
-import { MasaPlugin, MasaPluginLive, runtime } from "../main";
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/fetch";
+import type { ContractRouterClient } from "@orpc/contract";
+import type { masaContract } from "../../../plugins/masa-source/src/schemas";
 import { DatabaseService, DatabaseServiceLive } from "../services/db.service";
 
 // Worker ID for tracking which worker is processing tasks
@@ -95,12 +97,15 @@ const analyzeContent = (content: CuratedContent) => {
   };
 };
 
+// Create typed oRPC client for Masa plugin
+const BASE_URL = Bun.env.CURATE_API_URL || "http://localhost:4001";
+const link = new RPCLink({ url: `${BASE_URL}/masa` });
+const masaClient: ContractRouterClient<typeof masaContract> = createORPCClient(link);
+
 // Process a single submission task
 const processSubmissionTask = (task: any) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
-    const pluginRuntime = yield* PluginRuntime;
-    const masaPlugin = yield* MasaPlugin;
 
     console.log(`🔄 Processing submission task ${task.id} for item ${task.itemId}`);
 
@@ -134,30 +139,26 @@ const processSubmissionTask = (task: any) =>
       console.log(`🔍 Fetching original post for ID: ${item.conversationId}`);
 
       // First, get the original post being curated
-      const originalPostResult = yield* pluginRuntime.executePlugin(
-        masaPlugin,
-        {
-          procedure: "getById",
-          input: {
-            id: item.conversationId,
-            sourceType: 'twitter' as const
-          }
-        }
-      ).pipe(
+      const originalPostResult = yield* Effect.tryPromise({
+        try: () => masaClient.getById({
+          id: item.conversationId,
+          sourceType: 'twitter' as const
+        }),
+        catch: (error) => error as Error
+      }).pipe(
         Effect.catchAll((error) => {
           console.error(`Failed to fetch original post: ${error}`);
           return Effect.succeed({ item: null });
         })
       );
 
-      const typedOriginalResult = originalPostResult as { item: any | null };
-      if (typedOriginalResult.item) {
+      if (originalPostResult.item) {
         curatedContent.originalPost = {
-          externalId: typedOriginalResult.item.externalId,
-          content: typedOriginalResult.item.content,
-          author: typedOriginalResult.item.authors?.[0] || null,
-          createdAt: typedOriginalResult.item.createdAt,
-          url: typedOriginalResult.item.url
+          externalId: originalPostResult.item.externalId,
+          content: originalPostResult.item.content,
+          author: originalPostResult.item.authors?.[0] || null,
+          createdAt: originalPostResult.item.createdAt,
+          url: originalPostResult.item.url
         };
 
         console.log(`📝 Original post: @${curatedContent.originalPost.author?.username}: "${curatedContent.originalPost.content.substring(0, 100)}..."`);
@@ -165,30 +166,26 @@ const processSubmissionTask = (task: any) =>
         // Now get all replies to understand the full conversation
         console.log(`🔍 Fetching replies for conversation ID: ${item.conversationId}`);
 
-        const repliesResult = yield* pluginRuntime.executePlugin(
-          masaPlugin,
-          {
-            procedure: "getReplies",
-            input: {
-              conversationId: item.conversationId,
-              sourceType: 'twitter' as const,
-              maxResults: 50
-            }
-          }
-        ).pipe(
+        const repliesResult = yield* Effect.tryPromise({
+          try: () => masaClient.getReplies({
+            conversationId: item.conversationId,
+            sourceType: 'twitter' as const,
+            maxResults: 50
+          }),
+          catch: (error) => error as Error
+        }).pipe(
           Effect.catchAll((error) => {
             console.error(`Failed to fetch replies: ${error}`);
             return Effect.succeed({ replies: [] });
           })
         );
 
-        const typedRepliesResult = repliesResult as { replies: any[] };
-        console.log(`📄 Retrieved ${typedRepliesResult.replies.length} replies`);
+        console.log(`📄 Retrieved ${repliesResult.replies.length} replies`);
 
         // Categorize the replies
         const { threadContent, conversationalContext } = categorizeContent(
           curatedContent.originalPost,
-          typedRepliesResult.replies,
+          repliesResult.replies,
           curatedContent.originalPost.author?.username
         );
 

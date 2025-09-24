@@ -1,93 +1,70 @@
-import { Effect, Layer, ManagedRuntime, type Stream } from "effect";
+import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import type { z } from "zod";
-import { type PluginLogger, PluginLoggerTag } from "../plugin";
 import type { PluginRuntimeError } from "./errors";
-import {
-	ModuleFederationService,
-	PluginService,
-	SecretsService,
-} from "./services";
-import type { StreamingOptions } from "./streaming";
+import { ModuleFederationService } from "./services/module-federation.service";
+import { PluginService } from "./services/plugin.service";
+import { SecretsService } from "./services/secrets.service";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
 	PluginConstructor,
 	PluginInstance,
+	PluginOf,
 	PluginRuntimeConfig,
+	RegistryBindings,
 } from "./types";
 
-// Default logger implementation
-const createDefaultLogger = (): PluginLogger => ({
-	logInfo: (message: string, context?: unknown) =>
-		Effect.logInfo(message).pipe(
-			Effect.annotateLogs({ source: "plugin", context }),
-		),
-	logWarning: (message: string, context?: unknown) =>
-		Effect.logWarning(message).pipe(
-			Effect.annotateLogs({ source: "plugin", context }),
-		),
-	logError: (message: string, error?: unknown, context?: unknown) =>
-		Effect.logError(message, error).pipe(
-			Effect.annotateLogs({ source: "plugin", error, context }),
-		),
-	logDebug: (message: string, context?: unknown) =>
-		Effect.logDebug(message).pipe(
-			Effect.annotateLogs({ source: "plugin", context }),
-		),
-});
-
 // Main PluginRuntime service interface
-export interface IPluginRuntime {
+export interface IPluginRuntime<R extends RegistryBindings = RegistryBindings> {
 	readonly loadPlugin: (
 		pluginId: string,
 	) => Effect.Effect<PluginConstructor, PluginRuntimeError>;
+
 	readonly instantiatePlugin: <T extends AnyPlugin>(
 		ctor: PluginConstructor,
 	) => Effect.Effect<PluginInstance<T>, PluginRuntimeError>;
+
 	readonly initializePlugin: <T extends AnyPlugin>(
 		instance: PluginInstance<T>,
 		config: z.infer<T["configSchema"]>,
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
-	readonly executePlugin: <T extends AnyPlugin>(
-		initializedPlugin: InitializedPlugin<T>,
-		input: z.infer<T["inputSchema"]>,
-	) => Effect.Effect<z.infer<T["outputSchema"]>, PluginRuntimeError>;
-	readonly usePlugin: <T extends AnyPlugin>(
+
+	// usePlugin: keyed overload + generic fallback
+	readonly usePlugin:
+	& (<K extends keyof R>(
+		pluginId: K,
+		config: z.infer<PluginOf<R[K]>["configSchema"]>,) => Effect.Effect<InitializedPlugin<PluginOf<R[K]>>, PluginRuntimeError>)
+	& (<T extends AnyPlugin>(
 		pluginId: string,
-		config: z.infer<T["configSchema"]>,
-	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
-	readonly streamPlugin: <
-		T extends AnyPlugin,
-		TItem = unknown,
-	>(
-		initializedPlugin: InitializedPlugin<T>,
-		input: z.infer<T["inputSchema"]>,
-		options?: StreamingOptions<TItem, z.infer<T["stateSchema"]>>
-	) => Effect.Effect<Stream.Stream<TItem, PluginRuntimeError>, PluginRuntimeError>;
+		config: z.infer<T["configSchema"]>,) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>);
+
 	readonly shutdown: () => Effect.Effect<void, never, never>;
 }
 
-export class PluginRuntime extends Effect.Tag("PluginRuntime")<
+export class PluginRuntime extends Context.Tag("PluginRuntime")<
 	PluginRuntime,
 	IPluginRuntime
 >() {
-	static Live = (config: PluginRuntimeConfig) => {
+	static Live = <R extends RegistryBindings = RegistryBindings>(config: PluginRuntimeConfig<R>) => {
 		const secrets = config.secrets || {};
-		const logger = config.logger || createDefaultLogger();
 
-		return Layer.effect(
+		return Layer.scoped(
 			PluginRuntime,
 			Effect.gen(function* () {
 				const pluginService = yield* PluginService;
+
+				// Register cleanup finalizer for automatic resource management
+				yield* Effect.addFinalizer(() =>
+					pluginService.cleanup().pipe(
+						Effect.catchAll(() => Effect.void) // Ensure cleanup never fails
+					)
+				);
 
 				return {
 					loadPlugin: pluginService.loadPlugin,
 					instantiatePlugin: pluginService.instantiatePlugin,
 					initializePlugin: pluginService.initializePlugin,
-					executePlugin: pluginService.executePlugin,
-
-					usePlugin: pluginService.usePlugin,
-					streamPlugin: pluginService.streamPlugin,
+					usePlugin: pluginService.usePlugin as IPluginRuntime["usePlugin"],
 					shutdown: () => pluginService.cleanup(),
 				};
 			}),
@@ -98,7 +75,6 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 						Layer.mergeAll(
 							ModuleFederationService.Live,
 							SecretsService.Live(secrets),
-							Layer.succeed(PluginLoggerTag, logger),
 						),
 					),
 				),
@@ -107,5 +83,16 @@ export class PluginRuntime extends Effect.Tag("PluginRuntime")<
 	}
 }
 
-export const createPluginRuntime = (config: PluginRuntimeConfig) =>
-	ManagedRuntime.make(PluginRuntime.Live(config));
+export function createPluginRuntime<R extends RegistryBindings = RegistryBindings>(config: PluginRuntimeConfig<R>) {
+	const layer = PluginRuntime.Live<R>(config);
+	const runtime = ManagedRuntime.make(layer);
+	const TypedPluginRuntime = PluginRuntime as unknown as Context.Tag<PluginRuntime, IPluginRuntime<R>>;
+	return { runtime, PluginRuntime: TypedPluginRuntime };
+}
+
+export type {
+	ConfigOf,
+	InitializedPlugin, InputOf,
+	OutputOf, PluginBinding,
+	PluginOf, RegistryBindings, StateOf
+} from "./types";

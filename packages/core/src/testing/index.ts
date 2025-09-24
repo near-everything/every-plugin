@@ -1,8 +1,7 @@
-import { Effect, Layer, ManagedRuntime } from "effect";
-import { PluginLoggerTag, type PluginRegistry } from "../plugin";
-import { PluginRuntime } from "../runtime";
+import { Context, Effect, Layer, ManagedRuntime } from "effect";
+import { type IPluginRuntime, PluginRuntime } from "../runtime";
 import { PluginService, SecretsService } from "../runtime/services";
-import type { PluginRuntimeConfig } from "../runtime/types";
+import type { PluginRegistry, PluginRuntimeConfig, RegistryBindings } from "../runtime/types";
 
 // Import the mock service factory and types
 import { createMockModuleFederationServiceLayer, type TestPluginMap } from "./mocks/module-federation.service";
@@ -24,9 +23,11 @@ export const createTestLogger = () => ({
  * This layer provides all the necessary services for testing plugin runtime
  * without requiring real module federation infrastructure.
  */
-export const createTestLayer = (config: PluginRuntimeConfig, pluginMap: TestPluginMap) => {
+export const createTestLayer = <R extends RegistryBindings = RegistryBindings>(
+  config: PluginRuntimeConfig<R>,
+  pluginMap: TestPluginMap
+) => {
   const secrets = config.secrets || {};
-  const logger = config.logger || createTestLogger();
 
   return Layer.effect(
     PluginRuntime,
@@ -37,9 +38,7 @@ export const createTestLayer = (config: PluginRuntimeConfig, pluginMap: TestPlug
         loadPlugin: pluginService.loadPlugin,
         instantiatePlugin: pluginService.instantiatePlugin,
         initializePlugin: pluginService.initializePlugin,
-        executePlugin: pluginService.executePlugin,
-        usePlugin: pluginService.usePlugin,
-        streamPlugin: pluginService.streamPlugin,
+        usePlugin: pluginService.usePlugin as IPluginRuntime<R>["usePlugin"],
         shutdown: () => pluginService.cleanup(),
       };
     }),
@@ -50,7 +49,6 @@ export const createTestLayer = (config: PluginRuntimeConfig, pluginMap: TestPlug
           Layer.mergeAll(
             createMockModuleFederationServiceLayer(pluginMap),
             SecretsService.Live(secrets),
-            Layer.succeed(PluginLoggerTag, logger),
           )
         )
       )
@@ -63,8 +61,15 @@ export const createTestLayer = (config: PluginRuntimeConfig, pluginMap: TestPlug
  * This is similar to createPluginRuntime but uses MockModuleFederationService
  * instead of the real one, making it suitable for unit tests.
  */
-export const createTestPluginRuntime = (config: PluginRuntimeConfig, pluginMap: TestPluginMap) =>
-  ManagedRuntime.make(createTestLayer(config, pluginMap));
+export const createTestPluginRuntime = <R extends RegistryBindings = RegistryBindings>(
+  config: PluginRuntimeConfig<R>,
+  pluginMap: TestPluginMap
+) => {
+  const layer = createTestLayer<R>(config, pluginMap);
+  const runtime = ManagedRuntime.make(layer);
+  const TypedPluginRuntime = PluginRuntime as Context.Tag<PluginRuntime, IPluginRuntime<R>>;
+  return { runtime, PluginRuntime: TypedPluginRuntime };
+};
 
 // Re-export useful types for tests
 export type { PluginRegistry, PluginRuntimeConfig, TestPluginMap };

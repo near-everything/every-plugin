@@ -1,68 +1,20 @@
-import { AnyContractRouter } from "@orpc/contract";
-import type { AnyRouter } from "@orpc/server";
-import { Context, Effect } from "effect";
+import type { AnyContractRouter } from "@orpc/contract";
+import type { AnyRouter, Context, Router } from "@orpc/server";
+import { Effect } from "effect";
 import { z } from "zod";
-import type { PluginConfigurationError } from "./errors";
+import type { PluginConfigSchema } from "./runtime/types";
 
-export type Contract = AnyContractRouter;
+/**
+ * Derive router type from contract at the type level
+ */
+type RouterFromContract<C extends AnyContractRouter, TContext extends Context = Record<never, never>> = Router<C, TContext>;
 
-export function createConfigSchema<
-	V extends z.ZodTypeAny,
-	S extends z.ZodTypeAny,
->(variablesSchema: V, secretsSchema: S) {
+export function createConfigSchema(variablesSchema: z.ZodTypeAny, secretsSchema: z.ZodTypeAny): PluginConfigSchema {
 	return z.object({
 		variables: variablesSchema,
 		secrets: secretsSchema
-	});
+	}) as PluginConfigSchema;
 }
-
-export function createStateSchema<T extends z.ZodTypeAny>(
-	pluginStateSchema: T,
-) {
-	const BaseStreamingStateSchema = z.object({
-		nextPollMs: z.number().nullable().optional(), // null = terminate, undefined/0 = no delay, number = delay ms
-	});
-
-	return BaseStreamingStateSchema.and(pluginStateSchema);
-}
-
-// Plugin types
-export type PluginType = "transformer" | "distributor" | "source";
-
-// Plugin metadata for registry
-export interface PluginMetadata {
-	remoteUrl: string;
-	type?: PluginType;
-	version?: string;
-	description?: string;
-}
-
-export interface PluginRegistry {
-	[pluginId: string]: PluginMetadata;
-}
-
-// Logger interface
-export interface PluginLogger {
-	readonly logInfo: (message: string, context?: unknown) => Effect.Effect<void>;
-	readonly logWarning: (
-		message: string,
-		context?: unknown,
-	) => Effect.Effect<void>;
-	readonly logError: (
-		message: string,
-		error?: unknown,
-		context?: unknown,
-	) => Effect.Effect<void>;
-	readonly logDebug: (
-		message: string,
-		context?: unknown,
-	) => Effect.Effect<void>;
-}
-
-export class PluginLoggerTag extends Context.Tag("PluginLogger")<
-	PluginLoggerTag,
-	PluginLogger
->() { }
 
 /**
  * Common error schemas that all plugins can use
@@ -116,170 +68,74 @@ export const CommonPluginErrors = {
 };
 
 /**
- * Schema creators for contract-based plugins
+ * Plugin interface
  */
-export function createPluginInputSchema<
-	TContract extends Contract,
-	TStateSchema extends z.ZodTypeAny,
->(
-	contract: TContract,
-	stateSchema: TStateSchema,
-) {
-	const contractEntries = Object.entries(contract);
-
-	const procedureSchemas = contractEntries.map(([procedureName, procedureSpec]) => {
-		// Extract input and output schemas from oRPC contract procedure
-		const inputSchema = procedureSpec['~orpc']?.inputSchema || z.object({});
-		const outputSchema = procedureSpec['~orpc']?.outputSchema || z.object({});
-
-		// Check if this procedure is streamable (has nextState in output)
-		const isStreamable = outputSchema._def?.shape?.nextState !== undefined;
-
-		const baseSchema = z.object({
-			procedure: z.literal(procedureName),
-			input: inputSchema,
-		});
-
-		// Only add state field for streamable procedures
-		// Allow null state for initial calls to streamable procedures
-		const stateInputSchema = stateSchema.nullable();
-		return isStreamable
-			? baseSchema.extend({ state: stateInputSchema })
-			: baseSchema;
-	});
-
-	return z.discriminatedUnion("procedure", procedureSchemas as [z.ZodObject<any>, ...z.ZodObject<any>[]]);
-}
-
-export function createPluginOutputSchema<
-	TContract extends Contract,
-	TStateSchema extends z.ZodTypeAny,
->(
-	contract: TContract,
-	stateSchema: TStateSchema,
-) {
-	const contractEntries = Object.entries(contract);
-
-	const procedureOutputSchemas = contractEntries.map(([_, procedureSpec]) => {
-		// Extract output schema from oRPC contract procedure
-		return procedureSpec['~orpc']?.outputSchema || z.object({});
-	});
-
-	// Return union of all procedure output schemas
-	return z.union(procedureOutputSchemas as [z.ZodTypeAny, ...z.ZodTypeAny[]]);
-}
-
-/**
- * Unified Plugin interface for all plugin types
- */
-export interface Plugin<
-	TContract extends Contract,
-	TConfigSchema extends z.ZodTypeAny = z.ZodTypeAny,
-	TStateSchema extends z.ZodTypeAny = z.ZodNull,
-> {
+export interface Plugin<TContract extends AnyContractRouter, TConfigSchema extends PluginConfigSchema, TRouter extends AnyRouter = RouterFromContract<TContract>> {
 	readonly id: string;
-	readonly type: PluginType;
+	readonly type: string;
 	readonly contract: TContract;
 	readonly configSchema: TConfigSchema;
-	readonly stateSchema: TStateSchema;
-	readonly inputSchema: ReturnType<typeof createPluginInputSchema<TContract, TStateSchema>>;
-	readonly outputSchema: ReturnType<typeof createPluginOutputSchema<TContract, TStateSchema>>;
 
-	initialize(
-		config?: z.infer<TConfigSchema>,
-	): Effect.Effect<void, PluginConfigurationError, PluginLoggerTag>;
+	// Plugin lifecycle
+	initialize(config: z.infer<TConfigSchema>): Effect.Effect<void, unknown, never>;
+	shutdown(): Effect.Effect<void, never>;
 
-	shutdown(): Effect.Effect<void, never, PluginLoggerTag>;
-
-	createRouter(): AnyRouter
-
-	isStreamable(procedureName: string): boolean;
+	// Router creation - returns oRPC router implementation
+	createRouter(): TRouter;
 }
 
 /**
- * State transition utilities for plugins
- * These provide a functional approach to state updates while keeping the API simple
+ * Factory function to create plugins without requiring Effect knowledge
+ * This is the new recommended way to create plugins
  */
-export const StateTransitions = {
-	/**
-	 * Transition to a new phase with optional updates
-	 */
-	to: <T extends { phase?: string }>(phase: string, updates: Partial<T> = {}) =>
-		(state: T): T => ({ ...state, phase, ...updates }),
+export function createPlugin<
+	TContract extends AnyContractRouter,
+	TConfigSchema extends PluginConfigSchema,
+	TContext extends Context = Record<never, never>,
+	TRouter extends AnyRouter = RouterFromContract<TContract, TContext>
+>(config: {
+	id: string;
+	type?: string;
+	contract: TContract;
+	configSchema: TConfigSchema;
+	initialize?: (config: z.infer<TConfigSchema>) => Promise<TContext> | TContext;
+	createRouter: (context: TContext) => TRouter;
+}): new () => Plugin<TContract, TConfigSchema, TRouter> {
 
-	/**
-	 * Add polling delay to state
-	 */
-	withPolling: <T>(delayMs: number) =>
-		(state: T): T => ({ ...state, nextPollMs: delayMs }),
+	class CreatedPlugin implements Plugin<TContract, TConfigSchema, TRouter> {
+		readonly id = config.id;
+		readonly type = config.type || "source";
+		readonly contract = config.contract;
+		readonly configSchema = config.configSchema;
 
-	/**
-	 * Set error state with message and stop polling
-	 */
-	withError: <T>(errorMessage: string) =>
-		(state: T): T => ({
-			...state,
-			phase: 'error',
-			errorMessage,
-			nextPollMs: null
-		}),
+		private _config: z.infer<TConfigSchema> | null = null;
+		public _context: TContext = {} as TContext;
 
-	/**
-	 * Preserve existing state with updates
-	 */
-	update: <T>(updates: Partial<T>) =>
-		(state: T): T => ({ ...state, ...updates }),
-};
+		initialize(pluginConfig: z.infer<TConfigSchema>): Effect.Effect<void, unknown, never> {
+			const self = this;
+			return Effect.gen(function* () {
+				self._config = pluginConfig;
 
-/**
- * Simple pipe utility for composing state transformations
- */
-export const pipe = <T>(value: T, ...fns: Array<(val: T) => T>): T =>
-	fns.reduce((acc, fn) => fn(acc), value);
+				if (config.initialize) {
+					const result = config.initialize(pluginConfig);
+					// Handle both sync and async initialize functions
+					if (result instanceof Promise) {
+						self._context = yield* Effect.tryPromise(() => result);
+					} else {
+						self._context = result;
+					}
+				}
+			});
+		}
 
-/**
- * Simple plugin base class that uses pure oRPC patterns
- * Plugin just needs to define contract, config, and create oRPC router
- */
-export abstract class SimplePlugin<
-	TContract extends Contract,
-	TConfigSchema extends z.ZodTypeAny,
-	TStateSchema extends z.ZodTypeAny = z.ZodNull
-> implements Plugin<TContract, TConfigSchema, TStateSchema> {
-	abstract readonly id: string;
-	abstract readonly type: PluginType;
-	abstract readonly contract: TContract;
-	abstract readonly configSchema: TConfigSchema;
-	abstract readonly stateSchema: TStateSchema;
+		shutdown(): Effect.Effect<void, never> {
+			return Effect.void;
+		}
 
-	// Auto-generated schemas
-	get inputSchema() {
-		return createPluginInputSchema(this.contract, this.stateSchema);
+		createRouter() {
+			return config.createRouter(this._context);
+		}
 	}
 
-	get outputSchema() {
-		return createPluginOutputSchema(this.contract, this.stateSchema);
-	}
-
-	// Default implementations - runtime handles validation
-	initialize(config?: z.infer<TConfigSchema>): Effect.Effect<void, PluginConfigurationError, PluginLoggerTag> {
-		return Effect.void;
-	}
-
-	// Plugin implements this to return pure oRPC router following oRPC docs pattern
-	abstract createRouter(): AnyRouter
-
-	shutdown(): Effect.Effect<void, never, PluginLoggerTag> {
-		return Effect.void;
-	}
-
-	// Default streamable detection
-	isStreamable(procedureName: string): boolean {
-		const contractEntries = Object.entries(this.contract);
-		const procedure = contractEntries.find(([name]) => name === procedureName);
-		if (!procedure) return false;
-
-		const outputSchema = procedure[1]['~orpc']?.outputSchema;
-		return outputSchema?._def?.shape?.nextState !== undefined;
-	}
+	return CreatedPlugin;
 }
