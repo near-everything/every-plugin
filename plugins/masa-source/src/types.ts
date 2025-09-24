@@ -3,8 +3,7 @@ import type { PluginBinding } from "every-plugin/runtime";
 
 export type MasaBinding = PluginBinding<
   typeof masaContract,
-  typeof MasaSourceConfigSchema,
-  typeof stateSchema
+  typeof MasaSourceConfigSchema
 >;
 
 export type MasaContract = typeof masaContract;

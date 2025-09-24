@@ -4,11 +4,11 @@ import { describe } from "vitest";
 import { createPluginClient } from "../../src/runtime/client";
 import type { PluginBinding, PluginRegistry } from "../../src/runtime/types";
 import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
-import TestPlugin, { sourceContract, SourceTemplateConfigSchema, StreamingStateSchema } from "../test-plugin/src/index";
+import TestPlugin, { sourceContract, SourceTemplateConfigSchema } from "../test-plugin/src/index";
 
 // Define typed registry bindings for the test plugin
 type TestBindings = {
-  "test-plugin": PluginBinding<typeof sourceContract, typeof SourceTemplateConfigSchema, typeof StreamingStateSchema>;
+  "test-plugin": PluginBinding<typeof sourceContract, typeof SourceTemplateConfigSchema>;
 };
 
 // Test registry for client unit tests
@@ -77,7 +77,7 @@ describe("Plugin Client Unit Tests", () => {
       const client = createPluginClient(plugin);
 
       // Test bulk fetch
-      const result = yield* Effect.tryPromise(() => 
+      const result = yield* Effect.tryPromise(() =>
         client.getBulk({ ids: ["bulk1", "bulk2", "bulk3"] })
       );
 
@@ -215,7 +215,7 @@ describe("Plugin Client Unit Tests", () => {
       const client = createPluginClient(plugin);
 
       // Test procedure that uses config values
-      const result = yield* Effect.tryPromise(() => 
+      const result = yield* Effect.tryPromise(() =>
         client.requiresSpecialConfig({ checkValue: "test-input" })
       );
 

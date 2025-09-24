@@ -3,11 +3,12 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import type { PluginBinding, PluginRegistry } from "../../src/runtime/types";
 import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
-import TestPlugin, { sourceContract, SourceTemplateConfigSchema, StateSchema } from "../test-plugin/src/index";
+import TestPlugin, { sourceContract, SourceTemplateConfigSchema } from "../test-plugin/src/index";
+import { z } from "zod";
 
 // Define typed registry bindings for the test plugin
 type TestBindings = {
-  "test-plugin": PluginBinding<typeof sourceContract, typeof SourceTemplateConfigSchema, typeof StateSchema>;
+  "test-plugin": PluginBinding<typeof sourceContract, typeof SourceTemplateConfigSchema>;
 };
 
 // Test registry for lifecycle unit tests

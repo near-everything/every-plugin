@@ -236,7 +236,7 @@ const integrationTest = async () => {
     console.error("Integration test failed:", error);
     process.exit(1);
   } finally {
-    await runtime.dispose();
+    await runtime.disposeRuntime();
   }
 };
 ```

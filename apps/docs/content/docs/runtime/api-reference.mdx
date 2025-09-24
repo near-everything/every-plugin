@@ -224,7 +224,7 @@ const processJob = (job: Job) =>
 
 // Cleanup on shutdown
 process.on("SIGTERM", async () => {
-  await runtime.dispose();
+  await runtime.disposeRuntime();
 });
 ```
 
@@ -239,7 +239,7 @@ The runtime automatically manages plugin lifecycles and cleanup:
 // - Automatic cleanup on dispose()
 // - Resource leak prevention
 
-await runtime.dispose(); // Clean shutdown
+await runtime.disposeRuntime(); // Clean shutdown
 ```
 
 ## Next Steps

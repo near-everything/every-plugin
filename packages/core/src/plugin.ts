@@ -9,11 +9,14 @@ import type { PluginConfigSchema } from "./runtime/types";
  */
 type RouterFromContract<C extends AnyContractRouter, TContext extends Context = Record<never, never>> = Router<C, TContext>;
 
-export function createConfigSchema(variablesSchema: z.ZodTypeAny, secretsSchema: z.ZodTypeAny): PluginConfigSchema {
+export function createConfigSchema<
+	V extends z.ZodTypeAny, 
+	S extends z.ZodTypeAny
+>(variablesSchema: V, secretsSchema: S) {
 	return z.object({
 		variables: variablesSchema,
 		secrets: secretsSchema
-	}) as PluginConfigSchema;
+	});
 }
 
 /**
@@ -109,7 +112,7 @@ export function createPlugin<
 		readonly configSchema = config.configSchema;
 
 		private _config: z.infer<TConfigSchema> | null = null;
-		public _context: TContext = {} as TContext;
+		private _context: TContext | null = null;
 
 		initialize(pluginConfig: z.infer<TConfigSchema>): Effect.Effect<void, unknown, never> {
 			const self = this;
@@ -124,6 +127,8 @@ export function createPlugin<
 					} else {
 						self._context = result;
 					}
+				} else {
+					self._context = {} as TContext;
 				}
 			});
 		}
@@ -133,6 +138,9 @@ export function createPlugin<
 		}
 
 		createRouter() {
+			if (this._context === null) {
+				throw new Error(`Plugin ${this.id} must be initialized before creating router`);
+			}
 			return config.createRouter(this._context);
 		}
 	}

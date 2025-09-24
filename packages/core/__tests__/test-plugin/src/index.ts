@@ -1,4 +1,4 @@
-import { oc, ORPCError } from "@orpc/contract";
+import { oc } from "@orpc/contract";
 import { implement } from "@orpc/server";
 import { z } from "zod";
 import {
@@ -11,7 +11,7 @@ import { SourceTemplateClient } from "./client";
 
 // Configuration schemas
 const VariablesSchema = z.object({
-	baseUrl: z.string().default("http://localhost:1337"),
+	baseUrl: z.string(),
 	timeout: z.number().optional(),
 });
 
@@ -131,16 +131,6 @@ function createTestItem(id: string, prefix: string = "item"): SourceItem {
 	};
 }
 
-// Streaming state type for procedure inputs
-export const StreamingStateSchema = z.object({
-	phase: z.string(),
-	status: z.string().optional(),
-	jobId: z.string().optional(),
-	lastId: z.string().optional(),
-}).nullable();
-
-export type StreamingState = z.infer<typeof StreamingStateSchema>;
-
 // Create the test plugin
 const TestPlugin = createPlugin<
 	typeof sourceContract,
@@ -152,15 +142,7 @@ const TestPlugin = createPlugin<
 	contract: sourceContract,
 	configSchema: SourceTemplateConfigSchema,
 	initialize: async (config: SourceTemplateConfig) => {
-		// Test config validation
-		if (!config?.secrets?.apiKey) {
-			throw new PluginConfigurationError({
-				message: "API key is required",
-				retryable: false
-			});
-		}
-
-		// Test special config requirements
+		// Business logic validation - config structure is guaranteed by schema
 		if (config.secrets.apiKey === "invalid-key") {
 			throw new PluginConfigurationError({
 				message: "Invalid API key format",
@@ -170,7 +152,7 @@ const TestPlugin = createPlugin<
 
 		// Initialize client
 		const client = new SourceTemplateClient(
-			config.variables?.baseUrl || "http://localhost:1337",
+			config.variables.baseUrl,
 			config.secrets.apiKey,
 		);
 
@@ -184,7 +166,7 @@ const TestPlugin = createPlugin<
 		// Return context object - this gets passed to createRouter
 		return {
 			client,
-			baseUrl: config.variables?.baseUrl || "http://localhost:1337"
+			baseUrl: config.variables.baseUrl
 		};
 	},
 	createRouter: (context: { client: SourceTemplateClient; baseUrl: string }) => {

@@ -7,6 +7,5 @@ export type {
 	PluginBinding,
 	PluginOf,
 	RegistryBindings,
-	StateOf,
 	PluginRegistry
 } from "./runtime/types";

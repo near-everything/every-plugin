@@ -1,11 +1,8 @@
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import { PluginLoggerTag } from "../../src/plugin";
 import { ModuleFederationService } from "../../src/runtime/services/module-federation.service";
-import { createTestLogger } from "../../src/runtime/test-utils";
 import { TEST_REMOTE_ENTRY_URL } from "./global-setup";
 
-const testLayer = Layer.succeed(PluginLoggerTag, createTestLogger());
 
 describe("Module Federation Integration Tests", () => {
 
@@ -37,7 +34,6 @@ describe("Module Federation Integration Tests", () => {
         return "success";
       }).pipe(
         Effect.provide(ModuleFederationService.Live),
-        Effect.provide(testLayer),
         Effect.catchAll((error) => {
           console.error("Remote registration failed:", error);
           return Effect.succeed(`failed: ${error}`);
@@ -58,14 +54,14 @@ describe("Module Federation Integration Tests", () => {
 
         // Load the constructor
         const ctor = yield* mfService.loadRemoteConstructor("test-plugin", TEST_REMOTE_ENTRY_URL);
-        
+
         expect(typeof ctor).toBe("function");
         expect(ctor.name).toBeDefined();
-        
+
         return "constructor-loaded";
       }).pipe(
         Effect.provide(ModuleFederationService.Live),
-        Effect.provide(testLayer),
+
         Effect.catchAll((error) => {
           console.error("Constructor loading failed:", error);
           return Effect.succeed(`failed: ${error.message}`);
@@ -84,18 +80,17 @@ describe("Module Federation Integration Tests", () => {
         // Register and load constructor
         yield* mfService.registerRemote("test-plugin", TEST_REMOTE_ENTRY_URL);
         const ctor = yield* mfService.loadRemoteConstructor("test-plugin", TEST_REMOTE_ENTRY_URL);
-        
+
         // Instantiate the plugin
         const instance = new ctor();
-        
+
         expect(instance).toBeDefined();
         expect(instance.id).toBe("test-plugin");
         expect(instance.type).toBe("source");
-        
+
         return "plugin-instantiated";
       }).pipe(
         Effect.provide(ModuleFederationService.Live),
-        Effect.provide(testLayer),
         Effect.catchAll((error) => {
           console.error("Plugin instantiation failed:", error);
           return Effect.succeed(`failed: ${error.message}`);
@@ -110,7 +105,6 @@ describe("Module Federation Integration Tests", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const mfService = yield* ModuleFederationService;
-
         return yield* mfService.registerRemote("invalid-plugin", "https://invalid-url.com/plugin.js").pipe(
           Effect.catchAll((error) => {
             expect(error).toBeDefined();
@@ -118,8 +112,7 @@ describe("Module Federation Integration Tests", () => {
           })
         );
       }).pipe(
-        Effect.provide(ModuleFederationService.Live),
-        Effect.provide(testLayer)
+        Effect.provide(ModuleFederationService.Live)
       )
     );
 

@@ -92,7 +92,8 @@ export function createPluginRuntime<R extends RegistryBindings = RegistryBinding
 
 export type {
 	ConfigOf,
-	InitializedPlugin, InputOf,
-	OutputOf, PluginBinding,
-	PluginOf, RegistryBindings, StateOf
+	InitializedPlugin,
+	PluginBinding,
+	PluginOf,
+	RegistryBindings
 } from "./types";
