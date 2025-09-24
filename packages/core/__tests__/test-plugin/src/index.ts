@@ -1,5 +1,5 @@
 import { oc } from "@orpc/contract";
-import { implement } from "@orpc/server";
+import { eventIterator, implement } from "@orpc/server";
 import { z } from "zod";
 import {
 	CommonPluginErrors,
@@ -9,17 +9,12 @@ import {
 } from "../../../src/index";
 import { SourceTemplateClient } from "./client";
 
-// Configuration schemas
-const VariablesSchema = z.object({
+const SourceTemplateConfigSchema = createConfigSchema(z.object({
 	baseUrl: z.string(),
 	timeout: z.number().optional(),
-});
-
-const SecretsSchema = z.object({
+}), z.object({
 	apiKey: z.string(),
-});
-
-const SourceTemplateConfigSchema = createConfigSchema(VariablesSchema, SecretsSchema);
+}));
 type SourceTemplateConfig = z.infer<typeof SourceTemplateConfigSchema>;
 
 // Export for use in tests
@@ -39,6 +34,21 @@ const sourceItemSchema = z.object({
 		url: z.string().optional(),
 	})).optional(),
 	raw: z.unknown(), // Original API response
+});
+
+// Schema for streaming events
+const streamEventSchema = z.object({
+	item: sourceItemSchema,
+	state: z.object({
+		nextPollMs: z.number().nullable(),
+		phase: z.string(),
+		jobId: z.string(),
+		lastId: z.string(),
+	}),
+	metadata: z.object({
+		itemIndex: z.number(),
+		timestamp: z.number(),
+	})
 });
 
 // Contract definition for the test plugin
@@ -69,6 +79,7 @@ export const sourceContract = oc.router({
 			count: z.number().min(1).max(10).default(3),
 			prefix: z.string().default("item"),
 		}))
+		.output(eventIterator(streamEventSchema))
 		.errors(CommonPluginErrors),
 
 	// Empty stream - returns no items
@@ -76,6 +87,7 @@ export const sourceContract = oc.router({
 		.input(z.object({
 			reason: z.string().optional(),
 		}))
+		.output(eventIterator(streamEventSchema))
 		.errors(CommonPluginErrors),
 
 	// Error testing procedures
@@ -219,12 +231,12 @@ const TestPlugin = createPlugin<
 		});
 
 		// Empty stream for testing
+		// biome-ignore lint/correctness/useYield: specific test case
 		const emptyStream = os.emptyStream.handler(async function* ({ input }) {
-			// Log the reason but don't yield anything
-			console.log(`[TEST-PLUGIN] Empty stream requested: ${input.reason || 'no reason'}`);
-			// Generator ends immediately - no yields
-			// biome-ignore lint/correctness/noConstantCondition: test case
-			if (false) yield;
+			// Log why it's empty, do any setup/cleanup, but don't yield
+			console.log(`Empty stream: ${input.reason}`);
+			// Generator ends without yielding - creates empty AsyncIterable
+			return;
 		});
 
 		// Error testing procedures

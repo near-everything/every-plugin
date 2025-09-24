@@ -12,7 +12,7 @@ type RouterFromContract<C extends AnyContractRouter, TContext extends Context = 
 export function createConfigSchema<
 	V extends z.ZodTypeAny, 
 	S extends z.ZodTypeAny
->(variablesSchema: V, secretsSchema: S) {
+>(variablesSchema: V, secretsSchema: S): PluginConfigSchema<V, S> {
 	return z.object({
 		variables: variablesSchema,
 		secrets: secretsSchema
@@ -73,7 +73,7 @@ export const CommonPluginErrors = {
 /**
  * Plugin interface
  */
-export interface Plugin<TContract extends AnyContractRouter, TConfigSchema extends PluginConfigSchema, TRouter extends AnyRouter = RouterFromContract<TContract>> {
+export interface Plugin<TContract extends AnyContractRouter, TConfigSchema extends PluginConfigSchema<z.ZodTypeAny, z.ZodTypeAny>, TRouter extends AnyRouter = RouterFromContract<TContract>> {
 	readonly id: string;
 	readonly type: string;
 	readonly contract: TContract;
@@ -93,7 +93,7 @@ export interface Plugin<TContract extends AnyContractRouter, TConfigSchema exten
  */
 export function createPlugin<
 	TContract extends AnyContractRouter,
-	TConfigSchema extends PluginConfigSchema,
+	TConfigSchema extends PluginConfigSchema<z.ZodTypeAny, z.ZodTypeAny>,
 	TContext extends Context = Record<never, never>,
 	TRouter extends AnyRouter = RouterFromContract<TContract, TContext>
 >(config: {

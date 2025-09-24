@@ -7,7 +7,7 @@ import type {
 	PluginConstructor,
 	PluginInstance,
 	PluginRegistry,
-	SecretsConfig,
+	SecretsConfig
 } from "../types";
 import { validate } from "../validation";
 import { ModuleFederationService } from "./module-federation.service";

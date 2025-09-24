@@ -3,7 +3,13 @@ import type { AnyRouter } from "@orpc/server";
 import type { z } from "zod";
 import type { Plugin } from "../plugin";
 
-export type PluginConfigSchema = z.ZodObject<{ variables: z.ZodTypeAny; secrets: z.ZodTypeAny }>;
+export type PluginConfigSchema<
+	V extends z.ZodTypeAny = z.ZodTypeAny,
+	S extends z.ZodTypeAny = z.ZodTypeAny
+> = z.ZodObject<{
+	variables: V;
+	secrets: S;
+}>;
 
 // Runtime configuration
 export interface PluginRuntimeConfig<R extends RegistryBindings = RegistryBindings> {
@@ -28,26 +34,26 @@ export interface PluginRegistry {
  * Plugin lifecycle types
  * Uses Plugin's default TRouter (RouterFromContract) to preserve concrete router types.
  */
-export type AnyPlugin = Plugin<AnyContractRouter, PluginConfigSchema, AnyRouter>;
+export type AnyPlugin = Plugin<AnyContractRouter, PluginConfigSchema<z.ZodTypeAny, z.ZodTypeAny>, AnyRouter>;
 
 // Type-safe registry bindings
-export type RegistryBindings = Record<string, PluginBinding<AnyContractRouter, PluginConfigSchema>>;
+export type RegistryBindings = Record<string, PluginBinding<AnyContractRouter, PluginConfigSchema<z.ZodTypeAny, z.ZodTypeAny>>>;
 
 export interface PluginBinding<
 	C extends AnyContractRouter,
-	Conf extends PluginConfigSchema
+	Conf extends PluginConfigSchema<z.ZodTypeAny, z.ZodTypeAny>
 > {
 	contract: C;
 	config: Conf;
 }
 
 // Utility types for extracting plugin information from bindings
-export type PluginOf<B extends PluginBinding<AnyContractRouter, PluginConfigSchema>> = Plugin<
+export type PluginOf<B extends PluginBinding<AnyContractRouter, PluginConfigSchema<z.ZodTypeAny, z.ZodTypeAny>>> = Plugin<
 	B["contract"],
 	B["config"]
 >;
 
-export type ConfigOf<B extends PluginBinding<AnyContractRouter, PluginConfigSchema>> = z.infer<
+export type ConfigOf<B extends PluginBinding<AnyContractRouter, PluginConfigSchema<z.ZodTypeAny, z.ZodTypeAny>>> = z.infer<
 	PluginOf<B>["configSchema"]
 >;
 

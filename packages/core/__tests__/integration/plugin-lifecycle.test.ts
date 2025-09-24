@@ -61,7 +61,6 @@ describe("Plugin Lifecycle Integration Tests", () => {
       expect(initializedPlugin).toBeDefined();
       expect(initializedPlugin.config).toBeDefined();
 
-      // Use client instead of executePlugin
       const client = createPluginClient(initializedPlugin);
       const output = yield* Effect.tryPromise(() => 
         client.getById({ id: "integration-test" })
@@ -131,6 +130,7 @@ describe("Plugin Lifecycle Integration Tests", () => {
       const result = yield* pluginRuntime
         .usePlugin("test-plugin", {
           variables: { baseUrl: "http://localhost:1337" },
+          // @ts-expect-error - means the types are really good!
           secrets: {}, // Missing required apiKey
         })
         .pipe(

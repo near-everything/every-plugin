@@ -108,7 +108,7 @@ describe("Plugin Client Unit Tests", () => {
       expect(Symbol.asyncIterator in result).toBe(true);
 
       // Convert to Effect stream and collect
-      const stream = Stream.fromAsyncIterable(result as AsyncIterable<any>, (error) => error);
+      const stream = Stream.fromAsyncIterable(result, (error) => error);
       const items = yield* stream.pipe(
         Stream.take(5), // Take more than expected to ensure it terminates
         Stream.runCollect

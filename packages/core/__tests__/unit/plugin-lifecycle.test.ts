@@ -3,8 +3,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import type { PluginBinding, PluginRegistry } from "../../src/runtime/types";
 import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
-import TestPlugin, { sourceContract, SourceTemplateConfigSchema } from "../test-plugin/src/index";
-import { z } from "zod";
+import TestPlugin, { type SourceTemplateConfigSchema, type sourceContract } from "../test-plugin/src/index";
 
 // Define typed registry bindings for the test plugin
 type TestBindings = {
@@ -30,11 +29,7 @@ const TEST_CONFIG = {
   },
 };
 
-const SECRETS_CONFIG = {
-  API_KEY: "test-api-key-value",
-};
-
-// Plugin map for tests
+// Plugin map for tests (mocking)
 const TEST_PLUGIN_MAP: TestPluginMap = {
   "test-plugin": TestPlugin,
 };
@@ -42,7 +37,9 @@ const TEST_PLUGIN_MAP: TestPluginMap = {
 describe("Plugin Lifecycle Unit Tests", () => {
   const { runtime, PluginRuntime } = createTestPluginRuntime<TestBindings>({
     registry: TEST_REGISTRY,
-    secrets: SECRETS_CONFIG,
+    secrets: {
+      API_KEY: "test-api-key-value",
+    },
   }, TEST_PLUGIN_MAP);
 
   it.effect("should handle complete plugin lifecycle", () =>
@@ -77,7 +74,7 @@ describe("Plugin Lifecycle Unit Tests", () => {
 
       // Test usePlugin which combines load + instantiate + initialize
       const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
-      
+
       expect(plugin).toBeDefined();
       expect(plugin.plugin).toBeDefined();
       expect(plugin.plugin.id).toBe("test-plugin");
@@ -95,6 +92,7 @@ describe("Plugin Lifecycle Unit Tests", () => {
     Effect.gen(function* () {
       const pluginRuntime = yield* PluginRuntime;
 
+      // @ts-expect-error - means the types are really good!
       const result = yield* pluginRuntime.loadPlugin("non-existent-plugin").pipe(
         Effect.catchTag("PluginRuntimeError", (error) => {
           expect(error.operation).toBe("load-plugin");
@@ -115,6 +113,7 @@ describe("Plugin Lifecycle Unit Tests", () => {
 
       const result = yield* pluginRuntime.usePlugin("test-plugin", {
         variables: { baseUrl: "http://localhost:1337" },
+        // @ts-expect-error - means the types are really good!
         secrets: {}, // Missing required apiKey
       }).pipe(
         Effect.catchTag("PluginRuntimeError", (error) => {
@@ -171,14 +170,14 @@ describe("Plugin Lifecycle Unit Tests", () => {
   it.effect("should handle runtime shutdown gracefully", () =>
     Effect.gen(function* () {
       const pluginRuntime = yield* PluginRuntime;
-      
+
       // Initialize a plugin first
       const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
       expect(plugin).toBeDefined();
 
       // Test shutdown
       yield* pluginRuntime.shutdown();
-      
+
       // If we reach here, shutdown was successful
       expect(true).toBe(true);
     }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))

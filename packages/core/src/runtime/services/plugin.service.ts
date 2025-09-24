@@ -1,4 +1,5 @@
 import { Cache, Context, Duration, Effect, Hash, Layer, Ref } from "effect";
+import type { z } from "zod";
 import { PluginRuntimeError } from "../errors";
 import type {
 	AnyPlugin,
@@ -6,12 +7,11 @@ import type {
 	PluginConstructor,
 	PluginInstance,
 	PluginRegistry,
-	SecretsConfig,
+	SecretsConfig
 } from "../types";
+import { validate } from "../validation";
 import { PluginLifecycleService } from "./plugin-lifecycle.service";
 import { PluginLoaderService } from "./plugin-loader.service";
-import type { z } from "zod";
-import { validate } from "../validation";
 
 export interface IPluginService {
 	readonly loadPlugin: (
