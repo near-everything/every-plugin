@@ -48,7 +48,7 @@ export async function setup() {
 export async function teardown() {
   if (server) {
     return new Promise<void>((resolve) => {
-      server!.close(() => {
+      server?.close(() => {
         console.log(`Test plugin server stopped on port ${TEST_PORT}`);
         server = null;
         resolve();

@@ -73,7 +73,7 @@ describe("Plugin Router Access Methods", () => {
 
     // Create both handlers
     const rpcHandler = new RPCHandler(router);
-    const openApiHandler = new OpenAPIHandler(router);
+    const openApiHandler = new OpenAPIHandler(router); // type error doesn't matter
 
     const port = PORT_POOL.RPC_TEST; // Use one port for unified server
     baseUrl = `http://localhost:${port}`;

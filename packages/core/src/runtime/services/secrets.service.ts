@@ -1,4 +1,5 @@
 import { Effect, Layer } from "effect";
+import { z } from "zod";
 import type { SecretsConfig } from "../../types";
 import { PluginRuntimeError } from "../errors";
 
@@ -9,6 +10,10 @@ export interface ISecretsService {
 	) => Effect.Effect<T, PluginRuntimeError>;
 }
 
+const configSchema = z.object({
+	secrets: z.record(z.string(), z.unknown())
+}).loose();
+
 export class SecretsService extends Effect.Tag("SecretsService")<
 	SecretsService,
 	ISecretsService
@@ -17,12 +22,9 @@ export class SecretsService extends Effect.Tag("SecretsService")<
 		Layer.succeed(SecretsService, {
 			hydrateSecrets: <T>(config: T, secretsConfig: SecretsConfig) =>
 				Effect.gen(function* () {
-					if (!config || typeof config !== "object" || !(config as any).secrets) {
-						return config;
-					}
-
+					const parseResult = configSchema.parse(config);
 					try {
-						const configString = JSON.stringify(config);
+						const configString = JSON.stringify(parseResult);
 						let hydratedString = configString;
 
 						// Use provided secrets or fallback to secretsConfig
