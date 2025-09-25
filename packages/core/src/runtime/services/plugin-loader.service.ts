@@ -14,11 +14,11 @@ import { ModuleFederationService } from "./module-federation.service";
 import { SecretsService } from "./secrets.service";
 
 export interface IPluginLoaderService {
-	readonly loadPlugin: (
+	readonly loadPlugin: <T extends AnyPlugin = AnyPlugin>(
 		pluginId: string,
-	) => Effect.Effect<PluginConstructor, PluginRuntimeError>;
+	) => Effect.Effect<PluginConstructor<T>, PluginRuntimeError>;
 	readonly instantiatePlugin: <T extends AnyPlugin>(
-		pluginConstructor: PluginConstructor,
+		pluginConstructor: PluginConstructor<T>,
 	) => Effect.Effect<PluginInstance<T>, PluginRuntimeError>;
 	readonly initializePlugin: <T extends AnyPlugin>(
 		pluginInstance: PluginInstance<T>,
@@ -85,10 +85,10 @@ export class PluginLoaderService extends Context.Tag("PluginLoaderService")<
 						}),
 
 					instantiatePlugin: <T extends AnyPlugin>(
-						pluginConstructor: PluginConstructor,
+						pluginConstructor: PluginConstructor<T>,
 					) =>
 						Effect.gen(function* () {
-							const instance = yield* Effect.try(() => new pluginConstructor.ctor() as T).pipe(
+							const instance = yield* Effect.try(() => new pluginConstructor.ctor()).pipe(
 								Effect.mapError((error) =>
 									toPluginRuntimeError(
 										error,
@@ -165,8 +165,8 @@ export class PluginLoaderService extends Context.Tag("PluginLoaderService")<
 								),
 							);
 
-							// Initialize plugin with proper context
-							yield* plugin.initialize(finalConfig).pipe(
+							// Initialize plugin and capture the returned context
+							const context = yield* plugin.initialize(finalConfig).pipe(
 								Effect.mapError((error) =>
 									toPluginRuntimeError(error, plugin.id, undefined, "initialize-plugin", false),
 								)
@@ -176,6 +176,7 @@ export class PluginLoaderService extends Context.Tag("PluginLoaderService")<
 								plugin,
 								metadata: pluginInstance.metadata,
 								config: finalConfig as z.infer<T["configSchema"]>,
+								context,
 							} satisfies InitializedPlugin<T>;
 						}),
 				};

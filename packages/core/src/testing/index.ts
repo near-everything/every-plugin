@@ -1,5 +1,5 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { PluginRuntime, PluginRuntimeImpl } from "../runtime";
+import { PluginRuntime, PluginRuntimeService } from "../runtime";
 import { PluginService, SecretsService } from "../runtime/services";
 import type { PluginRuntimeConfig, RegistryBindings } from "../runtime/types";
 
@@ -9,7 +9,7 @@ import { createMockModuleFederationServiceLayer, type TestPluginMap } from "./mo
 
 /**
  * Creates a test layer with mock ModuleFederationService for unit testing.
- * This mirrors PluginRuntime.Live but uses mock ModuleFederationService.
+ * This mirrors PluginRuntimeService.Live but uses mock ModuleFederationService.
  */
 export const createTestLayer = <R extends RegistryBindings = RegistryBindings>(
   config: PluginRuntimeConfig<R>,
@@ -17,9 +17,9 @@ export const createTestLayer = <R extends RegistryBindings = RegistryBindings>(
 ) => {
   const secrets = config.secrets || {};
 
-  // Same structure as PluginRuntime.Live but with mock ModuleFederationService
+  // Same structure as PluginRuntimeService.Live but with mock ModuleFederationService
   return Layer.scoped(
-    PluginRuntime,
+    PluginRuntimeService,
     Effect.gen(function* () {
       const pluginService = yield* PluginService;
 
@@ -59,9 +59,8 @@ export const createTestPluginRuntime = <R extends RegistryBindings = RegistryBin
 
   // Same exact pattern as createPluginRuntime
   const createTypedRuntime = Effect.gen(function* () {
-    const pluginService = yield* PluginRuntime;
-    const registryKeys = new Set(Object.keys(config.registry));
-    return new PluginRuntimeImpl<R>(pluginService, config.registry, registryKeys);
+    const pluginService = yield* PluginRuntimeService;
+    return new PluginRuntime<R>(pluginService, config.registry, config.bindings);
   });
 
   return {
@@ -73,4 +72,3 @@ export const createTestPluginRuntime = <R extends RegistryBindings = RegistryBin
 // Re-export useful types for tests
 export type { PluginRegistry, RegistryBindings } from "../runtime/types";
 export type { PluginRuntimeConfig, TestPluginMap };
-

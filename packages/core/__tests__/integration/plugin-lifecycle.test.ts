@@ -1,16 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import type { PluginBinding } from "../../src/plugin";
+import { createPluginRuntime } from "../../src/runtime";
 import { createPluginClient } from "../../src/runtime/client";
-import { createPluginRuntime, PluginRuntime } from "../../src/runtime";
-import type { PluginBinding, PluginRegistry } from "../../src/runtime/types";
-import { sourceContract, SourceTemplateConfigSchema } from "../test-plugin/src/index";
+import type { PluginRegistry } from "../../src/runtime/types";
+import TestPlugin from "../test-plugin/src/index";
 import { TEST_REMOTE_ENTRY_URL } from "./global-setup";
 
-// Define typed registry bindings for the integration test plugin
-type TestBindings = {
-  "test-plugin": PluginBinding<typeof sourceContract, typeof SourceTemplateConfigSchema>;
-};
 
 // Test registry using the real served plugin
 const TEST_REGISTRY: PluginRegistry = {
@@ -37,9 +34,10 @@ const SECRETS_CONFIG = {
 };
 
 describe("Plugin Lifecycle Integration Tests", () => {
-  const { runtime, PluginRuntime } = createPluginRuntime<TestBindings>({
+  const { runtime, PluginRuntime } = createPluginRuntime({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG,
+    bindings: { "test-plugin": TestPlugin }
   });
 
   it.effect("should complete full plugin lifecycle with real MF", () =>
@@ -62,7 +60,7 @@ describe("Plugin Lifecycle Integration Tests", () => {
       expect(initializedPlugin.config).toBeDefined();
 
       const client = createPluginClient(initializedPlugin);
-      const output = yield* Effect.tryPromise(() => 
+      const output = yield* Effect.tryPromise(() =>
         client.getById({ id: "integration-test" })
       );
       expect(output).toBeDefined();
@@ -75,7 +73,7 @@ describe("Plugin Lifecycle Integration Tests", () => {
       const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
       const client = createPluginClient(plugin);
-      const result = yield* Effect.tryPromise(() => 
+      const result = yield* Effect.tryPromise(() =>
         client.getById({ id: "integration-test-id" })
       );
 
@@ -92,7 +90,7 @@ describe("Plugin Lifecycle Integration Tests", () => {
       const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
       const client = createPluginClient(plugin);
-      const result = yield* Effect.tryPromise(() => 
+      const result = yield* Effect.tryPromise(() =>
         client.getBulk({ ids: ["bulk1", "bulk2", "bulk3"] })
       );
 
@@ -112,7 +110,7 @@ describe("Plugin Lifecycle Integration Tests", () => {
       const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
       const client = createPluginClient(plugin);
-      const result = yield* Effect.tryPromise(() => 
+      const result = yield* Effect.tryPromise(() =>
         client.simpleStream({ count: 3, prefix: "integration" })
       );
 

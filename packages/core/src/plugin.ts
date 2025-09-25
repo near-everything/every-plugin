@@ -2,22 +2,38 @@ import type { AnyContractRouter } from "@orpc/contract";
 import type { AnyRouter, Context, Router } from "@orpc/server";
 import { Effect } from "effect";
 import { z } from "zod";
-import type { PluginConfigSchema } from "./runtime/types";
 
 /**
  * Derive router type from contract at the type level
  */
 type RouterFromContract<C extends AnyContractRouter, TContext extends Context = Record<never, never>> = Router<C, TContext>;
 
-export function createConfigSchema<
-	V extends z.ZodTypeAny, 
-	S extends z.ZodTypeAny
->(variablesSchema: V, secretsSchema: S): PluginConfigSchema<V, S> {
-	return z.object({
-		variables: variablesSchema,
-		secrets: secretsSchema
-	});
+/**
+ * Helper type that correctly constructs the config schema type
+ */
+export type PluginConfigFor<V extends z.ZodTypeAny, S extends z.ZodTypeAny> = 
+	z.ZodObject<{ variables: V; secrets: S }>;
+
+/**
+ * Plugin constructor with static binding property
+ */
+export interface PluginConstructorWithBinding<
+	TContract extends AnyContractRouter,
+	TVariables extends z.ZodTypeAny,
+	TSecrets extends z.ZodTypeAny,
+	TContext extends Context = Record<never, never>
+> {
+	new(): Plugin<TContract, TVariables, TSecrets, TContext>;
+	binding: { 
+		contract: TContract; 
+		config: PluginConfigFor<TVariables, TSecrets>;
+	};
 }
+
+/**
+ * Utility type to extract binding from plugin constructor
+ */
+export type PluginBinding<T> = T extends { binding: infer B } ? B : never;
 
 /**
  * Common error schemas that all plugins can use
@@ -73,18 +89,23 @@ export const CommonPluginErrors = {
 /**
  * Plugin interface
  */
-export interface Plugin<TContract extends AnyContractRouter, TConfigSchema extends PluginConfigSchema<z.ZodTypeAny, z.ZodTypeAny>, TRouter extends AnyRouter = RouterFromContract<TContract>> {
+export interface Plugin<
+	TContract extends AnyContractRouter,
+	TVariables extends z.ZodTypeAny,
+	TSecrets extends z.ZodTypeAny,
+	TContext extends Context = Record<never, never>
+> {
 	readonly id: string;
 	readonly type: string;
 	readonly contract: TContract;
-	readonly configSchema: TConfigSchema;
+	readonly configSchema: PluginConfigFor<TVariables, TSecrets>;
 
 	// Plugin lifecycle
-	initialize(config: z.infer<TConfigSchema>): Effect.Effect<void, unknown, never>;
+	initialize(config: { variables: z.infer<TVariables>; secrets: z.infer<TSecrets> }): Effect.Effect<TContext, unknown, never>;
 	shutdown(): Effect.Effect<void, never>;
 
 	// Router creation - returns oRPC router implementation
-	createRouter(): TRouter;
+	createRouter(context?: TContext): RouterFromContract<TContract, TContext>;
 }
 
 /**
@@ -92,33 +113,35 @@ export interface Plugin<TContract extends AnyContractRouter, TConfigSchema exten
  * This is the new recommended way to create plugins
  */
 export function createPlugin<
+	V extends z.ZodTypeAny,
+	S extends z.ZodTypeAny,
 	TContract extends AnyContractRouter,
-	TConfigSchema extends PluginConfigSchema<z.ZodTypeAny, z.ZodTypeAny>,
-	TContext extends Context = Record<never, never>,
-	TRouter extends AnyRouter = RouterFromContract<TContract, TContext>
+	TContext extends Context
 >(config: {
 	id: string;
 	type?: string;
+	variables: V;
+	secrets: S;
 	contract: TContract;
-	configSchema: TConfigSchema;
-	initialize?: (config: z.infer<TConfigSchema>) => Promise<TContext> | TContext;
-	createRouter: (context: TContext) => TRouter;
-}): new () => Plugin<TContract, TConfigSchema, TRouter> {
+	initialize?: (config: { variables: z.infer<V>; secrets: z.infer<S> }) => Promise<TContext> | TContext;
+	createRouter: (context: TContext) => RouterFromContract<TContract, TContext>;
+}) {
+	const configSchema = z.object({
+		variables: config.variables,
+		secrets: config.secrets
+	});
 
-	class CreatedPlugin implements Plugin<TContract, TConfigSchema, TRouter> {
+	class CreatedPlugin implements Plugin<TContract, V, S, TContext> {
 		readonly id = config.id;
 		readonly type = config.type || "source";
 		readonly contract = config.contract;
-		readonly configSchema = config.configSchema;
+		readonly configSchema = configSchema;
 
-		private _config: z.infer<TConfigSchema> | null = null;
 		private _context: TContext | null = null;
 
-		initialize(pluginConfig: z.infer<TConfigSchema>): Effect.Effect<void, unknown, never> {
+		initialize(pluginConfig: { variables: z.infer<V>; secrets: z.infer<S> }): Effect.Effect<TContext, unknown, never> {
 			const self = this;
 			return Effect.gen(function* () {
-				self._config = pluginConfig;
-
 				if (config.initialize) {
 					const result = config.initialize(pluginConfig);
 					// Handle both sync and async initialize functions
@@ -130,6 +153,7 @@ export function createPlugin<
 				} else {
 					self._context = {} as TContext;
 				}
+				return self._context;
 			});
 		}
 
@@ -137,13 +161,16 @@ export function createPlugin<
 			return Effect.void;
 		}
 
-		createRouter() {
-			if (this._context === null) {
-				throw new Error(`Plugin ${this.id} must be initialized before creating router`);
-			}
-			return config.createRouter(this._context);
+		createRouter(context: TContext): RouterFromContract<TContract, TContext> {
+			return config.createRouter(context);
 		}
 	}
 
-	return CreatedPlugin;
+	const PluginConstructor = CreatedPlugin as unknown as PluginConstructorWithBinding<TContract, V, S, TContext>;
+	PluginConstructor.binding = {
+		contract: config.contract,
+		config: configSchema
+	};
+
+	return PluginConstructor;
 }

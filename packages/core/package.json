@@ -12,6 +12,10 @@
       "types": "./dist/runtime/index.d.ts",
       "default": "./dist/runtime/index.js"
     },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "default": "./dist/client/index.js"
+    },
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
@@ -58,10 +62,10 @@
   },
   "keywords": [
     "plugin",
-		"module-federation",
-		"orpc",
-		"zod",
-		"typescript"
+    "module-federation",
+    "orpc",
+    "zod",
+    "typescript"
   ],
   "author": "everything.near",
   "license": "MIT",

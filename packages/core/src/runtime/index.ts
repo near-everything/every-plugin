@@ -7,15 +7,16 @@ import { SecretsService } from "./services/secrets.service";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
+	PluginBindingsFor,
 	PluginConstructor,
 	PluginInstance,
 	PluginOf,
 	PluginRegistry,
 	PluginRuntimeConfig,
-	RegistryBindings,
+	RegistryBindings
 } from "./types";
 
-// Main PluginRuntime service interface
+// Unified runtime interface that works with or without bindings
 export interface IPluginRuntime<R extends RegistryBindings = RegistryBindings> {
 	readonly loadPlugin: <K extends keyof R>(
 		pluginId: K,
@@ -37,33 +38,32 @@ export interface IPluginRuntime<R extends RegistryBindings = RegistryBindings> {
 
 	readonly shutdown: () => Effect.Effect<void, never, never>;
 }
-
-// Create a typed runtime implementation
-export class PluginRuntimeImpl<R extends RegistryBindings> implements IPluginRuntime<R> {
+export class PluginRuntime<R extends RegistryBindings = RegistryBindings> implements IPluginRuntime<R> {
 	constructor(
 		private pluginService: IPluginService,
 		private registry: PluginRegistry,
-		private registryKeys: Set<string>
+		private bindings?: PluginBindingsFor<R>
 	) { }
 
 	private validatePluginId<K extends keyof R>(pluginId: K): Effect.Effect<string, PluginRuntimeError> {
 		const pluginIdStr = pluginId as string;
 
-		// Runtime validation - ensures type safety promises hold
-		if (!this.registryKeys.has(pluginIdStr)) {
-			return Effect.fail(new PluginRuntimeError({
-				pluginId: pluginIdStr,
-				operation: "validate-plugin-id",
-				cause: new Error(`Plugin ID '${pluginIdStr}' not found in registry bindings`),
-				retryable: false,
-			}));
-		}
-
+		// Runtime validation
 		if (!(pluginIdStr in this.registry)) {
 			return Effect.fail(new PluginRuntimeError({
 				pluginId: pluginIdStr,
 				operation: "validate-plugin-id",
-				cause: new Error(`Plugin ID '${pluginIdStr}' not found in runtime registry`),
+				cause: new Error(`Plugin ID '${pluginIdStr}' not found in registry`),
+				retryable: false,
+			}));
+		}
+
+		// If bindings are provided, also validate against bindings
+		if (this.bindings && !(pluginIdStr in this.bindings)) {
+			return Effect.fail(new PluginRuntimeError({
+				pluginId: pluginIdStr,
+				operation: "validate-plugin-id",
+				cause: new Error(`Plugin ID '${pluginIdStr}' not found in bindings`),
 				retryable: false,
 			}));
 		}
@@ -75,7 +75,7 @@ export class PluginRuntimeImpl<R extends RegistryBindings> implements IPluginRun
 		const self = this;
 		return Effect.gen(function* () {
 			const validatedId = yield* self.validatePluginId(pluginId);
-			const result = yield* self.pluginService.loadPlugin(validatedId);
+			const result = yield* self.pluginService.loadPlugin<PluginOf<R[K]>>(validatedId);
 			return result as PluginConstructor<PluginOf<R[K]>>;
 		});
 	}
@@ -83,7 +83,7 @@ export class PluginRuntimeImpl<R extends RegistryBindings> implements IPluginRun
 	instantiatePlugin<K extends keyof R>(ctor: PluginConstructor<PluginOf<R[K]>>): Effect.Effect<PluginInstance<PluginOf<R[K]>>, PluginRuntimeError> {
 		const self = this;
 		return Effect.gen(function* () {
-			const result = yield* self.pluginService.instantiatePlugin(ctor as PluginConstructor);
+			const result = yield* self.pluginService.instantiatePlugin(ctor as PluginConstructor<AnyPlugin>);
 			return result as PluginInstance<PluginOf<R[K]>>;
 		});
 	}
@@ -94,8 +94,11 @@ export class PluginRuntimeImpl<R extends RegistryBindings> implements IPluginRun
 	): Effect.Effect<InitializedPlugin<PluginOf<R[K]>>, PluginRuntimeError> {
 		const self = this;
 		return Effect.gen(function* () {
-			const result = yield* self.pluginService.initializePlugin(instance as PluginInstance<AnyPlugin>, config);
-			return result as unknown as InitializedPlugin<PluginOf<R[K]>>;
+			const result = yield* self.pluginService.initializePlugin(
+				instance as PluginInstance<AnyPlugin>,
+				config
+			);
+			return result as InitializedPlugin<PluginOf<R[K]>>;
 		});
 	}
 
@@ -106,7 +109,7 @@ export class PluginRuntimeImpl<R extends RegistryBindings> implements IPluginRun
 		const self = this;
 		return Effect.gen(function* () {
 			const validatedId = yield* self.validatePluginId(pluginId);
-			const result = yield* self.pluginService.usePlugin(validatedId, config);
+			const result = yield* self.pluginService.usePlugin<PluginOf<R[K]>>(validatedId, config);
 			return result as InitializedPlugin<PluginOf<R[K]>>;
 		});
 	}
@@ -116,15 +119,15 @@ export class PluginRuntimeImpl<R extends RegistryBindings> implements IPluginRun
 	}
 }
 
-export class PluginRuntime extends Context.Tag("PluginRuntime")<
-	PluginRuntime,
+export class PluginRuntimeService extends Context.Tag("PluginRuntimeService")<
+	PluginRuntimeService,
 	IPluginService
 >() {
 	static Live = <R extends RegistryBindings = RegistryBindings>(config: PluginRuntimeConfig<R>) => {
 		const secrets = config.secrets || {};
 
 		return Layer.scoped(
-			PluginRuntime,
+			PluginRuntimeService,
 			Effect.gen(function* () {
 				const pluginService = yield* PluginService;
 
@@ -152,15 +155,15 @@ export class PluginRuntime extends Context.Tag("PluginRuntime")<
 	}
 }
 
-export function createPluginRuntime<R extends RegistryBindings = RegistryBindings>(config: PluginRuntimeConfig<R>) {
-	const layer = PluginRuntime.Live<R>(config);
+export function createPluginRuntime<R extends RegistryBindings = RegistryBindings>(
+	config: PluginRuntimeConfig<R>
+) {
+	const layer = PluginRuntimeService.Live(config);
 	const runtime = ManagedRuntime.make(layer);
 
-	// Typed wrapper for IDE auto complete and type checking
 	const createTypedRuntime = Effect.gen(function* () {
-		const pluginService = yield* PluginRuntime;
-		const registryKeys = new Set(Object.keys(config.registry));
-		return new PluginRuntimeImpl<R>(pluginService, config.registry, registryKeys);
+		const pluginService = yield* PluginRuntimeService;
+		return new PluginRuntime<R>(pluginService, config.registry, config.bindings);
 	});
 
 	return {
@@ -172,7 +175,6 @@ export function createPluginRuntime<R extends RegistryBindings = RegistryBinding
 export type {
 	ConfigOf,
 	InitializedPlugin,
-	PluginBinding,
 	PluginOf,
 	RegistryBindings
 } from "./types";

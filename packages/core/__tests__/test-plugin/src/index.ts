@@ -3,25 +3,13 @@ import { eventIterator, implement } from "@orpc/server";
 import { z } from "zod";
 import {
 	CommonPluginErrors,
-	createConfigSchema,
 	createPlugin,
 	PluginConfigurationError,
 } from "../../../src/index";
-import { SourceTemplateClient } from "./client";
+import { TestClient } from "./client";
 
-const SourceTemplateConfigSchema = createConfigSchema(z.object({
-	baseUrl: z.string(),
-	timeout: z.number().optional(),
-}), z.object({
-	apiKey: z.string(),
-}));
-type SourceTemplateConfig = z.infer<typeof SourceTemplateConfigSchema>;
-
-// Export for use in tests
-export { SourceTemplateConfigSchema };
-
-// Source item schema that plugins return
-const sourceItemSchema = z.object({
+// Test item schema that plugins return
+const testItemSchema = z.object({
 	externalId: z.string(),
 	content: z.string(),
 	contentType: z.string().optional(),
@@ -38,7 +26,7 @@ const sourceItemSchema = z.object({
 
 // Schema for streaming events
 const streamEventSchema = z.object({
-	item: sourceItemSchema,
+	item: testItemSchema,
 	state: z.object({
 		nextPollMs: z.number().nullable(),
 		phase: z.string(),
@@ -52,14 +40,14 @@ const streamEventSchema = z.object({
 });
 
 // Contract definition for the test plugin
-export const sourceContract = oc.router({
+export const testContract = oc.router({
 	// Basic single item fetch
 	getById: oc
 		.input(z.object({
 			id: z.string()
 		}))
 		.output(z.object({
-			item: sourceItemSchema
+			item: testItemSchema
 		}))
 		.errors(CommonPluginErrors),
 
@@ -69,7 +57,7 @@ export const sourceContract = oc.router({
 			ids: z.array(z.string()),
 		}))
 		.output(z.object({
-			items: z.array(sourceItemSchema),
+			items: z.array(testItemSchema),
 		}))
 		.errors(CommonPluginErrors),
 
@@ -124,11 +112,11 @@ export const sourceContract = oc.router({
 });
 
 // Export types for use in implementation
-export type SourceContract = typeof sourceContract;
-export type SourceItem = z.infer<typeof sourceItemSchema>;
+export type TestContract = typeof testContract;
+export type TestItem = z.infer<typeof testItemSchema>;
 
 // Helper to create consistent test items
-function createTestItem(id: string, prefix: string = "item"): SourceItem {
+function createTestItem(id: string, prefix: string = "item"): TestItem {
 	return {
 		externalId: id,
 		content: `${prefix} content for ${id}`,
@@ -144,16 +132,18 @@ function createTestItem(id: string, prefix: string = "item"): SourceItem {
 }
 
 // Create the test plugin
-const TestPlugin = createPlugin<
-	typeof sourceContract,
-	typeof SourceTemplateConfigSchema,
-	{ client: SourceTemplateClient; baseUrl: string }
->({
+const TestPlugin = createPlugin({
 	id: "test-plugin",
 	type: "source",
-	contract: sourceContract,
-	configSchema: SourceTemplateConfigSchema,
-	initialize: async (config: SourceTemplateConfig) => {
+	variables: z.object({
+		baseUrl: z.string(),
+		timeout: z.number().optional(),
+	}),
+	secrets: z.object({
+		apiKey: z.string(),
+	}),
+	contract: testContract,
+	initialize: async (config) => {
 		// Business logic validation - config structure is guaranteed by schema
 		if (config.secrets.apiKey === "invalid-key") {
 			throw new PluginConfigurationError({
@@ -163,7 +153,7 @@ const TestPlugin = createPlugin<
 		}
 
 		// Initialize client
-		const client = new SourceTemplateClient(
+		const client = new TestClient(
 			config.variables.baseUrl,
 			config.secrets.apiKey,
 		);
@@ -181,8 +171,8 @@ const TestPlugin = createPlugin<
 			baseUrl: config.variables.baseUrl
 		};
 	},
-	createRouter: (context: { client: SourceTemplateClient; baseUrl: string }) => {
-		const os = implement(sourceContract).$context<{ client: SourceTemplateClient; baseUrl: string }>();
+	createRouter: (context: { client: TestClient; baseUrl: string }) => {
+		const os = implement(testContract).$context<{ client: TestClient; baseUrl: string }>();
 
 		// Basic single item fetch
 		const getById = os.getById.handler(async ({ input }) => {
