@@ -129,7 +129,7 @@ export function createPlugin<
 	secrets: S;
 	contract: TContract;
 	initialize?: (config: { variables: z.infer<V>; secrets: z.infer<S> }) => Promise<TContext> | TContext;
-	createRouter: (context: TContext) => Router<any, TContext>;
+	createRouter: (ctx: TContext) => Router<any, TContext>;
 }) {
 	const configSchema = z.object({
 		variables: config.variables,
@@ -166,8 +166,8 @@ export function createPlugin<
 			return Effect.void;
 		}
 
-		createRouter(context: TContext): RouterFromContract<TContract, TContext> {
-			return config.createRouter(context) as RouterFromContract<TContract, TContext>;
+		createRouter(ctx: TContext): RouterFromContract<TContract, TContext> {
+			return config.createRouter(ctx) as RouterFromContract<TContract, TContext>;
 		}
 	}
 

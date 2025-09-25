@@ -1,9 +1,10 @@
 import { oc } from "@orpc/contract";
-import { CommonPluginErrors, createConfigSchema } from "every-plugin";
+import { eventIterator } from "@orpc/server";
+import { CommonPluginErrors } from "every-plugin";
 import { z } from "zod";
 import type { Update, Message } from "telegraf/types";
 
-export const SourceItemSchema = z.object({
+export const TelegramItemSchema = z.object({
   id: z.string(),
   content: z.string(),
   contentType: z.enum(['text', 'image', 'video', 'audio', 'file', 'sticker']),
@@ -27,40 +28,45 @@ export const SourceItemSchema = z.object({
   message: z.custom<Message>(),
 });
 
-// State schema fro streaming operations
-export const stateSchema = z.object({
+// State schema for streaming operations
+export const streamStateSchema = z.object({
   totalProcessed: z.number().default(0),
   lastUpdateId: z.number().optional(), // Telegram's update_id for resumption
-  nextPollMs: z.number().nullable().optional(), // For streaming: null = terminate, number = delay
   chatId: z.string().nullish(), // Track specific chat if configured
 });
 
+// Schema for streaming events
+export const telegramStreamEventSchema = z.object({
+  item: TelegramItemSchema,
+  state: streamStateSchema,
+  metadata: z.object({
+    itemIndex: z.number(),
+  })
+});
+
 // Contract definition for the Telegram source plugin
-export const telegramContract = {
+export const telegramContract = oc.router({
   webhook: oc
+    .route({ method: 'POST', path: '/webhook' })
     .input(z.unknown())
     .output(z.object({
       processed: z.boolean(),
     }))
-    .errors(CommonPluginErrors)
-    .meta({ "streamable": "false" }),
+    .errors(CommonPluginErrors),
 
   listen: oc
+    .route({ method: 'POST', path: '/listen' })
     .input(z.object({
       chatId: z.string().optional(),
       maxResults: z.number().min(1).optional().default(100),
-      budgetMs: z.number().min(1000).max(300000).optional().default(30000),
       includeCommands: z.boolean().optional().default(true),
       textOnly: z.boolean().optional().default(false),
     }))
-    .output(z.object({
-      items: z.array(SourceItemSchema),
-      nextState: stateSchema
-    }))
-    .errors(CommonPluginErrors)
-    .meta({ "streamable": "true" }),
+    .output(eventIterator(telegramStreamEventSchema))
+    .errors(CommonPluginErrors),
 
   sendMessage: oc
+    .route({ method: 'POST', path: '/sendMessage' })
     .input(z.object({
       chatId: z.string(),
       text: z.string(),
@@ -73,27 +79,10 @@ export const telegramContract = {
       chatId: z.string(),
     }))
     .errors(CommonPluginErrors)
-    .meta({ "streamable": "false" }),
-};
+});
 
 // Export types for use in implementation
 export type TelegramContract = typeof telegramContract;
-export type SourceItem = z.infer<typeof SourceItemSchema>;
-export type StreamState = z.infer<typeof stateSchema>;
-
-export const TelegramSourceConfigSchema = createConfigSchema(
-  // Variables (non-sensitive config)
-  z.object({
-    domain: z.string().min(1).optional(), // Optional - if not provided, use polling mode
-    timeout: z.number().default(30000),
-    defaultMaxResults: z.number().min(1).max(1000).default(100),
-  }),
-  // Secrets (sensitive config, hydrated at runtime)
-  z.object({
-    webhookToken: z.string().optional(),
-    botToken: z.string().min(1, "Telegram bot token is required"),
-  }),
-);
-
-// Derived types
-export type TelegramSourceConfig = z.infer<typeof TelegramSourceConfigSchema>;
+export type TelegramItem = z.infer<typeof TelegramItemSchema>;
+export type StreamState = z.infer<typeof streamStateSchema>;
+export type TelegramStreamEvent = z.infer<typeof telegramStreamEventSchema>;
