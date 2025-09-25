@@ -1,5 +1,5 @@
 import type { AnyContractRouter } from "@orpc/contract";
-import type { Context } from "@orpc/server";
+import type { Context, Router } from "@orpc/server";
 import type { z } from "zod";
 import type { Plugin, PluginConfigFor, PluginConstructorWithBinding } from "./plugin";
 

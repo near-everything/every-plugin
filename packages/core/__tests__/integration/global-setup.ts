@@ -57,6 +57,15 @@ export async function teardown() {
   }
 }
 
+// Port pool for integration tests to avoid conflicts
+export const PORT_POOL = {
+  TEST_PLUGIN_SERVER: 3999,
+  OPENAPI_TEST: 4001,
+  RPC_TEST: 4002, 
+  STREAMING_TEST: 4003,
+  OPENAPI_GEN_TEST: 4004
+} as const;
+
 // Export test server URL for use in tests
 export const TEST_SERVER_URL = `http://localhost:${TEST_PORT}`;
 export const TEST_REMOTE_ENTRY_URL = `${TEST_SERVER_URL}/remoteEntry.js`;

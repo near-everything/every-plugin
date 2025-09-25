@@ -1,5 +1,5 @@
 import { oc } from "@orpc/contract";
-import { eventIterator, implement } from "@orpc/server";
+import { eventIterator, implement, os } from "@orpc/server";
 import { z } from "zod";
 import {
 	CommonPluginErrors,
