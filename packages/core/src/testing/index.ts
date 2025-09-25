@@ -1,27 +1,15 @@
-import { Context, Effect, Layer, ManagedRuntime } from "effect";
-import { type IPluginRuntime, PluginRuntime } from "../runtime";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { PluginRuntime, PluginRuntimeImpl } from "../runtime";
 import { PluginService, SecretsService } from "../runtime/services";
-import type { PluginRegistry, PluginRuntimeConfig, RegistryBindings } from "../runtime/types";
+import type { PluginRuntimeConfig, RegistryBindings } from "../runtime/types";
 
 // Import the mock service factory and types
 import { createMockModuleFederationServiceLayer, type TestPluginMap } from "./mocks/module-federation.service";
 
-// Create test logger
-export const createTestLogger = () => ({
-  logInfo: (message: string, context?: unknown) =>
-    Effect.sync(() => console.log(`[INFO] ${message}`, context || '')),
-  logWarning: (message: string, context?: unknown) =>
-    Effect.sync(() => console.warn(`[WARNING] ${message}`, context || '')),
-  logError: (message: string, error?: unknown, context?: unknown) =>
-    Effect.sync(() => console.error(`[ERROR] ${message}`, error, context || '')),
-  logDebug: (message: string, context?: unknown) =>
-    Effect.sync(() => console.log(`[DEBUG] ${message}`, context || '')),
-});
 
 /**
  * Creates a test layer with mock ModuleFederationService for unit testing.
- * This layer provides all the necessary services for testing plugin runtime
- * without requiring real module federation infrastructure.
+ * This mirrors PluginRuntime.Live but uses mock ModuleFederationService.
  */
 export const createTestLayer = <R extends RegistryBindings = RegistryBindings>(
   config: PluginRuntimeConfig<R>,
@@ -29,37 +17,38 @@ export const createTestLayer = <R extends RegistryBindings = RegistryBindings>(
 ) => {
   const secrets = config.secrets || {};
 
-  return Layer.effect(
+  // Same structure as PluginRuntime.Live but with mock ModuleFederationService
+  return Layer.scoped(
     PluginRuntime,
     Effect.gen(function* () {
       const pluginService = yield* PluginService;
 
-      return {
-        loadPlugin: pluginService.loadPlugin,
-        instantiatePlugin: pluginService.instantiatePlugin,
-        initializePlugin: pluginService.initializePlugin,
-        usePlugin: pluginService.usePlugin as IPluginRuntime<R>["usePlugin"],
-        shutdown: () => pluginService.cleanup(),
-      };
+      // Register cleanup finalizer for automatic resource management
+      yield* Effect.addFinalizer(() =>
+        pluginService.cleanup().pipe(
+          Effect.catchAll(() => Effect.void) // Ensure cleanup never fails
+        )
+      );
+
+      return pluginService;
     }),
   ).pipe(
     Layer.provide(
       PluginService.Live(config.registry, secrets).pipe(
         Layer.provide(
           Layer.mergeAll(
-            createMockModuleFederationServiceLayer(pluginMap),
+            createMockModuleFederationServiceLayer(pluginMap), // Mock instead of real
             SecretsService.Live(secrets),
-          )
-        )
-      )
-    )
+          ),
+        ),
+      ),
+    ),
   );
 };
 
 /**
  * Creates a test plugin runtime using mock services.
- * This is similar to createPluginRuntime but uses MockModuleFederationService
- * instead of the real one, making it suitable for unit tests.
+ * This mirrors createPluginRuntime exactly but uses test layer.
  */
 export const createTestPluginRuntime = <R extends RegistryBindings = RegistryBindings>(
   config: PluginRuntimeConfig<R>,
@@ -67,9 +56,21 @@ export const createTestPluginRuntime = <R extends RegistryBindings = RegistryBin
 ) => {
   const layer = createTestLayer<R>(config, pluginMap);
   const runtime = ManagedRuntime.make(layer);
-  const TypedPluginRuntime = PluginRuntime as Context.Tag<PluginRuntime, IPluginRuntime<R>>;
-  return { runtime, PluginRuntime: TypedPluginRuntime };
+
+  // Same exact pattern as createPluginRuntime
+  const createTypedRuntime = Effect.gen(function* () {
+    const pluginService = yield* PluginRuntime;
+    const registryKeys = new Set(Object.keys(config.registry));
+    return new PluginRuntimeImpl<R>(pluginService, config.registry, registryKeys);
+  });
+
+  return {
+    runtime,
+    PluginRuntime: createTypedRuntime.pipe(Effect.provide(runtime))
+  };
 };
 
 // Re-export useful types for tests
-export type { PluginRegistry, PluginRuntimeConfig, TestPluginMap };
+export type { PluginRegistry, RegistryBindings } from "../runtime/types";
+export type { PluginRuntimeConfig, TestPluginMap };
+

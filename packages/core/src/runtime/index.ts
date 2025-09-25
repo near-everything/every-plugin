@@ -39,7 +39,7 @@ export interface IPluginRuntime<R extends RegistryBindings = RegistryBindings> {
 }
 
 // Create a typed runtime implementation
-class PluginRuntimeImpl<R extends RegistryBindings> implements IPluginRuntime<R> {
+export class PluginRuntimeImpl<R extends RegistryBindings> implements IPluginRuntime<R> {
 	constructor(
 		private pluginService: IPluginService,
 		private registry: PluginRegistry,

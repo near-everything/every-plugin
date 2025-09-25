@@ -95,7 +95,7 @@ describe("Plugin Lifecycle Unit Tests", () => {
       // @ts-expect-error - means the types are really good!
       const result = yield* pluginRuntime.loadPlugin("non-existent-plugin").pipe(
         Effect.catchTag("PluginRuntimeError", (error) => {
-          expect(error.operation).toBe("load-plugin");
+          expect(error.operation).toBe("validate-plugin-id");
           expect(error.retryable).toBe(false);
           expect(error.pluginId).toBe("non-existent-plugin");
           expect(error.cause?.message).toContain("not found in registry");
