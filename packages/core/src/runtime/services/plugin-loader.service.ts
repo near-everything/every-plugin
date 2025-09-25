@@ -1,6 +1,5 @@
 import { Context, Effect, Layer } from "effect";
 import type { z } from "zod";
-import { PluginRuntimeError, toPluginRuntimeError } from "../errors";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
@@ -8,15 +7,16 @@ import type {
 	PluginInstance,
 	PluginRegistry,
 	SecretsConfig
-} from "../types";
+} from "../../types";
+import { PluginRuntimeError, toPluginRuntimeError } from "../errors";
 import { validate } from "../validation";
 import { ModuleFederationService } from "./module-federation.service";
 import { SecretsService } from "./secrets.service";
 
 export interface IPluginLoaderService {
-	readonly loadPlugin: <T extends AnyPlugin = AnyPlugin>(
+	readonly loadPlugin: (
 		pluginId: string,
-	) => Effect.Effect<PluginConstructor<T>, PluginRuntimeError>;
+	) => Effect.Effect<PluginConstructor<AnyPlugin>, PluginRuntimeError>;
 	readonly instantiatePlugin: <T extends AnyPlugin>(
 		pluginConstructor: PluginConstructor<T>,
 	) => Effect.Effect<PluginInstance<T>, PluginRuntimeError>;

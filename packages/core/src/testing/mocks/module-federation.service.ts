@@ -2,7 +2,7 @@ import { Effect, Layer } from "effect";
 import { ModuleFederationError } from "../../runtime/errors";
 import type { IModuleFederationService } from "../../runtime/services/module-federation.service";
 import { ModuleFederationService } from "../../runtime/services/module-federation.service";
-import type { AnyPlugin } from "../../runtime/types";
+import type { AnyPlugin } from "../../types";
 
 export interface TestPluginMap {
   [pluginId: string]: new () => AnyPlugin;

@@ -1,23 +1,26 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import { createPluginClient } from "../../src/client/index";
 import type { PluginBinding } from "../../src/plugin";
 import { createPluginRuntime } from "../../src/runtime";
-import { createPluginClient } from "../../src/runtime/client";
-import type { PluginRegistry } from "../../src/runtime/types";
-import TestPlugin from "../test-plugin/src/index";
+import type TestPlugin from "../test-plugin/src/index";
 import { TEST_REMOTE_ENTRY_URL } from "./global-setup";
 
+// Define typed registry bindings for the test plugin
+type TestBindings = {
+  "test-plugin": PluginBinding<typeof TestPlugin>;
+};
 
 // Test registry using the real served plugin
-const TEST_REGISTRY: PluginRegistry = {
+const TEST_REGISTRY = {
   "test-plugin": {
     remoteUrl: TEST_REMOTE_ENTRY_URL,
     type: "source",
     version: "0.0.1",
     description: "Real test plugin for integration testing",
   },
-};
+} as const;
 
 const TEST_CONFIG = {
   variables: {
@@ -34,10 +37,9 @@ const SECRETS_CONFIG = {
 };
 
 describe("Plugin Lifecycle Integration Tests", () => {
-  const { runtime, PluginRuntime } = createPluginRuntime({
+  const { runtime, PluginRuntime } = createPluginRuntime<TestBindings>({
     registry: TEST_REGISTRY,
-    secrets: SECRETS_CONFIG,
-    bindings: { "test-plugin": TestPlugin }
+    secrets: SECRETS_CONFIG
   });
 
   it.effect("should complete full plugin lifecycle with real MF", () =>

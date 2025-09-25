@@ -1,11 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
 import { describe } from "vitest";
-import { createPluginClient } from "../../src/runtime/client";
-import type { PluginRegistry } from "../../src/runtime/types";
-import { PluginBinding } from "../../src/plugin";
+import { createPluginClient } from "../../src/client/index";
+import type { PluginBinding } from "../../src/plugin";
 import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
-import TestPlugin, { testContract } from "../test-plugin/src/index";
+import type { PluginRegistry } from "../../src/types";
+import TestPlugin from "../test-plugin/src/index";
 
 // Define typed registry bindings for the test plugin
 type TestBindings = {
@@ -59,7 +59,7 @@ describe("Plugin Client Unit Tests", () => {
       expect(typeof client.getBulk).toBe('function');
       expect(typeof client.simpleStream).toBe('function');
       expect(typeof client.emptyStream).toBe('function');
-      expect(typeof client.throwUnauthorized).toBe('function');
+      expect(typeof client.throwError).toBe('function');
       expect(typeof client.requiresSpecialConfig).toBe('function');
 
       // Test non-streaming procedure
@@ -169,7 +169,7 @@ describe("Plugin Client Unit Tests", () => {
 
       // Apply Effect stream operations
       const processedItems = yield* stream.pipe(
-        Stream.map((item: any) => ({
+        Stream.map((item) => ({
           ...item,
           processed: true,
           timestamp: Date.now(),
@@ -194,8 +194,10 @@ describe("Plugin Client Unit Tests", () => {
       const client = createPluginClient(plugin);
 
       // Test error propagation - expect the call to throw
-      const result = yield* Effect.tryPromise(() => client.throwUnauthorized({})).pipe(
-        Effect.catchAll((error: any) => {
+      const result = yield* Effect.tryPromise(() => 
+        client.throwError({ errorType: 'UNAUTHORIZED' })
+      ).pipe(
+        Effect.catchAll((error) => {
           expect(error).toBeDefined();
           // The error might be wrapped, so check if it contains the expected message
           const errorMessage = error.message || error.toString();

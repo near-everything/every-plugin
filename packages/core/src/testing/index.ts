@@ -1,9 +1,8 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { PluginRuntime, PluginRuntimeService } from "../runtime";
-import { PluginService, SecretsService } from "../runtime/services";
-import type { PluginRuntimeConfig, RegistryBindings } from "../runtime/types";
-
 // Import the mock service factory and types
+import { SecretsService, PluginService } from "../runtime/services";
+import { PluginRuntime, PluginRuntimeService } from "../runtime";
+import type { PluginRuntimeConfig, RegistryBindings } from "../types";
 import { createMockModuleFederationServiceLayer, type TestPluginMap } from "./mocks/module-federation.service";
 
 
@@ -60,7 +59,7 @@ export const createTestPluginRuntime = <R extends RegistryBindings = RegistryBin
   // Same exact pattern as createPluginRuntime
   const createTypedRuntime = Effect.gen(function* () {
     const pluginService = yield* PluginRuntimeService;
-    return new PluginRuntime<R>(pluginService, config.registry, config.bindings);
+    return new PluginRuntime<R>(pluginService, config.registry);
   });
 
   return {
@@ -70,5 +69,6 @@ export const createTestPluginRuntime = <R extends RegistryBindings = RegistryBin
 };
 
 // Re-export useful types for tests
-export type { PluginRegistry, RegistryBindings } from "../runtime/types";
+export type { PluginRegistry, RegistryBindings } from "../types";
 export type { PluginRuntimeConfig, TestPluginMap };
+

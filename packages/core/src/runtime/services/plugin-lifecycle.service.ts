@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Ref } from "effect";
+import type { AnyPlugin, InitializedPlugin } from "../../types";
 import { type PluginRuntimeError, toPluginRuntimeError } from "../errors";
-import type { AnyPlugin, InitializedPlugin } from "../types";
 
 export interface IPluginLifecycleService {
   readonly register: <T extends AnyPlugin>(

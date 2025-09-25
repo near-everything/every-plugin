@@ -19,6 +19,11 @@
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
+    },
+    "./normalize": {
+      "types": "./dist/runtime/services/normalize.d.ts",
+      "require": "./dist/runtime/services/normalize.js",
+      "default": "./dist/runtime/services/normalize.js"
     }
   },
   "files": [
@@ -67,7 +72,7 @@
     "zod",
     "typescript"
   ],
-  "author": "everything.near",
+  "author": "plugin.every.near",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -76,5 +81,8 @@
   "bugs": {
     "url": "https://github.com/near-everything/every-plugin/issues"
   },
-  "homepage": "https://plugin.everything.dev"
+  "homepage": "https://plugin.everything.dev",
+  "workspaces": [
+    "./__tests__/test-plugin/*"
+  ]
 }

@@ -6,14 +6,7 @@ const pkg = require("./package.json");
 // Check if we're running in test environment
 const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST || process.env.npm_lifecycle_event === 'test';
 
-// Helper to get normalized remote name
-function getNormalizedRemoteName(name) {
-  return name
-    .toLowerCase()
-    .replace(/^@/, '')  // Remove leading @
-    .replace(/\//g, '_'); // Replace / with _
-    // Keep hyphens as-is
-}
+const { getNormalizedRemoteName } = require("every-plugin/normalize");
 
 function getPluginInfo() {
   return {

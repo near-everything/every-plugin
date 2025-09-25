@@ -5,14 +5,9 @@ import {
 } from "@module-federation/enhanced/runtime";
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
 import { Effect, Layer } from "effect";
+import type { AnyPlugin } from "../../types";
 import { ModuleFederationError } from "../errors";
-
-const normalizePluginId = (pluginId: string): string => {
-	return pluginId
-		.toLowerCase()
-		.replace(/^@/, "")
-		.replace(/\//g, "_");
-};
+import { getNormalizedRemoteName } from "./normalize";
 
 export interface IModuleFederationService {
 	readonly registerRemote: (
@@ -22,7 +17,7 @@ export interface IModuleFederationService {
 	readonly loadRemoteConstructor: (
 		pluginId: string,
 		url: string,
-	) => Effect.Effect<any, ModuleFederationError>;
+	) => Effect.Effect<new () => AnyPlugin, ModuleFederationError>;
 }
 
 const createModuleFederationInstance = Effect.cached(
@@ -124,11 +119,8 @@ export class ModuleFederationService extends Effect.Tag(
 							);
 						}
 
-						// Register remote
-						const remoteName = pluginId
-							.toLowerCase()
-							.replace(/^@/, "")
-							.replace(/\//g, "_");
+						// Register remote using normalized name
+						const remoteName = getNormalizedRemoteName(pluginId);
 
 						yield* Effect.try({
 							try: () => mf.registerRemotes([{ name: remoteName, entry: url }]),
@@ -146,7 +138,7 @@ export class ModuleFederationService extends Effect.Tag(
 
 				loadRemoteConstructor: (pluginId: string, url: string) =>
 					Effect.gen(function* () {
-						const remoteName = normalizePluginId(pluginId);
+						const remoteName = getNormalizedRemoteName(pluginId);
 						console.log(`[MF] Loading remote ${remoteName}`);
 						const modulePath = `${remoteName}/plugin`;
 

@@ -6,36 +6,17 @@ import {
 	createPlugin,
 	PluginConfigurationError,
 } from "../../../src/index";
-import { TestClient } from "./client";
-
-// Test item schema that plugins return
-const testItemSchema = z.object({
-	externalId: z.string(),
-	content: z.string(),
-	contentType: z.string().optional(),
-	createdAt: z.string().optional(),
-	url: z.string().optional(),
-	authors: z.array(z.object({
-		id: z.string().optional(),
-		username: z.string().optional(),
-		displayName: z.string().optional(),
-		url: z.string().optional(),
-	})).optional(),
-	raw: z.unknown(), // Original API response
-});
+import { TestClient, testItemSchema } from "./client";
 
 // Schema for streaming events
 const streamEventSchema = z.object({
 	item: testItemSchema,
 	state: z.object({
 		nextPollMs: z.number().nullable(),
-		phase: z.string(),
-		jobId: z.string(),
 		lastId: z.string(),
 	}),
 	metadata: z.object({
 		itemIndex: z.number(),
-		timestamp: z.number(),
 	})
 });
 
@@ -78,24 +59,12 @@ export const testContract = oc.router({
 		.output(eventIterator(streamEventSchema))
 		.errors(CommonPluginErrors),
 
-	// Error testing procedures
-	throwUnauthorized: oc
-		.input(z.object({}))
-		.output(z.object({ message: z.string() }))
-		.errors(CommonPluginErrors),
-
-	throwForbidden: oc
-		.input(z.object({}))
-		.output(z.object({ message: z.string() }))
-		.errors(CommonPluginErrors),
-
-	throwRateLimit: oc
-		.input(z.object({}))
-		.output(z.object({ message: z.string() }))
-		.errors(CommonPluginErrors),
-
-	throwServiceUnavailable: oc
-		.input(z.object({}))
+	// Consolidated error testing procedure
+	throwError: oc
+		.input(z.object({
+			errorType: z.enum(['UNAUTHORIZED', 'FORBIDDEN', 'RATE_LIMITED', 'SERVICE_UNAVAILABLE']),
+			customMessage: z.string().optional()
+		}))
 		.output(z.object({ message: z.string() }))
 		.errors(CommonPluginErrors),
 
@@ -111,28 +80,8 @@ export const testContract = oc.router({
 		.errors(CommonPluginErrors),
 });
 
-// Export types for use in implementation
-export type TestContract = typeof testContract;
-export type TestItem = z.infer<typeof testItemSchema>;
-
-// Helper to create consistent test items
-function createTestItem(id: string, prefix: string = "item"): TestItem {
-	return {
-		externalId: id,
-		content: `${prefix} content for ${id}`,
-		contentType: "post",
-		createdAt: new Date().toISOString(),
-		url: `https://example.com/posts/${id}`,
-		authors: [{
-			username: "test_user",
-			displayName: "Test User",
-		}],
-		raw: { id, prefix, type: "test" },
-	};
-}
-
 // Create the test plugin
-const TestPlugin = createPlugin({
+export default createPlugin({
 	id: "test-plugin",
 	type: "source",
 	variables: z.object({
@@ -167,57 +116,27 @@ const TestPlugin = createPlugin({
 
 		// Return context object - this gets passed to createRouter
 		return {
-			client,
-			baseUrl: config.variables.baseUrl
+			client
 		};
 	},
-	createRouter: (context: { client: TestClient; baseUrl: string }) => {
-		const os = implement(testContract).$context<{ client: TestClient; baseUrl: string }>();
+	createRouter: (context: { client: TestClient }) => {
+		const os = implement(testContract).$context<{ client: TestClient }>();
 
 		// Basic single item fetch
 		const getById = os.getById.handler(async ({ input }) => {
-			if (!context.client) {
-				throw new Error("Plugin not initialized");
-			}
-
-			return {
-				item: createTestItem(input.id, "single"),
-			};
+			const item = await context.client.fetchById(input.id);
+			return { item };
 		});
 
 		// Basic bulk fetch
 		const getBulk = os.getBulk.handler(async ({ input }) => {
-			if (!context.client) {
-				throw new Error("Plugin not initialized");
-			}
-
-			return {
-				items: input.ids.map(id => createTestItem(id, "bulk")),
-			};
+			const items = await context.client.fetchBulk(input.ids);
+			return { items };
 		});
 
 		// Simple predictable streaming
 		const simpleStream = os.simpleStream.handler(async function* ({ input }) {
-			for (let i = 0; i < input.count; i++) {
-				const item = createTestItem(`${input.prefix}_${i}`, input.prefix);
-
-				yield {
-					item,
-					state: {
-						nextPollMs: null, // Terminate after this batch
-						phase: "simple",
-						jobId: `simple_${Date.now()}`,
-						lastId: item.externalId,
-					},
-					metadata: {
-						itemIndex: i,
-						timestamp: Date.now(),
-					}
-				};
-
-				// Small delay for testing
-				await new Promise(resolve => setTimeout(resolve, 5));
-			}
+			yield* context.client.streamItems(input.count, input.prefix);
 		});
 
 		// Empty stream for testing
@@ -229,46 +148,45 @@ const TestPlugin = createPlugin({
 			return;
 		});
 
-		// Error testing procedures
-		const throwUnauthorized = os.throwUnauthorized.handler(async ({ errors }) => {
-			throw errors.UNAUTHORIZED({
-				message: "Test unauthorized error",
-				data: { apiKeyProvided: true, authType: 'apiKey' as const }
-			});
-		});
+		// Error testing procedure
+		const throwError = os.throwError.handler(async ({ input, errors }) => {
+			const message = input.customMessage || `Test ${input.errorType.toLowerCase()} error`;
 
-		const throwForbidden = os.throwForbidden.handler(async ({ errors }) => {
-			throw errors.FORBIDDEN({
-				message: "Test forbidden error",
-				data: { requiredPermissions: ['read:data'], action: 'test' }
-			});
-		});
-
-		const throwRateLimit = os.throwRateLimit.handler(async ({ errors }) => {
-			throw errors.RATE_LIMITED({
-				message: "Test rate limit error",
-				data: {
-					retryAfter: 60,
-					remainingRequests: 0,
-					limitType: 'requests' as const
-				}
-			});
-		});
-
-		const throwServiceUnavailable = os.throwServiceUnavailable.handler(async ({ errors }) => {
-			throw errors.SERVICE_UNAVAILABLE({
-				message: "Test service unavailable error",
-				data: {
-					retryAfter: 30,
-					maintenanceWindow: false
-				}
-			});
+			switch (input.errorType) {
+				case 'UNAUTHORIZED':
+					throw errors.UNAUTHORIZED({
+						message,
+						data: { apiKeyProvided: true, authType: 'apiKey' as const }
+					});
+				case 'FORBIDDEN':
+					throw errors.FORBIDDEN({
+						message,
+						data: { requiredPermissions: ['read:data'], action: 'test' }
+					});
+				case 'RATE_LIMITED':
+					throw errors.RATE_LIMITED({
+						message,
+						data: {
+							retryAfter: 60,
+							remainingRequests: 0,
+							limitType: 'requests' as const
+						}
+					});
+				case 'SERVICE_UNAVAILABLE':
+					throw errors.SERVICE_UNAVAILABLE({
+						message,
+						data: {
+							retryAfter: 30,
+							maintenanceWindow: false
+						}
+					});
+			}
 		});
 
 		// Config validation testing
 		const requiresSpecialConfig = os.requiresSpecialConfig.handler(async ({ input }) => {
 			return {
-				configValue: context.baseUrl,
+				configValue: context.client.getConfigValue(),
 				inputValue: input.checkValue,
 			};
 		});
@@ -279,13 +197,8 @@ const TestPlugin = createPlugin({
 			getBulk,
 			simpleStream,
 			emptyStream,
-			throwUnauthorized,
-			throwForbidden,
-			throwRateLimit,
-			throwServiceUnavailable,
+			throwError,
 			requiresSpecialConfig,
 		});
 	}
 });
-
-export default TestPlugin;

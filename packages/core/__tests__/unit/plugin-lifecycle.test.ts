@@ -1,10 +1,10 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import type { PluginRegistry } from "../../src/runtime/types";
-import { PluginBinding } from "../../src/plugin";
+import type { PluginBinding } from "../../src/plugin";
 import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
-import TestPlugin, { type testContract } from "../test-plugin/src/index";
+import type { PluginRegistry } from "../../src/types";
+import TestPlugin from "../test-plugin/src/index";
 
 // Define typed registry bindings for the test plugin
 type TestBindings = {

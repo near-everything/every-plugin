@@ -1,5 +1,5 @@
 import type { AnyContractRouter } from "@orpc/contract";
-import type { AnyRouter, Context, Router } from "@orpc/server";
+import type { Context, Router } from "@orpc/server";
 import { Effect } from "effect";
 import { z } from "zod";
 
@@ -11,7 +11,7 @@ type RouterFromContract<C extends AnyContractRouter, TContext extends Context = 
 /**
  * Helper type that correctly constructs the config schema type
  */
-export type PluginConfigFor<V extends z.ZodTypeAny, S extends z.ZodTypeAny> = 
+export type PluginConfigFor<V extends z.ZodTypeAny, S extends z.ZodTypeAny> =
 	z.ZodObject<{ variables: V; secrets: S }>;
 
 /**
@@ -24,8 +24,8 @@ export interface PluginConstructorWithBinding<
 	TContext extends Context = Record<never, never>
 > {
 	new(): Plugin<TContract, TVariables, TSecrets, TContext>;
-	binding: { 
-		contract: TContract; 
+	binding: {
+		contract: TContract;
 		config: PluginConfigFor<TVariables, TSecrets>;
 	};
 }
@@ -104,13 +104,17 @@ export interface Plugin<
 	initialize(config: { variables: z.infer<TVariables>; secrets: z.infer<TSecrets> }): Effect.Effect<TContext, unknown, never>;
 	shutdown(): Effect.Effect<void, never>;
 
-	// Router creation - returns oRPC router implementation
+	/**
+	 * Creates the strongly-typed oRPC router for this plugin.
+	 * The router's procedure types are inferred directly from the contract.
+	 * @param context The initialized plugin context
+	 * @returns A router with procedures matching the plugin's contract
+	 */
 	createRouter(context?: TContext): RouterFromContract<TContract, TContext>;
 }
 
 /**
- * Factory function to create plugins without requiring Effect knowledge
- * This is the new recommended way to create plugins
+ * Factory function to create plugins
  */
 export function createPlugin<
 	V extends z.ZodTypeAny,
@@ -166,11 +170,11 @@ export function createPlugin<
 		}
 	}
 
-	const PluginConstructor = CreatedPlugin as unknown as PluginConstructorWithBinding<TContract, V, S, TContext>;
+	const PluginConstructor = CreatedPlugin as any;
 	PluginConstructor.binding = {
 		contract: config.contract,
 		config: configSchema
 	};
 
-	return PluginConstructor;
+	return PluginConstructor as PluginConstructorWithBinding<TContract, V, S, TContext>;
 }

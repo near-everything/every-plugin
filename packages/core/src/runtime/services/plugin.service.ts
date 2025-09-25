@@ -1,6 +1,5 @@
 import { Cache, Context, Duration, Effect, Hash, Layer, Ref } from "effect";
 import type { z } from "zod";
-import { PluginRuntimeError } from "../errors";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
@@ -8,15 +7,16 @@ import type {
 	PluginInstance,
 	PluginRegistry,
 	SecretsConfig
-} from "../types";
+} from "../../types";
+import { PluginRuntimeError } from "../errors";
 import { validate } from "../validation";
 import { PluginLifecycleService } from "./plugin-lifecycle.service";
 import { PluginLoaderService } from "./plugin-loader.service";
 
 export interface IPluginService {
-	readonly loadPlugin: <T extends AnyPlugin = AnyPlugin>(
+	readonly loadPlugin: (
 		pluginId: string,
-	) => Effect.Effect<PluginConstructor<T>, PluginRuntimeError>;
+	) => Effect.Effect<PluginConstructor<AnyPlugin>, PluginRuntimeError>;
 	readonly instantiatePlugin: <T extends AnyPlugin>(
 		pluginConstructor: PluginConstructor<T>,
 	) => Effect.Effect<PluginInstance<T>, PluginRuntimeError>;
