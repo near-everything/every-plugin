@@ -1,9 +1,5 @@
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import type { z } from "zod";
-import { PluginRuntimeError } from "./errors";
-import { ModuleFederationService } from "./services/module-federation.service";
-import { type IPluginService, PluginService } from "./services/plugin.service";
-import { SecretsService } from "./services/secrets.service";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
@@ -11,11 +7,14 @@ import type {
 	PluginInstance,
 	PluginOf,
 	PluginRegistry,
-	PluginRegistryFor,
 	PluginRuntimeConfig,
 	RegistryBindings,
 	SecretsConfig
 } from "../types";
+import { PluginRuntimeError } from "./errors";
+import { ModuleFederationService } from "./services/module-federation.service";
+import { type IPluginService, PluginService } from "./services/plugin.service";
+import { SecretsService } from "./services/secrets.service";
 
 // Unified runtime interface that works with or without bindings
 export interface IPluginRuntime<R extends RegistryBindings = RegistryBindings> {
@@ -147,7 +146,6 @@ export class PluginRuntimeService extends Context.Tag("PluginRuntimeService")<
 
 /**
  * Creates a typed plugin runtime with compile-time registry key validation.
- * This enables full IDE autocomplete for pluginId and strongly-typed config inference.
  */
 export function createPluginRuntime<R extends RegistryBindings = RegistryBindings>(
 	config: { registry: PluginRegistry; secrets?: SecretsConfig }

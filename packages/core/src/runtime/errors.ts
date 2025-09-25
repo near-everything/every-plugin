@@ -24,17 +24,6 @@ export class ValidationError extends Data.TaggedError("ValidationError")<{
 	readonly zodError: z.ZodError;
 }> { }
 
-export class StreamError extends Data.TaggedError("StreamError")<{
-	readonly pluginId: string;
-	readonly operation: "callback" | "state-extraction" | "item-extraction" | "stream-termination";
-	readonly cause?: Error;
-	readonly context?: {
-		readonly iteration?: number;
-		readonly itemsProcessed?: number;
-		readonly procedureName?: string;
-	};
-}> { }
-
 // Helper to determine if an oRPC error code is retryable
 export const isRetryableORPCCode = (code: string): boolean => {
 	switch (code) {
