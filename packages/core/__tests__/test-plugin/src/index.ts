@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { oc, ContractRouterClient } from "@orpc/contract";
 import { eventIterator, implement, os } from "@orpc/server";
 import { z } from "zod";
 import {
@@ -24,6 +24,7 @@ const streamEventSchema = z.object({
 export const testContract = oc.router({
 	// Basic single item fetch
 	getById: oc
+		.route({ method: 'POST', path: '/getById' })
 		.input(z.object({
 			id: z.string()
 		}))
@@ -34,6 +35,7 @@ export const testContract = oc.router({
 
 	// Basic bulk fetch
 	getBulk: oc
+		.route({ method: 'POST', path: '/getBulk' })
 		.input(z.object({
 			ids: z.array(z.string()),
 		}))
@@ -44,6 +46,7 @@ export const testContract = oc.router({
 
 	// Simple streaming - returns fixed number of items
 	simpleStream: oc
+		.route({ method: 'POST', path: '/simpleStream' })
 		.input(z.object({
 			count: z.number().min(1).max(10).default(3),
 			prefix: z.string().default("item"),
@@ -53,6 +56,7 @@ export const testContract = oc.router({
 
 	// Empty stream - returns no items
 	emptyStream: oc
+		.route({ method: 'POST', path: '/emptyStream' })
 		.input(z.object({
 			reason: z.string().optional(),
 		}))
@@ -61,6 +65,7 @@ export const testContract = oc.router({
 
 	// Consolidated error testing procedure
 	throwError: oc
+		.route({ method: 'POST', path: '/throwError' })
 		.input(z.object({
 			errorType: z.enum(['UNAUTHORIZED', 'FORBIDDEN', 'RATE_LIMITED', 'SERVICE_UNAVAILABLE']),
 			customMessage: z.string().optional()
@@ -70,6 +75,7 @@ export const testContract = oc.router({
 
 	// Config validation testing
 	requiresSpecialConfig: oc
+		.route({ method: 'POST', path: '/requiresSpecialConfig' })
 		.input(z.object({
 			checkValue: z.string(),
 		}))
@@ -79,6 +85,9 @@ export const testContract = oc.router({
 		}))
 		.errors(CommonPluginErrors),
 });
+
+// Export the client type for typed oRPC clients
+export type TestPluginClient = ContractRouterClient<typeof testContract>;
 
 // Create the test plugin
 export default createPlugin({

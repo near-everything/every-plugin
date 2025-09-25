@@ -3,6 +3,8 @@ import type { Context, Router } from "@orpc/server";
 import type { z } from "zod";
 import type { Plugin, PluginConfigFor, PluginConstructorWithBinding } from "./plugin";
 
+export type AnyContract = Router<AnyContractRouter, any>
+
 /**
  * Base type for any plugin instance.
  * This is the foundation that enables type inference across the entire plugin system.

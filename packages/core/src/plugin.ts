@@ -2,6 +2,7 @@ import type { AnyContractRouter } from "@orpc/contract";
 import type { Context, Router } from "@orpc/server";
 import { Effect } from "effect";
 import { z } from "zod";
+import { AnyContract } from "./types";
 
 /**
  * Derive router type from contract at the type level

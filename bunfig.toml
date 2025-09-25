@@ -1,2 +1,2 @@
 [install]
-linker = "hardlink"
+linker = "isolated"

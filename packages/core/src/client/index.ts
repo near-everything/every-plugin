@@ -1,3 +1,4 @@
+import type { AnyContractRouter } from "@orpc/contract";
 import {
   type ClientContext,
   type CreateProcedureClientOptions,
@@ -17,8 +18,9 @@ import type { AnyPlugin, InitializedPlugin, RouterOf } from "../types";
  */
 export function getPluginRouter<T extends AnyPlugin>(
   initialized: InitializedPlugin<T>
-): RouterOf<T> {
-  return initialized.plugin.createRouter(initialized.context) as RouterOf<T>;
+): RouterOf<T> & AnyContractRouter {
+  const router = initialized.plugin.createRouter(initialized.context);
+  return router as RouterOf<T> & AnyContractRouter;
 }
 
 /**
