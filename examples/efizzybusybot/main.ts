@@ -31,7 +31,7 @@ const useWebhooks = !!WEBHOOK_DOMAIN;
 const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
   registry: {
     "@curatedotfun/telegram-source": {
-      remoteUrl: "https://elliot-braem-34--curatedotfun-telegram-source-eve-b940ac6b5-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-36--curatedotfun-telegram-source-eve-8b7d40659-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },
@@ -119,7 +119,7 @@ const createHttpServer = Effect.gen(function* () {
   // Mount plugin router for telegram endpoints using Hono pattern
   const router = getPluginRouter(telegramPlugin);
   const handler = new RPCHandler(router);
-  
+
   app.use("/telegram/*", async (c, next) => {
     const { matched, response } = await handler.handle(c.req.raw, {
       prefix: "/telegram",
@@ -152,7 +152,7 @@ const createHttpServer = Effect.gen(function* () {
 });
 
 // Save stream state
-const saveState = (state: any) =>
+const saveState = (state: { lastUpdateId: number, totalProcessed: number, chatId?: string }) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
     yield* db.saveStreamState({
@@ -224,10 +224,10 @@ const program = Effect.gen(function* () {
   // Start message streaming and processing
   const asyncIterable = yield* Effect.tryPromise(() =>
     pluginClient.listen({
-      chatId: TARGET_CHAT_ID,
-      maxResults: 100,
-      messageTypes: ['text', 'photo', 'document', 'video', 'voice', 'audio', 'sticker', 'location', 'contact', 'animation', 'video_note'],
-      commands: ['/start', '/help'], // Include common commands
+      // chatId: TARGET_CHAT_ID,
+      // maxResults: 100,
+      // messageTypes: ['text', 'photo', 'document', 'video', 'voice', 'audio', 'sticker', 'location', 'contact', 'animation', 'video_note'],
+      // commands: ['/start', '/help'], // Include common commands
     })
   );
 
@@ -241,7 +241,7 @@ const program = Effect.gen(function* () {
 
         const username = ctx.from?.username || ctx.from?.first_name || 'unknown';
         const chatType = ctx.chat?.type || 'unknown';
-        
+
         console.log(`\n📨 Message ${messageCount}: ${username} in ${chatType}`);
 
         // Process message with worker

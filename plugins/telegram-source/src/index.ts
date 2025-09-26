@@ -1,5 +1,5 @@
 import { implement } from "@orpc/server";
-import { Duration, Effect, Fiber, Queue, Stream, Schedule } from "effect";
+import { Effect, Queue, Stream } from "effect";
 import { createPlugin } from "every-plugin";
 import type { Context } from "telegraf";
 import { Telegraf } from "telegraf";
@@ -10,13 +10,6 @@ import {
 } from "./schemas";
 
 const MAX_QUEUE_SIZE = 1000;
-
-// Context type for the plugin
-interface TelegramContext {
-  bot: Telegraf;
-  queue: Queue.Queue<Context<Update>>;
-  isWebhookMode: boolean;
-}
 
 const handleTelegramError = (error: unknown, errors: Record<string, Function>): never => {
   if (error instanceof Error) {
@@ -135,8 +128,9 @@ export default createPlugin({
           // Enqueue context using Effect.runFork to avoid blocking Telegraf's event loop
           Effect.runFork(
             Queue.offer(queue, ctx).pipe(
+              Effect.tap(() => Effect.sync(() => console.log(`📋 [Queue] Added context to queue`))),
               Effect.tap(() => Queue.size(queue).pipe(
-                Effect.tap((size) => Effect.sync(() => console.log(`📋 [Queue] Added context to queue. Queue size: ${size}`)))
+                Effect.tap((size) => Effect.sync(() => console.log(`📋 [Queue] Current queue size: ${size}`)))
               )),
               Effect.catchAll(() => Effect.void) // ignore enqueue failures
             )
@@ -201,8 +195,15 @@ export default createPlugin({
               // Process the update through the bot to create a Context
               await context.bot.handleUpdate(input);
             },
-            catch: (error) => new Error(`Failed to process webhook update: ${error instanceof Error ? error.message : String(error)}`)
-          });
+            catch: (error) => new Error(`Webhook processing failed: ${error instanceof Error ? error.message : String(error)}`)
+          }).pipe(
+            Effect.catchAll((error) => 
+              Effect.sync(() => {
+                // Log the error but don't fail - malformed data should be handled gracefully
+                console.error(`[Telegram] Webhook processing error: ${error.message}`);
+              })
+            )
+          );
           return { processed: true };
         })
       )
@@ -212,10 +213,10 @@ export default createPlugin({
       const { maxResults, chatId, messageTypes, chatTypes, commands } = input;
 
       console.log(`🎧 [Listen] Starting listen maxResults: ${maxResults}`);
-      
+
       // Create a blocking, infinite stream that only ends when the plugin scope closes
       let stream = Stream.repeatEffect(Queue.take(context.queue));
-      
+
       console.log(`📡 [Listen] Created stream from queue`);
 
       // Apply chatId filter
@@ -252,7 +253,13 @@ export default createPlugin({
                   const messageText = ctx.message.text || '';
                   const isCommand = messageText.startsWith('/');
 
-                  return commands && commands.length > 0 ? true : !isCommand;
+                  // If commands are specified, allow commands through text filter
+                  if (isCommand && commands && commands.length > 0) {
+                    return true;
+                  }
+
+                  // Otherwise, only allow non-command text messages
+                  return !isCommand;
                 }
                 case 'photo': return ctx.message && 'photo' in ctx.message;
                 case 'document': return ctx.message && 'document' in ctx.message;

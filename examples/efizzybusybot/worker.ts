@@ -120,6 +120,16 @@ const isFromEjlbraem = (ctx) => {
   return ctx.from?.id?.toString() === EJLBRAEM_USER_ID;
 };
 
+// Check if message is a reply to the bot
+const isReplyToBot = (ctx) => {
+  if (!ctx.message || !('reply_to_message' in ctx.message) || !ctx.message.reply_to_message) {
+    return false;
+  }
+  
+  // Check if the replied-to message is from the bot
+  return ctx.message.reply_to_message.from?.is_bot === true;
+};
+
 // Generate reply text based on message analysis
 const generateReply = (ctx) => {
   const username = ctx.from?.username || ctx.from?.first_name || 'friend';
@@ -134,13 +144,18 @@ const generateReply = (ctx) => {
     return `hey! ${username}`;
   }
   
+  // Priority 3: Check if replying to the bot
+  if (isReplyToBot(ctx)) {
+    return "what's up?";
+  }
+  
   // No reply needed
   return null;
 };
 
 // Main worker function to process a telegram message
 export const processMessage = (
-  ctx,
+  ctx: any,
   sendReply: (chatId: string, text: string, replyToMessageId?: number) => Effect.Effect<void, Error>
 ) =>
   Effect.gen(function* () {
