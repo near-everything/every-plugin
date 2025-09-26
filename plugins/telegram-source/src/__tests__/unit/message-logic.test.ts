@@ -5,7 +5,7 @@ import { createPluginClient } from "every-plugin/client";
 import { createTestPluginRuntime, type TestPluginMap } from "every-plugin/testing";
 import { beforeAll, describe } from "vitest";
 import TelegramSourcePlugin from "../../index";
-import { createTextUpdate, createCommandUpdate, createMediaUpdate } from "../fixtures/telegram-updates";
+import { createCommandUpdate, createTextUpdate } from "../fixtures/telegram-updates";
 
 // Define typed registry bindings for the telegram plugin
 type TelegramBindings = {
@@ -77,7 +77,7 @@ describe("Telegram Message Logic Tests", () => {
         const client = createPluginClient(plugin);
 
         const testMessage = `Unit test message - ${new Date().toISOString()}`;
-        
+
         const result = yield* Effect.tryPromise(() =>
           client.sendMessage({
             chatId: TEST_CHAT_ID,
@@ -123,8 +123,8 @@ describe("Telegram Message Logic Tests", () => {
         const update2 = createCommandUpdate("/start", parseInt(TEST_CHAT_ID));
 
         // Send webhook updates (this just adds to queue, no real webhook)
-        const result1 = yield* Effect.tryPromise(() => client.webhook({ input: update1 }));
-        const result2 = yield* Effect.tryPromise(() => client.webhook({ input: update2 }));
+        const result1 = yield* Effect.tryPromise(() => client.webhook(update1));
+        const result2 = yield* Effect.tryPromise(() => client.webhook(update2));
 
         expect(result1.processed).toBe(true);
         expect(result2.processed).toBe(true);
@@ -139,7 +139,8 @@ describe("Telegram Message Logic Tests", () => {
 
         // Send malformed data
         const result = yield* Effect.tryPromise(() =>
-          client.webhook({ input: { malformed: "data", no_update_id: true } })
+          // @ts-expect-error malformed, type errors are good
+          client.webhook({ malformed: "data", no_update_id: true })
         );
 
         expect(result.processed).toBe(true);
@@ -159,53 +160,54 @@ describe("Telegram Message Logic Tests", () => {
         const update2 = createTextUpdate("Stream test message 2", parseInt(TEST_CHAT_ID));
         const update3 = createCommandUpdate("/help", parseInt(TEST_CHAT_ID));
 
-        yield* Effect.tryPromise(() => client.webhook({ input: update1 }));
-        yield* Effect.tryPromise(() => client.webhook({ input: update2 }));
-        yield* Effect.tryPromise(() => client.webhook({ input: update3 }));
+        yield* Effect.tryPromise(() => client.webhook(update1));
+        yield* Effect.tryPromise(() => client.webhook(update2));
+        yield* Effect.tryPromise(() => client.webhook(update3));
 
         // Stream the messages
         const asyncIterable = yield* Effect.tryPromise(() =>
           client.listen({
             chatId: TEST_CHAT_ID,
-            maxResults: 10,
-            includeCommands: true,
+            maxResults: 3,
+            messageTypes: ['text'],
+            commands: ['/help'],
+            idleTimeout: 1000, // Complete after 1s of no new messages
           })
         );
 
         const stream = Stream.fromAsyncIterable(asyncIterable, (error) => error);
         const collected = yield* stream.pipe(
-          Stream.take(5),
+          Stream.take(3),
           Stream.runCollect
         );
 
-        const events = Array.from(collected);
+        const contexts = Array.from(collected);
+
+        // Actual test assertions - we should get exactly 3 contexts
+        expect(contexts.length).toBeGreaterThanOrEqual(1);
         
-        // Test the core functionality: webhook -> queue -> stream processing
-        console.log(`📊 Stream processing test: got ${events.length} events`);
-        
-        if (events.length >= 3) {
-          // Verify event structure if we got the expected events
-          const firstEvent = events[0];
-          expect(firstEvent).toHaveProperty('item');
-          expect(firstEvent).toHaveProperty('state');
-          expect(firstEvent).toHaveProperty('metadata');
+        // Verify each context has the expected Telegraf Context structure
+        for (const ctx of contexts) {
+          expect(ctx).toHaveProperty('update');
+          expect(ctx).toHaveProperty('telegram');
+          expect(ctx).toHaveProperty('chat');
+          expect(ctx).toHaveProperty('message');
           
-          expect(firstEvent.item.chatId).toBe(TEST_CHAT_ID);
-          expect(firstEvent.item.content).toContain("Stream test message 1");
-          expect(firstEvent.state.totalProcessed).toBeGreaterThan(0);
-          expect(firstEvent.metadata.itemIndex).toBe(0);
+          // Verify chat ID matches
+          expect(ctx.chat?.id.toString()).toBe(TEST_CHAT_ID);
           
-          console.log(`✅ Stream processing verified with ${events.length} events`);
-        } else {
-          // The webhook processing worked (no errors thrown), but queue might be empty
-          // This can happen due to timing or other tests consuming the queue
-          console.log("ℹ️ Webhook processing successful, but stream returned fewer events than expected");
-          console.log("   This is acceptable as the core webhook->queue mechanism is working");
+          // Verify update structure
+          expect(ctx.update.update_id).toBeGreaterThan(0);
+          expect(ctx.message).toBeDefined();
         }
+
+        // Verify we can find our test messages
+        const textContexts = contexts.filter(ctx => 
+          ctx.message && 'text' in ctx.message && 
+          (ctx.message.text?.includes("Stream test message") || ctx.message.text?.startsWith("/help"))
+        );
         
-        // The main test is that webhook processing doesn't throw errors
-        // and the stream mechanism works (even if queue is empty)
-        expect(true).toBe(true); // Test passes if we reach here without errors
+        expect(textContexts.length).toBeGreaterThanOrEqual(1);
       }).pipe(Effect.provide(runtime), Effect.timeout("15 seconds"))
     );
 
@@ -219,14 +221,15 @@ describe("Telegram Message Logic Tests", () => {
         const targetUpdate = createTextUpdate("Target chat message", parseInt(TEST_CHAT_ID));
         const otherUpdate = createTextUpdate("Other chat message", 999999);
 
-        yield* Effect.tryPromise(() => client.webhook({ input: targetUpdate }));
-        yield* Effect.tryPromise(() => client.webhook({ input: otherUpdate }));
+        yield* Effect.tryPromise(() => client.webhook(targetUpdate));
+        yield* Effect.tryPromise(() => client.webhook(otherUpdate));
 
         // Filter by target chat ID
         const asyncIterable = yield* Effect.tryPromise(() =>
           client.listen({
             chatId: TEST_CHAT_ID,
             maxResults: 10,
+            idleTimeout: 500,
           })
         );
 
@@ -236,16 +239,16 @@ describe("Telegram Message Logic Tests", () => {
           Stream.runCollect
         );
 
-        const events = Array.from(collected);
-        
+        const contexts = Array.from(collected);
+
         // Should only get messages from target chat
-        for (const event of events) {
-          expect(event.item.chatId).toBe(TEST_CHAT_ID);
+        for (const ctx of contexts) {
+          expect(ctx.chat?.id.toString()).toBe(TEST_CHAT_ID);
         }
       }).pipe(Effect.provide(runtime), Effect.timeout("15 seconds"))
     );
 
-    it.effect("should filter commands when includeCommands is false", () =>
+    it.effect("should filter commands using messageTypes", () =>
       Effect.gen(function* () {
         const pluginRuntime = yield* PluginRuntime;
         const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
@@ -255,15 +258,16 @@ describe("Telegram Message Logic Tests", () => {
         const regularUpdate = createTextUpdate("Regular message", parseInt(TEST_CHAT_ID));
         const commandUpdate = createCommandUpdate("/command", parseInt(TEST_CHAT_ID));
 
-        yield* Effect.tryPromise(() => client.webhook({ input: regularUpdate }));
-        yield* Effect.tryPromise(() => client.webhook({ input: commandUpdate }));
+        yield* Effect.tryPromise(() => client.webhook(regularUpdate));
+        yield* Effect.tryPromise(() => client.webhook(commandUpdate));
 
-        // Listen with commands excluded
+        // Listen with only text messages (excludes commands by not specifying them)
         const asyncIterable = yield* Effect.tryPromise(() =>
           client.listen({
             chatId: TEST_CHAT_ID,
-            includeCommands: false,
+            messageTypes: ['text'], // Only text messages, no commands specified
             maxResults: 10,
+            idleTimeout: 500,
           })
         );
 
@@ -273,11 +277,15 @@ describe("Telegram Message Logic Tests", () => {
           Stream.runCollect
         );
 
-        const events = Array.from(collected);
-        
-        // All events should be non-commands
-        for (const event of events) {
-          expect(event.item.isCommand).toBe(false);
+        const contexts = Array.from(collected);
+
+        // Should get contexts, verify they're text messages
+        for (const ctx of contexts) {
+          expect(ctx.message).toBeDefined();
+          if (ctx.message && 'text' in ctx.message) {
+            // Regular text messages should not start with /
+            expect(ctx.message.text?.startsWith('/')).toBe(false);
+          }
         }
       }).pipe(Effect.provide(runtime), Effect.timeout("15 seconds"))
     );
@@ -292,6 +300,7 @@ describe("Telegram Message Logic Tests", () => {
         const asyncIterable = yield* Effect.tryPromise(() =>
           client.listen({
             maxResults: 10,
+            idleTimeout: 500, // Should timeout quickly with empty queue
           })
         );
 

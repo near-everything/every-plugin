@@ -2,6 +2,7 @@ import type { AnyContractRouter } from "@orpc/contract";
 import type { Context, Router } from "@orpc/server";
 import type { z } from "zod";
 import type { Plugin, PluginConfigFor, PluginConstructorWithBinding } from "./plugin";
+import { Scope } from "effect";
 
 export type AnyContract = Router<AnyContractRouter, any>
 
@@ -141,7 +142,7 @@ export interface PluginInstance<T extends AnyPlugin = AnyPlugin> {
 
 /**
  * Fully initialized plugin ready for use.
- * Contains the plugin instance, validated config, and execution context.
+ * Contains the plugin instance, validated config, execution context, and scope.
  * This is what gets passed to createPluginClient for type-safe procedure calls.
  */
 export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
@@ -154,6 +155,8 @@ export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
   };
   readonly config: z.infer<T["configSchema"]>;
   readonly context: Context;
+  readonly scope: Scope.CloseableScope
+;
 }
 
 /**

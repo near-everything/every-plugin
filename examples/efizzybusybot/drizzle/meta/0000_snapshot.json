@@ -1,130 +1,11 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1bdb1b35-1a9b-46f6-8388-681737873037",
+  "id": "f8c1f4c6-9a14-4d3f-b56e-1f839d6d7b06",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "chats": {
-      "name": "chats",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "chat_id": {
-          "name": "chat_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "chat_type": {
-          "name": "chat_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "username": {
-          "name": "username",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "member_count": {
-          "name": "member_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "is_active": {
-          "name": "is_active",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": true
-        },
-        "first_seen_at": {
-          "name": "first_seen_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "CURRENT_TIMESTAMP"
-        },
-        "last_message_at": {
-          "name": "last_message_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "CURRENT_TIMESTAMP"
-        }
-      },
-      "indexes": {
-        "chats_chat_id_unique": {
-          "name": "chats_chat_id_unique",
-          "columns": [
-            "chat_id"
-          ],
-          "isUnique": true
-        },
-        "chats_chat_id_idx": {
-          "name": "chats_chat_id_idx",
-          "columns": [
-            "chat_id"
-          ],
-          "isUnique": true
-        },
-        "chats_username_idx": {
-          "name": "chats_username_idx",
-          "columns": [
-            "username"
-          ],
-          "isUnique": false
-        },
-        "chats_type_idx": {
-          "name": "chats_type_idx",
-          "columns": [
-            "chat_type"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "items": {
-      "name": "items",
+    "messages": {
+      "name": "messages",
       "columns": {
         "id": {
           "name": "id",
@@ -140,14 +21,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "platform": {
-          "name": "platform",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'telegram'"
-        },
         "content": {
           "name": "content",
           "type": "text",
@@ -157,6 +30,41 @@
         },
         "content_type": {
           "name": "content_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "author_id": {
+          "name": "author_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "author_username": {
+          "name": "author_username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "author_display_name": {
+          "name": "author_display_name",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -180,42 +88,7 @@
           "name": "chat_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "chat_title": {
-          "name": "chat_title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "chat_username": {
-          "name": "chat_username",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "original_author_id": {
-          "name": "original_author_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "original_author_username": {
-          "name": "original_author_username",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "original_author_display_name": {
-          "name": "original_author_display_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "is_command": {
@@ -226,34 +99,21 @@
           "autoincrement": false,
           "default": false
         },
-        "is_mentioned": {
-          "name": "is_mentioned",
+        "is_reply": {
+          "name": "is_reply",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
           "default": false
         },
-        "reply_to_message_id": {
-          "name": "reply_to_message_id",
+        "has_media": {
+          "name": "has_media",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
-          "autoincrement": false
-        },
-        "forward_from_user_id": {
-          "name": "forward_from_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": false
         },
         "ingested_at": {
           "name": "ingested_at",
@@ -263,12 +123,13 @@
           "autoincrement": false,
           "default": "CURRENT_TIMESTAMP"
         },
-        "url": {
-          "name": "url",
-          "type": "text",
+        "processed": {
+          "name": "processed",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": false
         },
         "raw_data": {
           "name": "raw_data",
@@ -279,163 +140,64 @@
         }
       },
       "indexes": {
-        "items_external_id_idx": {
-          "name": "items_external_id_idx",
+        "messages_external_id_unique": {
+          "name": "messages_external_id_unique",
           "columns": [
             "external_id"
           ],
           "isUnique": true
         },
-        "items_chat_id_idx": {
-          "name": "items_chat_id_idx",
+        "messages_external_id_idx": {
+          "name": "messages_external_id_idx",
+          "columns": [
+            "external_id"
+          ],
+          "isUnique": true
+        },
+        "messages_chat_id_idx": {
+          "name": "messages_chat_id_idx",
           "columns": [
             "chat_id"
           ],
           "isUnique": false
         },
-        "items_author_username_idx": {
-          "name": "items_author_username_idx",
+        "messages_author_id_idx": {
+          "name": "messages_author_id_idx",
           "columns": [
-            "original_author_username"
+            "author_id"
           ],
           "isUnique": false
         },
-        "items_ingested_at_idx": {
-          "name": "items_ingested_at_idx",
+        "messages_author_username_idx": {
+          "name": "messages_author_username_idx",
+          "columns": [
+            "author_username"
+          ],
+          "isUnique": false
+        },
+        "messages_ingested_at_idx": {
+          "name": "messages_ingested_at_idx",
           "columns": [
             "ingested_at"
           ],
           "isUnique": false
         },
-        "items_chat_type_idx": {
-          "name": "items_chat_type_idx",
-          "columns": [
-            "chat_type"
-          ],
-          "isUnique": false
-        },
-        "items_command_idx": {
-          "name": "items_command_idx",
+        "messages_is_command_idx": {
+          "name": "messages_is_command_idx",
           "columns": [
             "is_command"
           ],
           "isUnique": false
         },
-        "items_mention_idx": {
-          "name": "items_mention_idx",
+        "messages_processed_idx": {
+          "name": "messages_processed_idx",
           "columns": [
-            "is_mentioned"
+            "processed"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "processing_queue": {
-      "name": "processing_queue",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "item_id": {
-          "name": "item_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "submission_type": {
-          "name": "submission_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'pending'"
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": 0
-        },
-        "worker_id": {
-          "name": "worker_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "error_message": {
-          "name": "error_message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "CURRENT_TIMESTAMP"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "CURRENT_TIMESTAMP"
-        }
-      },
-      "indexes": {
-        "queue_status_idx": {
-          "name": "queue_status_idx",
-          "columns": [
-            "status"
-          ],
-          "isUnique": false
-        },
-        "queue_worker_idx": {
-          "name": "queue_worker_idx",
-          "columns": [
-            "worker_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "processing_queue_item_id_items_id_fk": {
-          "name": "processing_queue_item_id_items_id_fk",
-          "tableFrom": "processing_queue",
-          "tableTo": "items",
-          "columnsFrom": [
-            "item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -449,13 +211,6 @@
           "primaryKey": true,
           "notNull": true,
           "autoincrement": true
-        },
-        "phase": {
-          "name": "phase",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
         },
         "last_update_id": {
           "name": "last_update_id",
@@ -471,13 +226,6 @@
           "notNull": false,
           "autoincrement": false,
           "default": 0
-        },
-        "next_poll_ms": {
-          "name": "next_poll_ms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         },
         "chat_id": {
           "name": "chat_id",
@@ -496,133 +244,6 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "users": {
-      "name": "users",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "username": {
-          "name": "username",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "first_name": {
-          "name": "first_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "last_name": {
-          "name": "last_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "display_name": {
-          "name": "display_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "language_code": {
-          "name": "language_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "is_bot": {
-          "name": "is_bot",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": false
-        },
-        "first_seen_at": {
-          "name": "first_seen_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "CURRENT_TIMESTAMP"
-        },
-        "last_message_at": {
-          "name": "last_message_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "message_count": {
-          "name": "message_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": 0
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "CURRENT_TIMESTAMP"
-        }
-      },
-      "indexes": {
-        "users_user_id_unique": {
-          "name": "users_user_id_unique",
-          "columns": [
-            "user_id"
-          ],
-          "isUnique": true
-        },
-        "users_user_id_idx": {
-          "name": "users_user_id_idx",
-          "columns": [
-            "user_id"
-          ],
-          "isUnique": true
-        },
-        "users_username_idx": {
-          "name": "users_username_idx",
-          "columns": [
-            "username"
-          ],
-          "isUnique": false
-        },
-        "users_bot_idx": {
-          "name": "users_bot_idx",
-          "columns": [
-            "is_bot"
-          ],
-          "isUnique": false
-        }
-      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

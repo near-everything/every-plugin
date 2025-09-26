@@ -1,8 +1,7 @@
 import type { AnyContractRouter } from "@orpc/contract";
 import type { Context, Router } from "@orpc/server";
-import { Effect } from "effect";
+import { Effect, type Scope } from "effect";
 import { z } from "zod";
-import { AnyContract } from "./types";
 
 /**
  * Derive router type from contract at the type level
@@ -102,7 +101,7 @@ export interface Plugin<
 	readonly configSchema: PluginConfigFor<TVariables, TSecrets>;
 
 	// Plugin lifecycle
-	initialize(config: { variables: z.infer<TVariables>; secrets: z.infer<TSecrets> }): Effect.Effect<TContext, unknown, never>;
+	initialize(config: { variables: z.infer<TVariables>; secrets: z.infer<TSecrets> }): Effect.Effect<TContext, unknown, Scope.Scope>;
 	shutdown(): Effect.Effect<void, never>;
 
 	/**
@@ -128,8 +127,9 @@ export function createPlugin<
 	variables: V;
 	secrets: S;
 	contract: TContract;
-	initialize?: (config: { variables: z.infer<V>; secrets: z.infer<S> }) => Promise<TContext> | TContext;
+	initialize?: (config: { variables: z.infer<V>; secrets: z.infer<S> }) => Effect.Effect<TContext, Error, Scope.Scope>;
 	createRouter: (ctx: TContext) => Router<any, TContext>;
+	shutdown?: (ctx: TContext) => Effect.Effect<void, Error, never>;
 }) {
 	const configSchema = z.object({
 		variables: config.variables,
@@ -144,26 +144,26 @@ export function createPlugin<
 
 		private _context: TContext | null = null;
 
-		initialize(pluginConfig: { variables: z.infer<V>; secrets: z.infer<S> }): Effect.Effect<TContext, unknown, never> {
+		initialize(pluginConfig: { variables: z.infer<V>; secrets: z.infer<S> }): Effect.Effect<TContext, unknown, Scope.Scope> {
 			const self = this;
-			return Effect.gen(function* () {
-				if (config.initialize) {
-					const result = config.initialize(pluginConfig);
-					// Handle both sync and async initialize functions
-					if (result instanceof Promise) {
-						self._context = yield* Effect.tryPromise(() => result);
-					} else {
-						self._context = result;
-					}
-				} else {
-					self._context = {} as TContext;
-				}
-				return self._context;
-			});
+			const init = config.initialize ?? (() => Effect.succeed({} as TContext));
+
+			return init(pluginConfig).pipe(
+				Effect.tap((ctx) => Effect.sync(() => { self._context = ctx; })),
+				Effect.map(() => self._context as TContext),
+				Effect.mapError((error) => error as unknown)
+			);
 		}
 
 		shutdown(): Effect.Effect<void, never> {
-			return Effect.void;
+			const self = this;
+			return Effect.gen(function* () {
+				if (config.shutdown && self._context) {
+					yield* config.shutdown(self._context).pipe(
+						Effect.catchAll(() => Effect.void)
+					);
+				}
+			});
 		}
 
 		createRouter(ctx: TContext): RouterFromContract<TContract, TContext> {

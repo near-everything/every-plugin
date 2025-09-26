@@ -4,14 +4,7 @@ const { withZephyr } = require("zephyr-rspack-plugin");
 
 const pkg = require("./package.json");
 
-// Helper to get normalized remote name
-function getNormalizedRemoteName(name) {
-  return name
-    .toLowerCase()
-    .replace(/^@/, "") // Remove leading @
-    .replace(/\//g, "_"); // Replace / with _
-  // Keep hyphens as-is
-}
+const { getNormalizedRemoteName } = require("every-plugin/normalize");
 
 function getPluginInfo() {
   return {

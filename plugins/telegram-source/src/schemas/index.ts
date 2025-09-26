@@ -2,53 +2,18 @@ import { oc } from "@orpc/contract";
 import { eventIterator } from "@orpc/server";
 import { CommonPluginErrors } from "every-plugin";
 import { z } from "zod";
-import type { Update, Message } from "telegraf/types";
+import type { Update } from "telegraf/types";
+import type { Context } from "telegraf";
 
-export const TelegramItemSchema = z.object({
-  id: z.string(),
-  content: z.string(),
-  contentType: z.enum(['text', 'image', 'video', 'audio', 'file', 'sticker']),
-  createdAt: z.string(),
-  url: z.string().optional(),
-  
-  author: z.object({
-    id: z.string(),
-    username: z.string().optional(),
-    displayName: z.string(),
-  }).optional(),
-  
-  chatId: z.string(),
-  messageId: z.number(),
-  isCommand: z.boolean(),
-  isReply: z.boolean(),
-  hasMedia: z.boolean(),
-  chatType: z.enum(['private', 'group', 'supergroup', 'channel']),
-  
-  raw: z.custom<Update>(),
-  message: z.custom<Message>(),
-});
-
-// State schema for streaming operations
-export const streamStateSchema = z.object({
-  totalProcessed: z.number().default(0),
-  lastUpdateId: z.number().optional(), // Telegram's update_id for resumption
-  chatId: z.string().nullish(), // Track specific chat if configured
-});
-
-// Schema for streaming events
-export const telegramStreamEventSchema = z.object({
-  item: TelegramItemSchema,
-  state: streamStateSchema,
-  metadata: z.object({
-    itemIndex: z.number(),
-  })
+export const TelegramContextSchema = z.custom<Context>((val): val is Context => {
+  return typeof val === 'object' && val !== null && 'update' in val && 'telegram' in val;
 });
 
 // Contract definition for the Telegram source plugin
 export const telegramContract = oc.router({
   webhook: oc
     .route({ method: 'POST', path: '/webhook' })
-    .input(z.unknown())
+    .input(z.custom<Update>())
     .output(z.object({
       processed: z.boolean(),
     }))
@@ -59,10 +24,12 @@ export const telegramContract = oc.router({
     .input(z.object({
       chatId: z.string().optional(),
       maxResults: z.number().min(1).optional().default(100),
-      includeCommands: z.boolean().optional().default(true),
-      textOnly: z.boolean().optional().default(false),
+      messageTypes: z.array(z.enum(['text', 'photo', 'document', 'video', 'voice', 'audio', 'sticker', 'location', 'contact', 'animation', 'video_note'])).optional(),
+      chatTypes: z.array(z.enum(['private', 'group', 'supergroup', 'channel'])).optional(),
+      commands: z.array(z.string()).optional(),
+      idleTimeout: z.number().min(100).optional(), // Timeout in ms after no new messages
     }))
-    .output(eventIterator(telegramStreamEventSchema))
+    .output(eventIterator(TelegramContextSchema))
     .errors(CommonPluginErrors),
 
   sendMessage: oc
@@ -83,6 +50,4 @@ export const telegramContract = oc.router({
 
 // Export types for use in implementation
 export type TelegramContract = typeof telegramContract;
-export type TelegramItem = z.infer<typeof TelegramItemSchema>;
-export type StreamState = z.infer<typeof streamStateSchema>;
-export type TelegramStreamEvent = z.infer<typeof telegramStreamEventSchema>;
+export type TelegramContext = Context;

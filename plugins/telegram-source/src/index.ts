@@ -1,12 +1,11 @@
 import { implement } from "@orpc/server";
+import { Duration, Effect, Fiber, Queue, Stream, Schedule } from "effect";
 import { createPlugin } from "every-plugin";
+import type { Context } from "telegraf";
 import { Telegraf } from "telegraf";
 import type { Update } from "telegraf/types";
 import z from "zod";
 import {
-  type TelegramItem,
-  type StreamState,
-  type TelegramStreamEvent,
   telegramContract,
 } from "./schemas";
 
@@ -15,11 +14,11 @@ const MAX_QUEUE_SIZE = 1000;
 // Context type for the plugin
 interface TelegramContext {
   bot: Telegraf;
-  updateQueue: Update[];
+  queue: Queue.Queue<Context<Update>>;
   isWebhookMode: boolean;
 }
 
-const handleTelegramError = (error: unknown, errors: any): never => {
+const handleTelegramError = (error: unknown, errors: Record<string, Function>): never => {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
 
@@ -65,111 +64,6 @@ const handleTelegramError = (error: unknown, errors: any): never => {
   });
 };
 
-// Extract message from any update type
-function getMessageFromUpdate(update: Update) {
-  return ('message' in update && update.message) ||
-    ('edited_message' in update && update.edited_message) ||
-    ('channel_post' in update && update.channel_post) ||
-    ('edited_channel_post' in update && update.edited_channel_post) ||
-    null;
-}
-
-// Simple filtering helper functions for raw Telegram updates
-function updateMatchesChat(update: Update, chatId: string): boolean {
-  const message = getMessageFromUpdate(update);
-  return message ? message.chat.id.toString() === chatId : false;
-}
-
-function updateHasText(update: Update): boolean {
-  const message = getMessageFromUpdate(update);
-  return message ? (('text' in message && !!message.text) || ('caption' in message && !!message.caption)) : false;
-}
-
-function updateIsCommand(update: Update): boolean {
-  const message = getMessageFromUpdate(update);
-  return message && 'text' in message && message.text ? message.text.startsWith('/') : false;
-}
-
-function isMessageUpdate(update: Update): boolean {
-  return !!getMessageFromUpdate(update);
-}
-
-function detectMediaType(message: any): 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' {
-  if (message.photo) return 'image';
-  if (message.video || message.video_note) return 'video';
-  if (message.audio || message.voice) return 'audio';
-  if (message.sticker) return 'sticker';
-  if (message.document) return 'file';
-  return 'text';
-}
-
-function hasMediaContent(message: any): boolean {
-  return !!(message.photo || message.video || message.video_note ||
-    message.audio || message.voice || message.sticker ||
-    message.document);
-}
-
-function generateTelegramUrl(message: any): string | undefined {
-  if (message.chat.type === 'private') return undefined;
-
-  if ('username' in message.chat && message.chat.username) {
-    return `https://t.me/${message.chat.username}/${message.message_id}`;
-  }
-
-  return `https://t.me/c/${Math.abs(message.chat.id)}/${message.message_id}`;
-}
-
-function convertUpdateToTelegramItem(update: Update): TelegramItem | null {
-  const message = getMessageFromUpdate(update);
-  if (!message) return null;
-
-  // Extract content
-  let content = '';
-  let contentType: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' = 'text';
-
-  if ('text' in message && message.text) {
-    content = message.text;
-    contentType = 'text';
-  } else if ('caption' in message && message.caption) {
-    content = message.caption;
-    contentType = detectMediaType(message);
-  } else if (hasMediaContent(message)) {
-    content = '[Media message]';
-    contentType = detectMediaType(message);
-  } else {
-    content = '[System message]';
-    contentType = 'text';
-  }
-
-  return {
-    // Clean fields
-    id: `${message.chat.id}-${message.message_id}`,
-    content,
-    contentType,
-    createdAt: new Date(message.date * 1000).toISOString(),
-    url: generateTelegramUrl(message),
-
-    // Author
-    author: message.from ? {
-      id: message.from.id.toString(),
-      username: message.from.username,
-      displayName: `${message.from.first_name}${message.from.last_name ? ` ${message.from.last_name}` : ''}`,
-    } : undefined,
-
-    // Telegram conveniences
-    chatId: message.chat.id.toString(),
-    messageId: message.message_id,
-    isCommand: content.startsWith('/'),
-    isReply: !!(message as any).reply_to_message,
-    hasMedia: hasMediaContent(message),
-    chatType: message.chat.type,
-
-    // Full access
-    raw: update,
-    message,
-  };
-}
-
 export default createPlugin({
   id: "@curatedotfun/telegram-source",
   type: "source",
@@ -184,156 +78,247 @@ export default createPlugin({
   }),
   contract: telegramContract,
 
-  initialize: async (config): Promise<TelegramContext> => {
-    const { variables, secrets } = config;
-    // Determine mode based on domain presence
-    const isWebhookMode = !!variables.domain;
-    const updateQueue: Update[] = [];
+  initialize: (config) =>
+    Effect.gen(function* () {
+      const { variables, secrets } = config;
+      const isWebhookMode = !!variables.domain;
 
-    const bot = new Telegraf(secrets.botToken);
+      // Create shared queue as a scoped resource
+      const queue = yield* Effect.acquireRelease(
+        Queue.bounded<Context<Update>>(MAX_QUEUE_SIZE),
+        (q) => Queue.shutdown(q)
+      );
 
-    // Validate bot token
-    try {
-      await bot.telegram.getMe();
-    } catch (error) {
-      const originalMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`Bot token validation failed: ${originalMessage}`);
-    }
+      const bot = new Telegraf(secrets.botToken);
 
-    // Set up middleware to capture all updates
-    bot.use(async (ctx, next) => {
-      if (updateQueue.length >= MAX_QUEUE_SIZE) {
-        updateQueue.shift();
-      }
-      updateQueue.push(ctx.update);
-      await next();
-    });
+      // Validate bot token using Effect
+      yield* Effect.tryPromise({
+        try: () => bot.telegram.getMe(),
+        catch: (error) => new Error(`Bot token validation failed: ${error instanceof Error ? error.message : String(error)}`)
+      });
 
-    if (isWebhookMode) {
-      // Webhook mode setup
-      const webhookUrl = `${variables.domain}/telegram/webhook`;
-      try {
-        await bot.telegram.setWebhook(webhookUrl, {
-          secret_token: config.secrets?.webhookToken,
+      if (isWebhookMode) {
+        // Webhook mode: No middleware needed, updates come via webhook handler
+        const webhookUrl = `${variables.domain}/telegram/webhook`;
+        yield* Effect.tryPromise({
+          try: () => bot.telegram.setWebhook(webhookUrl, {
+            secret_token: secrets.webhookToken,
+          }),
+          catch: (error) => new Error(`Webhook registration failed: ${error instanceof Error ? error.message : String(error)}`)
         });
-        console.log(`[Telegram] Webhook registered: ${webhookUrl}`);
-      } catch (error) {
-        const originalMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Webhook registration failed: ${originalMessage}`);
-      }
-    } else {
-      // Polling mode setup
-      try {
-        bot.launch({
-          dropPendingUpdates: false,
-          allowedUpdates: ["message", "edited_message", "channel_post", "edited_channel_post"]
-        }).catch((launchError) => {
-          console.error("[Telegram] Polling launch error:", launchError);
-        });
-        console.log("[Telegram] Polling started");
-      } catch (error) {
-        const originalMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Bot launch failed: ${originalMessage}`);
-      }
-    }
-
-    return {
-      bot,
-      updateQueue,
-      isWebhookMode
-    };
-  },
-
-  createRouter: (context: TelegramContext) => {
-    const os = implement(telegramContract);
-
-    const webhook = os.webhook.handler(async ({ input }) => {
-      // Add the update directly to queue
-      if (context.updateQueue.length >= MAX_QUEUE_SIZE) {
-        context.updateQueue.shift();
-      }
-      context.updateQueue.push(input as Update);
-
-      return { processed: true };
-    });
-
-    const listen = os.listen.handler(async function* ({ input, errors }) {
-      try {
-        const availableUpdates = context.updateQueue.splice(0, input.maxResults || 100);
-
-        const filteredUpdates: Update[] = [];
-
-        for (const update of availableUpdates) {
-          // Skip non-message updates
-          if (!isMessageUpdate(update)) {
-            continue;
-          }
-
-          // Filter by chat ID
-          if (input.chatId && !updateMatchesChat(update, input.chatId)) {
-            continue;
-          }
-
-          // Filter text-only messages
-          if (input.textOnly && !updateHasText(update)) {
-            continue;
-          }
-
-          // Filter commands
-          if (!input.includeCommands && updateIsCommand(update)) {
-            continue;
-          }
-
-          filteredUpdates.push(update);
-        }
-
-        // Convert filtered updates to TelegramItems and yield as stream events
-        let itemIndex = 0;
-        for (const update of filteredUpdates) {
-          const item = convertUpdateToTelegramItem(update);
-          if (item) {
-            const state: StreamState = {
-              totalProcessed: itemIndex + 1,
-              lastUpdateId: update.update_id,
-              chatId: input.chatId,
-            };
-
-            const event: TelegramStreamEvent = {
-              item,
-              state,
-              metadata: { itemIndex }
-            };
-
-            yield event;
-            itemIndex++;
-          }
-        }
-
-      } catch (error) {
-        handleTelegramError(error, errors);
-      }
-    });
-
-    const sendMessage = os.sendMessage.handler(async ({ input, errors }) => {
-      try {
-        const result = await context.bot.telegram.sendMessage(
-          input.chatId,
-          input.text,
-          {
-            reply_parameters: input.replyToMessageId ? { message_id: input.replyToMessageId } : undefined,
-            parse_mode: input.parseMode,
-          }
-        );
+        yield* Effect.sync(() => console.log(`[Telegram] Webhook registered: ${webhookUrl}`));
 
         return {
-          messageId: result.message_id,
-          success: true,
-          chatId: input.chatId,
+          bot,
+          queue,
+          isWebhookMode
         };
-      } catch (error) {
-        return handleTelegramError(error, errors);
+      } else {
+        // Polling mode: Clear any existing webhook first to ensure polling works
+        yield* Effect.tryPromise({
+          try: () => bot.telegram.deleteWebhook({ drop_pending_updates: false }),
+          catch: () => new Error("Failed to clear webhook (may not exist)")
+        }).pipe(
+          Effect.catchAll(() => Effect.void) // Ignore errors if no webhook exists
+        );
+        yield* Effect.sync(() => console.log("[Telegram] Webhook cleared for polling"));
+
+        // Set up middleware to capture all updates and enqueue them
+        bot.use((ctx, next) => {
+          const updateType = ctx.updateType;
+          const chatId = ctx.chat?.id;
+          const messageText = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
+          const fromUser = ctx.from?.username || ctx.from?.first_name || 'unknown';
+
+          console.log(`📥 [Telegram] Update ${ctx.update.update_id}: ${updateType} from ${fromUser} in chat ${chatId}${messageText ? ` - "${messageText}"` : ''}`);
+
+          // Enqueue context using Effect.runFork to avoid blocking Telegraf's event loop
+          Effect.runFork(
+            Queue.offer(queue, ctx).pipe(
+              Effect.tap(() => Queue.size(queue).pipe(
+                Effect.tap((size) => Effect.sync(() => console.log(`📋 [Queue] Added context to queue. Queue size: ${size}`)))
+              )),
+              Effect.catchAll(() => Effect.void) // ignore enqueue failures
+            )
+          );
+
+          return next();
+        });
+
+        // Add error handler for Telegraf
+        bot.catch((err) => {
+          console.error("[Telegram] Bot error:", err);
+        });
+
+        // Launch Telegraf polling in a scoped fiber so it's managed by the plugin scope
+        const pollingFiber = yield* Effect.forkScoped(
+          Effect.tryPromise({
+            try: () => bot.launch({
+              dropPendingUpdates: false,
+              allowedUpdates: ["message", "edited_message", "channel_post", "edited_channel_post"]
+            }),
+            catch: (error) => new Error(`Bot launch failed: ${error instanceof Error ? error.message : String(error)}`)
+          })
+        );
+        yield* Effect.sync(() => console.log("[Telegram] Polling started"));
+
+        return {
+          bot,
+          queue,
+          isWebhookMode,
+          pollingFiber
+        };
       }
+    }),
+
+  shutdown: (context) =>
+    Effect.gen(function* () {
+      if (!context.isWebhookMode) {
+        yield* Effect.try({
+          try: () => context.bot.stop(),
+          catch: (error) => new Error(`Failed to stop polling: ${error instanceof Error ? error.message : String(error)}`)
+        });
+        yield* Effect.sync(() => console.log("[Telegram] Polling stopped"));
+      } else {
+        // For webhook mode, remove the webhook
+        yield* Effect.tryPromise({
+          try: () => context.bot.telegram.deleteWebhook(),
+          catch: (error) => new Error(`Failed to remove webhook: ${error instanceof Error ? error.message : String(error)}`)
+        }).pipe(Effect.catchAll(() => Effect.void));
+        yield* Effect.sync(() => console.log("[Telegram] Webhook removed"));
+      }
+    }),
+
+  createRouter: (context) => {
+    const os = implement(telegramContract);
+
+    const webhook = os.webhook.handler(({ input }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          // In webhook mode, manually process the update and add to queue
+          yield* Effect.tryPromise({
+            try: async () => {
+              // Process the update through the bot to create a Context
+              await context.bot.handleUpdate(input);
+            },
+            catch: (error) => new Error(`Failed to process webhook update: ${error instanceof Error ? error.message : String(error)}`)
+          });
+          return { processed: true };
+        })
+      )
+    );
+
+    const listen = os.listen.handler(async function* ({ input, errors }) {
+      const { maxResults, chatId, messageTypes, chatTypes, commands } = input;
+
+      console.log(`🎧 [Listen] Starting listen maxResults: ${maxResults}`);
+      
+      // Create a blocking, infinite stream that only ends when the plugin scope closes
+      let stream = Stream.repeatEffect(Queue.take(context.queue));
+      
+      console.log(`📡 [Listen] Created stream from queue`);
+
+      // Apply chatId filter
+      if (chatId) {
+        stream = stream.pipe(
+          Stream.filter((ctx: Context<Update>) => {
+            const id = ctx.chat?.id;
+            return typeof id === "number" || typeof id === "bigint"
+              ? String(id) === chatId
+              : false;
+          })
+        );
+      }
+
+      // Apply chatTypes filter
+      if (chatTypes && chatTypes.length > 0) {
+        stream = stream.pipe(
+          Stream.filter((ctx: Context<Update>) =>
+            ctx.chat?.type ? chatTypes.includes(ctx.chat.type) : false
+          )
+        );
+      }
+
+      // Apply messageTypes filter
+      if (messageTypes && messageTypes.length > 0) {
+        stream = stream.pipe(
+          Stream.filter((ctx: Context<Update>) => {
+            return messageTypes.some(type => {
+              switch (type) {
+                case 'text': {
+                  const isTextMessage = ctx.message && 'text' in ctx.message;
+                  if (!isTextMessage) return false;
+
+                  const messageText = ctx.message.text || '';
+                  const isCommand = messageText.startsWith('/');
+
+                  return commands && commands.length > 0 ? true : !isCommand;
+                }
+                case 'photo': return ctx.message && 'photo' in ctx.message;
+                case 'document': return ctx.message && 'document' in ctx.message;
+                case 'video': return ctx.message && 'video' in ctx.message;
+                case 'voice': return ctx.message && 'voice' in ctx.message;
+                case 'audio': return ctx.message && 'audio' in ctx.message;
+                case 'sticker': return ctx.message && 'sticker' in ctx.message;
+                case 'location': return ctx.message && 'location' in ctx.message;
+                case 'contact': return ctx.message && 'contact' in ctx.message;
+                case 'animation': return ctx.message && 'animation' in ctx.message;
+                case 'video_note': return ctx.message && 'video_note' in ctx.message;
+                default: return false;
+              }
+            });
+          })
+        );
+      }
+
+      // Apply commands filter
+      if (commands && commands.length > 0) {
+        stream = stream.pipe(
+          Stream.filter((ctx: Context<Update>) => {
+            const messageText = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
+            return !!messageText && commands.some(cmd => messageText.startsWith(cmd));
+          })
+        );
+      }
+
+      // Apply limits (only when specified)
+      if (maxResults) {
+        stream = stream.pipe(Stream.take(maxResults));
+      }
+
+      // Final debugging before yielding
+      stream = stream.pipe(
+        Stream.tap((ctx: Context<Update>) => Effect.sync(() =>
+          console.log(`🔄 [Stream] Yielding context for chat ${ctx.chat?.id}, update ${ctx.update.update_id}`)
+        ))
+      );
+
+      yield* Stream.toAsyncIterable(stream);
     });
+
+    const sendMessage = os.sendMessage.handler(({ input, errors }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const result = yield* Effect.tryPromise({
+            try: () => context.bot.telegram.sendMessage(
+              input.chatId,
+              input.text,
+              {
+                reply_parameters: input.replyToMessageId ? { message_id: input.replyToMessageId } : undefined,
+                parse_mode: input.parseMode,
+              }
+            ),
+            catch: (error) => handleTelegramError(error, errors)
+          });
+
+          return {
+            messageId: result.message_id,
+            success: true,
+            chatId: input.chatId,
+          };
+        })
+      )
+    );
 
     return os.router({
       webhook,

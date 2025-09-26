@@ -108,7 +108,7 @@ describe("Telegram Webhook Integration Tests", () => {
       // Simulate webhook for the message
       const webhookUpdate = createWebhookUpdateFromSentMessage(sentMessage, testMessage);
       const webhookResult = yield* Effect.tryPromise(() =>
-        client.webhook({ input: webhookUpdate })
+        client.webhook(webhookUpdate)
       );
       
       expect(webhookResult.processed).toBe(true);
@@ -135,7 +135,7 @@ describe("Telegram Webhook Integration Tests", () => {
         
         // Add to webhook queue
         const filterWebhookUpdate = createWebhookUpdateFromSentMessage(result, message);
-        yield* Effect.tryPromise(() => client.webhook({ input: filterWebhookUpdate }));
+        yield* Effect.tryPromise(() => client.webhook(filterWebhookUpdate));
       }
 
       console.log(`✅ Test 2: Sent and processed ${filterMessages.length} messages via webhook`);
@@ -195,7 +195,9 @@ describe("Telegram Webhook Integration Tests", () => {
         client.listen({
           chatId: TEST_CHAT_ID,
           maxResults: 10,
-          includeCommands: true,
+          messageTypes: ['text'],
+          commands: ['/command_test'],
+          idleTimeout: 1000, // Complete after 1s of no new messages
         })
       );
 
@@ -209,17 +211,18 @@ describe("Telegram Webhook Integration Tests", () => {
       console.log(`✅ Test 5: Listen streamed ${events.length} events`);
 
       if (events.length > 0) {
-        // Verify event structure
-        const firstEvent = events[0];
-        expect(firstEvent).toHaveProperty('item');
-        expect(firstEvent).toHaveProperty('state');
-        expect(firstEvent).toHaveProperty('metadata');
+        // Verify Context structure - now we get Telegraf Context objects
+        const firstContext = events[0];
+        expect(firstContext).toHaveProperty('update');
+        expect(firstContext).toHaveProperty('telegram');
+        expect(firstContext).toHaveProperty('chat');
+        expect(firstContext).toHaveProperty('message');
         
-        expect(firstEvent.item.chatId).toBe(TEST_CHAT_ID);
-        expect(firstEvent.state.totalProcessed).toBeGreaterThan(0);
-        expect(firstEvent.metadata.itemIndex).toBe(0);
+        expect(firstContext.chat?.id.toString()).toBe(TEST_CHAT_ID);
+        expect(firstContext.message).toBeDefined();
+        expect(firstContext.update.update_id).toBeGreaterThan(0);
         
-        console.log(`✅ Test 5: Verified event structure and content`);
+        console.log(`✅ Test 5: Verified Context structure and content`);
       }
 
       // Test 6: Filtering functionality
@@ -228,8 +231,9 @@ describe("Telegram Webhook Integration Tests", () => {
       const filteredIterable = yield* Effect.tryPromise(() =>
         client.listen({
           chatId: TEST_CHAT_ID,
-          includeCommands: false,
+          messageTypes: ['text'], // Only text messages, no commands specified
           maxResults: 10,
+          idleTimeout: 1000, // Complete after 1s of no new messages
         })
       );
 
@@ -239,12 +243,16 @@ describe("Telegram Webhook Integration Tests", () => {
         Stream.runCollect
       );
 
-      const filteredEvents = Array.from(filteredCollected);
-      console.log(`✅ Test 6: Filtered stream returned ${filteredEvents.length} non-command events`);
+      const filteredContexts = Array.from(filteredCollected);
+      console.log(`✅ Test 6: Filtered stream returned ${filteredContexts.length} text message contexts`);
 
-      // Verify all events are non-commands
-      for (const event of filteredEvents) {
-        expect(event.item.isCommand).toBe(false);
+      // Verify all contexts are text messages (not commands)
+      for (const ctx of filteredContexts) {
+        expect(ctx.message).toBeDefined();
+        if (ctx.message && 'text' in ctx.message) {
+          // Text messages should not start with / (commands)
+          expect(ctx.message.text?.startsWith('/')).toBe(false);
+        }
       }
 
       // Final confirmation message

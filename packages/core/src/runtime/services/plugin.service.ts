@@ -1,4 +1,4 @@
-import { Cache, Context, Duration, Effect, Hash, Layer, Ref } from "effect";
+import { Cache, Context, Duration, Effect, Exit, Hash, Layer, Ref, Scope } from "effect";
 import type { z } from "zod";
 import type {
 	AnyPlugin,
@@ -164,11 +164,16 @@ export class PluginService extends Context.Tag("PluginService")<
 						}),
 					shutdownPlugin: (plugin: InitializedPlugin<AnyPlugin>) =>
 						Effect.gen(function* () {
+							// Shutdown the plugin first (graceful cleanup)
+							yield* plugin.plugin.shutdown().pipe(
+								Effect.catchAll(() => Effect.void)
+							);
+
+							// Close the plugin scope to interrupt fibers and release resources
+							yield* Scope.close(plugin.scope, Exit.succeed(undefined));
+
 							// Unregister from lifecycle tracking
 							yield* lifecycle.unregister(plugin);
-
-							// Shutdown the plugin
-							yield* lifecycle.shutdown(plugin);
 						}),
 					cleanup: lifecycle.cleanup,
 				};

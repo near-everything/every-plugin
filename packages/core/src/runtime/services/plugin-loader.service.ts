@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Scope } from "effect";
 import type { z } from "zod";
 import type {
 	AnyPlugin,
@@ -165,8 +165,12 @@ export class PluginLoaderService extends Context.Tag("PluginLoaderService")<
 								),
 							);
 
-							// Initialize plugin and capture the returned context
+							// Create a long-lived scope for this plugin instance
+							const scope = yield* Scope.make();
+
+							// Initialize plugin within the scope
 							const context = yield* plugin.initialize(finalConfig).pipe(
+								Effect.provideService(Scope.Scope, scope),
 								Effect.mapError((error) =>
 									toPluginRuntimeError(error, plugin.id, undefined, "initialize-plugin", false),
 								)
@@ -177,6 +181,7 @@ export class PluginLoaderService extends Context.Tag("PluginLoaderService")<
 								metadata: pluginInstance.metadata,
 								config: finalConfig as z.infer<T["configSchema"]>,
 								context,
+								scope,
 							} satisfies InitializedPlugin<T>;
 						}),
 				};
