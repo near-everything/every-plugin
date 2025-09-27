@@ -1,7 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
 import type { PluginBinding, PluginRegistry } from "every-plugin";
-import { createPluginClient } from "every-plugin/client";
 import { createTestPluginRuntime, type TestPluginMap } from "every-plugin/testing";
 import { beforeAll, describe } from "vitest";
 import TelegramSourcePlugin from "../../index";
@@ -82,9 +81,8 @@ describe("Telegram Webhook Integration Tests", () => {
 
   it.effect("should handle complete integration flow with all features", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* Effect.provide(PluginRuntime, runtime);
-      const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", INTEGRATION_CONFIG);
-      const client = createPluginClient(plugin);
+      const pluginRuntime = yield* PluginRuntime;
+      const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", INTEGRATION_CONFIG);
 
       console.log("🚀 Testing complete integration: API → webhook → listen → stream");
 

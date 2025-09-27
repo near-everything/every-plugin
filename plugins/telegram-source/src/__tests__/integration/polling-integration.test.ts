@@ -1,7 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Duration, Effect, Stream } from "effect";
 import type { PluginBinding, PluginRegistry } from "every-plugin";
-import { createPluginClient } from "every-plugin/client";
 import { createTestPluginRuntime, type TestPluginMap } from "every-plugin/testing";
 import { describe } from "vitest";
 import TelegramSourcePlugin from "../../index";
@@ -57,18 +56,17 @@ describe("Telegram Polling Integration Tests", () => {
       if (!TEST_BOT_TOKEN) {
         throw new Error("TELEGRAM_BOT_TOKEN is required in .env.test file");
       }
-      
+
       console.log(`🔗 Setting up polling integration test using chat ID: ${TEST_CHAT_ID}`);
 
       // Initialize plugin and create properly typed client within the test
       console.log("🔧 Creating plugin client...");
       const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", POLLING_CONFIG);
-      const client = createPluginClient(plugin);
-      
+      const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", POLLING_CONFIG);
+
       console.log("✅ Plugin client created successfully");
       console.log("🚀 Starting self-guided polling integration test");
-      
+
       // Step 1: Send initial prompt message to guide the user
       const timestamp = Date.now();
       const promptMessage = `🤖 Integration Test Started! 
@@ -87,7 +85,7 @@ Test ID: ${timestamp}`;
       expect(promptResult.success).toBe(true);
       console.log(`✅ Test prompt sent: Message ID ${promptResult.messageId}`);
       console.log("⏳ Waiting for your reply to the bot's message...");
-      
+
       // Step 2: Listen for replies to our prompt message with timeout
       const streamResult = yield* Effect.tryPromise(() =>
         client.listen({
@@ -97,15 +95,15 @@ Test ID: ${timestamp}`;
       );
 
       console.log("🔄 Got stream result, creating Effect stream...");
-      
+
       // Convert to Effect stream following reference pattern
       const stream = Stream.fromAsyncIterable(streamResult, (error) => {
         console.error("❌ Stream error:", error);
         return error;
       });
-      
+
       console.log("🔄 Processing stream for incoming messages...");
-      
+
       // Step 3: Process the stream and collect the reply with timeout
       const messages = yield* Effect.race(
         stream.pipe(
@@ -125,12 +123,12 @@ Test ID: ${timestamp}`;
           Effect.as([])
         )
       );
-      
+
       const messageArray = Array.from(messages);
-      
+
       if (messageArray.length === 0) {
         console.log("⏰ No user response received within timeout - this is expected for automated tests");
-        
+
         // Send a completion message anyway
         const timeoutResult = yield* Effect.tryPromise(() =>
           client.sendMessage({
@@ -148,28 +146,28 @@ This is expected behavior for automated tests.
 Test ID: ${timestamp}`,
           })
         );
-        
+
         expect(timeoutResult.success).toBe(true);
         console.log(`✅ Timeout completion message sent: ${timeoutResult.messageId}`);
         return; // Exit early for timeout case
       }
-      
+
       expect(messageArray.length).toBe(1);
-      
+
       const ctx = messageArray[0];
       expect(ctx).toBeDefined();
       expect(ctx.update).toBeDefined();
-      
+
       // Step 4: Verify it's a reply and send success confirmation
       if (ctx.message && 'text' in ctx.message && ctx.message.text) {
         const userReply = ctx.message.text;
-        
+
         // Check if it's a reply to our prompt (optional - any message works)
         const isReply = ctx.message.reply_to_message?.message_id === promptResult.messageId;
         const replyStatus = isReply ? "✅ (Reply detected)" : "ℹ️ (General message)";
-        
+
         console.log(`📨 User response: "${userReply}" ${replyStatus}`);
-        
+
         // Send success confirmation
         const successMessage = `✅ Integration Test Completed Successfully!
 
@@ -188,21 +186,21 @@ Stream processing: ✅ Working
             replyToMessageId: ctx.message?.message_id,
           })
         );
-        
+
         console.log(`✅ Success confirmation sent: ${confirmationResult.messageId}`);
         expect(confirmationResult.success).toBe(true);
         expect(confirmationResult.messageId).toBeDefined();
-        
+
         console.log(`🎉 Integration test completed successfully!`);
         console.log(`📊 Test Results:`);
         console.log(`   - Polling: ✅ Received user message`);
         console.log(`   - Stream processing: ✅ Processed via Effect streams`);
         console.log(`   - Auto-reply: ✅ Sent confirmation message`);
         console.log(`   - User message: "${userReply}"`);
-        
+
       } else {
         console.log(`ℹ️ Received non-text message, but test still successful`);
-        
+
         // Send acknowledgment for non-text messages
         const ackResult = yield* Effect.tryPromise(() =>
           client.sendMessage({
@@ -214,7 +212,7 @@ Test ID: ${timestamp}
 🎉 Polling integration working!`,
           })
         );
-        
+
         expect(ackResult.success).toBe(true);
         console.log(`✅ Non-text message acknowledgment sent`);
       }
