@@ -1,5 +1,6 @@
 import { type ContractRouterClient, oc } from "@orpc/contract";
 import { eventIterator, implement } from "@orpc/server";
+import { Effect } from "effect";
 import { z } from "zod";
 import {
 	CommonPluginErrors,
@@ -101,33 +102,37 @@ export default createPlugin({
 		apiKey: z.string(),
 	}),
 	contract: testContract,
-	initialize: async (config) => {
-		// Business logic validation - config structure is guaranteed by schema
-		if (config.secrets.apiKey === "invalid-key") {
-			throw new PluginConfigurationError({
-				message: "Invalid API key format",
-				retryable: false
+	initialize: (config) =>
+		Effect.gen(function* () {
+			// Business logic validation - config structure is guaranteed by schema
+			if (config.secrets.apiKey === "invalid-key") {
+				yield* Effect.fail(new PluginConfigurationError({
+					message: "Invalid API key format",
+					retryable: false
+				}));
+			}
+
+			// Initialize client
+			const client = new TestClient(
+				config.variables.baseUrl,
+				config.secrets.apiKey,
+			);
+
+			// Test connection (can throw for testing)
+			if (config.secrets.apiKey === "connection-fail") {
+				yield* Effect.fail(new Error("Failed to connect to service"));
+			}
+
+			yield* Effect.tryPromise({
+				try: () => client.healthCheck(),
+				catch: (error) => new Error(`Health check failed: ${error instanceof Error ? error.message : String(error)}`)
 			});
-		}
 
-		// Initialize client
-		const client = new TestClient(
-			config.variables.baseUrl,
-			config.secrets.apiKey,
-		);
-
-		// Test connection (can throw for testing)
-		if (config.secrets.apiKey === "connection-fail") {
-			throw new Error("Failed to connect to service");
-		}
-
-		await client.healthCheck();
-
-		// Return context object - this gets passed to createRouter
-		return {
-			client
-		};
-	},
+			// Return context object - this gets passed to createRouter
+			return {
+				client
+			};
+		}),
 	createRouter: (context: { client: TestClient }) => {
 		const os = implement(testContract).$context<{ client: TestClient }>();
 

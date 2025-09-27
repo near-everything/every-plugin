@@ -72,9 +72,8 @@ describe("Plugin Lifecycle Integration Tests", () => {
   it.effect("should execute getById with real plugin", () =>
     Effect.gen(function* () {
       const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+      const { client } = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
-      const client = createPluginClient(plugin);
       const result = yield* Effect.tryPromise(() =>
         client.getById({ id: "integration-test-id" })
       );
@@ -89,9 +88,8 @@ describe("Plugin Lifecycle Integration Tests", () => {
   it.effect("should execute getBulk with real plugin", () =>
     Effect.gen(function* () {
       const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+      const { client } = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
-      const client = createPluginClient(plugin);
       const result = yield* Effect.tryPromise(() =>
         client.getBulk({ ids: ["bulk1", "bulk2", "bulk3"] })
       );
@@ -109,9 +107,8 @@ describe("Plugin Lifecycle Integration Tests", () => {
   it.effect("should handle streaming with real plugin", () =>
     Effect.gen(function* () {
       const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+      const { client } = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
-      const client = createPluginClient(plugin);
       const result = yield* Effect.tryPromise(() =>
         client.simpleStream({ count: 3, prefix: "integration" })
       );

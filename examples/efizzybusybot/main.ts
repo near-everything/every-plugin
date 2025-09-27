@@ -31,7 +31,7 @@ const useWebhooks = !!WEBHOOK_DOMAIN;
 const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
   registry: {
     "@curatedotfun/telegram-source": {
-      remoteUrl: "https://elliot-braem-36--curatedotfun-telegram-source-eve-8b7d40659-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-37--curatedotfun-telegram-source-eve-43d4b5b4e-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },
@@ -42,22 +42,8 @@ const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
 });
 
 // Create HTTP server with plugin router integration
-const createHttpServer = Effect.gen(function* () {
-  const pluginRuntime = yield* PluginRuntime;
+const createHttpServer = (telegramPlugin) => Effect.gen(function* () {
   const db = yield* DatabaseService;
-
-  // Initialize the telegram plugin
-  const telegramPlugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", {
-    variables: {
-      timeout: 30000,
-      defaultMaxResults: 100,
-      ...(useWebhooks && WEBHOOK_DOMAIN && { domain: WEBHOOK_DOMAIN })
-    },
-    secrets: {
-      botToken: "{{TELEGRAM_BOT_TOKEN}}",
-      ...(useWebhooks && WEBHOOK_TOKEN && { webhookToken: "{{TELEGRAM_WEBHOOK_TOKEN}}" })
-    }
-  });
 
   const app = new Hono();
 
@@ -148,7 +134,7 @@ const createHttpServer = Effect.gen(function* () {
     console.log(`🪝 Webhook endpoint: http://localhost:${HTTP_PORT}/telegram/webhook`);
   }
 
-  return { server, telegramPlugin };
+  return { server };
 });
 
 // Save stream state
@@ -192,6 +178,20 @@ const program = Effect.gen(function* () {
 
   console.log('🤖 Starting efizzybusybot with new telegram plugin...\n');
 
+  // Initialize plugin at program root level
+  const pluginRuntime = yield* PluginRuntime;
+  const telegramPlugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", {
+    variables: {
+      timeout: 30000,
+      defaultMaxResults: 100,
+      ...(useWebhooks && WEBHOOK_DOMAIN && { domain: WEBHOOK_DOMAIN })
+    },
+    secrets: {
+      botToken: "{{TELEGRAM_BOT_TOKEN}}",
+      ...(useWebhooks && WEBHOOK_TOKEN && { webhookToken: "{{TELEGRAM_WEBHOOK_TOKEN}}" })
+    }
+  });
+
   // Load initial state
   const initialState = yield* loadState();
 
@@ -201,8 +201,8 @@ const program = Effect.gen(function* () {
     console.log('📂 Starting fresh message collection');
   }
 
-  // Start HTTP server and get plugin instance
-  const { telegramPlugin } = yield* createHttpServer;
+  // Start HTTP server with plugin as dependency
+  const { server } = yield* createHttpServer(telegramPlugin);
   const pluginClient = createPluginClient(telegramPlugin);
 
   // Create reply function for worker
@@ -226,7 +226,7 @@ const program = Effect.gen(function* () {
     pluginClient.listen({
       // chatId: TARGET_CHAT_ID,
       // maxResults: 100,
-      // messageTypes: ['text', 'photo', 'document', 'video', 'voice', 'audio', 'sticker', 'location', 'contact', 'animation', 'video_note'],
+      messageTypes: ['text', 'photo', 'document', 'video', 'voice', 'audio', 'sticker', 'location', 'contact', 'animation', 'video_note'],
       // commands: ['/start', '/help'], // Include common commands
     })
   );
@@ -239,10 +239,17 @@ const program = Effect.gen(function* () {
       Effect.gen(function* () {
         messageCount++;
 
+        // Diagnostic logging matching test patterns
+        console.log(`🔍 Received message via stream: Update ${ctx.update?.update_id}`);
+        
+        if (ctx.message && 'text' in ctx.message && ctx.message.text) {
+          console.log(`📝 Message text: "${ctx.message.text}"`);
+        }
+
         const username = ctx.from?.username || ctx.from?.first_name || 'unknown';
         const chatType = ctx.chat?.type || 'unknown';
 
-        console.log(`\n📨 Message ${messageCount}: ${username} in ${chatType}`);
+        console.log(`📨 Message ${messageCount}: ${username} in ${chatType}`);
 
         // Process message with worker
         yield* processMessage(ctx, sendReply);

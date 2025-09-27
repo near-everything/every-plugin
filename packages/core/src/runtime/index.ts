@@ -1,5 +1,6 @@
-import { Context, Effect, Layer, ManagedRuntime } from "effect";
+import { Context, Effect, Hash, Layer, ManagedRuntime } from "effect";
 import type { z } from "zod";
+import { createPluginClient, getPluginRouter } from "../client/index";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
@@ -7,16 +8,17 @@ import type {
 	PluginInstance,
 	PluginOf,
 	PluginRegistry,
+	PluginResult,
 	PluginRuntimeConfig,
 	RegistryBindings,
+	RuntimeOptions,
 	SecretsConfig
 } from "../types";
 import { PluginRuntimeError } from "./errors";
-import { ModuleFederationService } from "./services/module-federation.service";
 import { type IPluginService, PluginService } from "./services/plugin.service";
-import { SecretsService } from "./services/secrets.service";
+import { ModuleFederationService } from "./services/module-federation.service";
+import { SecretsService } from "./services";
 
-// Unified runtime interface that works with or without bindings
 export interface IPluginRuntime<R extends RegistryBindings = RegistryBindings> {
 	readonly loadPlugin: <K extends keyof R>(
 		pluginId: K,
@@ -34,15 +36,22 @@ export interface IPluginRuntime<R extends RegistryBindings = RegistryBindings> {
 	readonly usePlugin: <K extends keyof R>(
 		pluginId: K,
 		config: z.infer<PluginOf<R[K]>["configSchema"]>,
-	) => Effect.Effect<InitializedPlugin<PluginOf<R[K]>>, PluginRuntimeError>;
+	) => Effect.Effect<PluginResult<PluginOf<R[K]>>, PluginRuntimeError>;
 
 	readonly shutdown: () => Effect.Effect<void, never, never>;
 }
 export class PluginRuntime<R extends RegistryBindings = RegistryBindings> implements IPluginRuntime<R> {
+	private pluginCache = new Map<string, Effect.Effect<PluginResult<AnyPlugin>, PluginRuntimeError>>();
+
 	constructor(
 		private pluginService: IPluginService,
 		private registry: PluginRegistry
 	) { }
+
+	private generateCacheKey(pluginId: string, config: unknown): string {
+		const configHash = Hash.structure(config as object).toString();
+		return `${pluginId}:${configHash}`;
+	}
 
 	private validatePluginId<K extends keyof R>(pluginId: K): Effect.Effect<string, PluginRuntimeError> {
 		const pluginIdStr = pluginId as string;
@@ -94,13 +103,36 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> implem
 	usePlugin<K extends keyof R>(
 		pluginId: K,
 		config: z.infer<PluginOf<R[K]>["configSchema"]>
-	): Effect.Effect<InitializedPlugin<PluginOf<R[K]>>, PluginRuntimeError> {
-		const self = this;
-		return Effect.gen(function* () {
-			const validatedId = yield* self.validatePluginId(pluginId);
-			const result = yield* self.pluginService.usePlugin(validatedId, config);
-			return result as InitializedPlugin<PluginOf<R[K]>>;
-		});
+	): Effect.Effect<PluginResult<PluginOf<R[K]>>, PluginRuntimeError> {
+		const cacheKey = this.generateCacheKey(String(pluginId), config);
+
+		let cachedPlugin = this.pluginCache.get(cacheKey);
+		if (!cachedPlugin) {
+			const self = this;
+			const operation = Effect.gen(function* () {
+				const validatedId = yield* self.validatePluginId(pluginId);
+
+				// Load → Instantiate → Initialize
+				const ctor = yield* self.pluginService.loadPlugin(validatedId);
+				const instance = yield* self.pluginService.instantiatePlugin(ctor);
+				const initialized = yield* self.pluginService.initializePlugin(instance, config);
+
+				const client = createPluginClient(initialized);
+				const router = getPluginRouter(initialized);
+
+				return {
+					client,
+					router,
+					metadata: initialized.metadata,
+					initialized
+				};
+			});
+
+			cachedPlugin = Effect.cached(operation).pipe(Effect.flatten);
+			this.pluginCache.set(cacheKey, cachedPlugin);
+		}
+
+		return cachedPlugin as Effect.Effect<PluginResult<PluginOf<R[K]>>, PluginRuntimeError>;
 	}
 
 	shutdown(): Effect.Effect<void, never, never> {
@@ -148,15 +180,15 @@ export class PluginRuntimeService extends Context.Tag("PluginRuntimeService")<
  * Creates a typed plugin runtime with compile-time registry key validation.
  */
 export function createPluginRuntime<R extends RegistryBindings = RegistryBindings>(
-	config: { registry: PluginRegistry; secrets?: SecretsConfig }
+	config: { registry: PluginRegistry; secrets?: SecretsConfig; options?: RuntimeOptions }
 ) {
 	const runtimeConfig: PluginRuntimeConfig<R> = {
 		registry: config.registry,
-		secrets: config.secrets
+		secrets: config.secrets,
+		options: config.options
 	};
 
-	const layer = PluginRuntimeService.Live(runtimeConfig);
-	const runtime = ManagedRuntime.make(layer);
+	const runtime = ManagedRuntime.make(PluginRuntimeService.Live(runtimeConfig));
 
 	const createTypedRuntime: Effect.Effect<PluginRuntime<R>, never, never> = Effect.gen(function* () {
 		const pluginService = yield* PluginRuntimeService;

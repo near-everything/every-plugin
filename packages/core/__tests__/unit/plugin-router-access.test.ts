@@ -1,15 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
-import type { AnyContractRouter } from "@orpc/contract";
 import { OpenAPIGenerator } from "@orpc/openapi";
 import { OpenAPIHandler } from "@orpc/openapi/node";
 import { RPCHandler } from "@orpc/server/node";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { Effect, Stream } from "effect";
 import { createServer } from "node:http";
-import { describe, beforeAll,afterAll } from "vitest";
-import { createPluginClient, getPluginRouter } from "../../src/client/index";
+import { afterAll, beforeAll, describe } from "vitest";
 import type { PluginBinding } from "../../src/plugin";
 import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
 import type { PluginRegistry } from "../../src/types";
@@ -61,19 +59,19 @@ describe("Plugin Router Access Methods", () => {
   let baseUrl: string = "";
 
   beforeAll(async () => {
-    const pluginRuntime = await Effect.runPromise(
+    const pluginResult = await Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* PluginRuntime;
         return yield* runtime.usePlugin("test-plugin", TEST_CONFIG);
       }).pipe(Effect.provide(runtime))
     );
-    
-    plugin = pluginRuntime;
-    const router = getPluginRouter(plugin);
+
+    plugin = pluginResult;
+    const router = pluginResult.router;
 
     // Create both handlers
     const rpcHandler = new RPCHandler(router);
-    const openApiHandler = new OpenAPIHandler(router); // type error doesn't matter
+    const openApiHandler = new OpenAPIHandler(router);
 
     const port = PORT_POOL.RPC_TEST; // Use one port for unified server
     baseUrl = `http://localhost:${port}`;
@@ -81,25 +79,25 @@ describe("Plugin Router Access Methods", () => {
     // Create unified server with both handlers
     server = createServer(async (req, res) => {
       const url = new URL(req.url!, baseUrl);
-      
+
       // Route to RPC handler
       if (url.pathname.startsWith('/rpc')) {
         const result = await rpcHandler.handle(req, res, {
           prefix: '/rpc',
-          context: plugin.context
+          context: plugin.initialized.context
         });
         if (result.matched) return;
       }
-      
+
       // Route to OpenAPI handler  
       if (url.pathname.startsWith('/api')) {
         const result = await openApiHandler.handle(req, res, {
           prefix: '/api',
-          context: plugin.context
+          context: plugin.initialized.context
         });
         if (result.matched) return;
       }
-      
+
       // 404 for unmatched routes
       res.statusCode = 404;
       res.end('Route not found');
@@ -123,10 +121,10 @@ describe("Plugin Router Access Methods", () => {
   it.effect("should work via direct client calls", () =>
     Effect.gen(function* () {
       const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
-      // Test direct client access (existing pattern)
-      const client = createPluginClient(plugin);
+      // Use client directly from result
+      const { client } = result;
 
       // Test basic procedure
       const getByIdResult = yield* Effect.tryPromise(() =>
@@ -265,9 +263,10 @@ describe("Plugin Router Access Methods", () => {
   it.effect("should generate OpenAPI specification from plugin router", () =>
     Effect.gen(function* () {
       const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
-      const router = getPluginRouter(plugin);
+      // Use router directly from result
+      const { router } = result;
 
       // Create OpenAPI generator
       const generator = new OpenAPIGenerator({

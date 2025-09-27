@@ -160,10 +160,44 @@ export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
 }
 
 /**
+ * Runtime options for plugin execution and resource management.
+ */
+export interface RuntimeOptions {
+  /** Resource isolation level for plugins */
+  isolation?: "strict" | "shared" | "none";
+  /** Memory limit per plugin instance */
+  memoryLimit?: string;
+  /** Maximum concurrent plugin operations */
+  concurrency?: number;
+  /** Resource timeout for plugin operations */
+  resourceTimeout?: string;
+  /** Enable debug logging */
+  debug?: boolean;
+  /** Enable metrics collection */
+  metrics?: boolean;
+}
+
+/**
+ * Enhanced plugin result containing client, router, and metadata.
+ */
+export interface PluginResult<T extends AnyPlugin = AnyPlugin> {
+  readonly client: import("@orpc/server").RouterClient<RouterOf<T>, Record<never, never>>;
+  readonly router: RouterOf<T>;
+  readonly metadata: {
+    readonly pluginId: string;
+    readonly version?: string;
+    readonly description?: string;
+    readonly type?: string;
+  };
+  readonly initialized: InitializedPlugin<T>;
+}
+
+/**
  * Runtime configuration for the plugin system.
  * The generic R parameter enables compile-time type safety when provided.
  */
 export interface PluginRuntimeConfig<R extends RegistryBindings = RegistryBindings> {
   registry: PluginRegistry;
   secrets?: SecretsConfig;
+  options?: RuntimeOptions;
 }

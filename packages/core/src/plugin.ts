@@ -145,12 +145,11 @@ export function createPlugin<
 		private _context: TContext | null = null;
 
 		initialize(pluginConfig: { variables: z.infer<V>; secrets: z.infer<S> }): Effect.Effect<TContext, unknown, Scope.Scope> {
-			const self = this;
 			const init = config.initialize ?? (() => Effect.succeed({} as TContext));
 
 			return init(pluginConfig).pipe(
-				Effect.tap((ctx) => Effect.sync(() => { self._context = ctx; })),
-				Effect.map(() => self._context as TContext),
+				Effect.tap((ctx) => Effect.sync(() => { this._context = ctx; })),
+				Effect.map(() => this._context as TContext),
 				Effect.mapError((error) => error as unknown)
 			);
 		}

@@ -73,19 +73,21 @@ describe("Plugin Lifecycle Unit Tests", () => {
     Effect.gen(function* () {
       const pluginRuntime = yield* PluginRuntime;
 
-      // Test usePlugin which combines load + instantiate + initialize
-      const plugin = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+      // Test usePlugin which returns { client, router, metadata, initialized }
+      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
-      expect(plugin).toBeDefined();
-      expect(plugin.plugin).toBeDefined();
-      expect(plugin.plugin.id).toBe("test-plugin");
-      expect(plugin.config).toBeDefined();
-      expect(plugin.config.secrets.apiKey).toBe("test-api-key-value");
+      expect(result).toBeDefined();
+      expect(result.client).toBeDefined();
+      expect(result.router).toBeDefined();
+      expect(result.metadata).toBeDefined();
+      expect(result.initialized).toBeDefined();
+      expect(result.initialized.plugin).toBeDefined();
+      expect(result.initialized.plugin.id).toBe("test-plugin");
+      expect(result.initialized.config).toBeDefined();
+      expect(result.initialized.config.secrets.apiKey).toBe("test-api-key-value");
 
-      // Verify plugin can create router
-      const router = plugin.plugin.createRouter();
-      expect(router).toBeDefined();
-      expect(typeof router).toBe("object");
+      // Verify router is ready to use
+      expect(typeof result.router).toBe("object");
     }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))
   );
 
@@ -188,13 +190,20 @@ describe("Plugin Lifecycle Unit Tests", () => {
     Effect.gen(function* () {
       const pluginRuntime = yield* PluginRuntime;
 
-      // Use same plugin with same config twice
-      const plugin1 = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
-      const plugin2 = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+      // Get the Effect instances (not the results)
+      const effect1 = pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+      const effect2 = pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
-      // Should be the same instance (cached)
-      expect(plugin1).toBe(plugin2);
-      expect(plugin1.plugin).toBe(plugin2.plugin);
+      // The Effect instances should be the same (cached)
+      expect(effect1).toBe(effect2);
+
+      // Execute both to verify they work
+      const result1 = yield* effect1;
+      const result2 = yield* effect2;
+
+      // Results should have same functional properties
+      expect(result1.metadata.pluginId).toBe(result2.metadata.pluginId);
+      expect(result1.initialized.plugin.id).toBe(result2.initialized.plugin.id);
     }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))
   );
 
@@ -213,13 +222,13 @@ describe("Plugin Lifecycle Unit Tests", () => {
       };
 
       // Use same plugin with different configs
-      const plugin1 = yield* pluginRuntime.usePlugin("test-plugin", config1);
-      const plugin2 = yield* pluginRuntime.usePlugin("test-plugin", config2);
+      const result1 = yield* pluginRuntime.usePlugin("test-plugin", config1);
+      const result2 = yield* pluginRuntime.usePlugin("test-plugin", config2);
 
       // Should be different instances
-      expect(plugin1).not.toBe(plugin2);
-      expect(plugin1.config.secrets.apiKey).toBe("key1");
-      expect(plugin2.config.secrets.apiKey).toBe("key2");
+      expect(result1).not.toBe(result2);
+      expect(result1.initialized.config.secrets.apiKey).toBe("key1");
+      expect(result2.initialized.config.secrets.apiKey).toBe("key2");
     }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))
   );
 });

@@ -22,7 +22,7 @@ export interface IPluginLoaderService {
 	) => Effect.Effect<PluginInstance<T>, PluginRuntimeError>;
 	readonly initializePlugin: <T extends AnyPlugin>(
 		pluginInstance: PluginInstance<T>,
-		config: z.infer<T["configSchema"]>,
+		config: { variables: unknown; secrets: unknown },
 	) => Effect.Effect<InitializedPlugin<T>, PluginRuntimeError>;
 }
 
@@ -122,7 +122,7 @@ export class PluginLoaderService extends Context.Tag("PluginLoaderService")<
 
 					initializePlugin: <T extends AnyPlugin>(
 						pluginInstance: PluginInstance<T>,
-						config: z.infer<T["configSchema"]>,
+						config: { variables: unknown; secrets: unknown },
 					) =>
 						Effect.gen(function* () {
 							const { plugin } = pluginInstance;
