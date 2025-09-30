@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "every-plugin/zod";
 
 export const testItemSchema = z.object({
 	externalId: z.string(),

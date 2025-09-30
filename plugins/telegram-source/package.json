@@ -10,22 +10,16 @@
     "typescript": "^5.0.0"
   },
   "devDependencies": {
-    "@curatedotfun/utils": "^0.0.2",
-    "@effect/vitest": "^0.25.1",
-    "@module-federation/node": "^2.7.15",
-    "@module-federation/runtime-core": "^0.18.3",
-    "@orpc/server": "^1.8.6",
+    "@effect/language-service": "^0.41.1",
+    "@effect/vitest": "^0.26.0",
     "@rspack/cli": "^1.5.2",
     "@rspack/core": "^1.5.2",
-    "@types/node": "^20.0.0",
-    "@vitest/coverage-v8": "^1.6.0",
+    "@types/node": "^24.6.0",
     "dotenv": "^17.2.2",
-    "effect": "^3.17.13",
     "every-plugin": "link:every-plugin",
     "msw": "^2.3.0",
     "vitest": "^3.2.4",
-    "zephyr-rspack-plugin": "^0.0.59",
-    "zod": "^4.1.5"
+    "zephyr-rspack-plugin": "^0.0.59"
   },
   "scripts": {
     "build": "rspack build && tsc -p tsconfig.build.json",
@@ -35,9 +29,6 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@better-fetch/fetch": "^1.1.18",
-    "@better-fetch/logger": "^1.1.18",
-    "@orpc/contract": "^1.8.6",
     "telegraf": "^4.16.3"
   }
 }

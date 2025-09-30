@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { RPCHandler } from "@orpc/server/fetch";
-import { Effect, Logger, LogLevel, Stream } from "effect";
+import { Effect, Logger, LogLevel, Stream } from "every-plugin/effect";
 import type { PluginBinding } from "every-plugin";
 import { createPluginRuntime } from "every-plugin/runtime";
 import { Hono } from "hono";
@@ -30,7 +30,7 @@ const useWebhooks = !!WEBHOOK_DOMAIN;
 const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
   registry: {
     "@curatedotfun/telegram-source": {
-      remoteUrl: "https://elliot-braem-38--curatedotfun-telegram-source-eve-3e573bb33-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-51-curatedotfun-telegram-source-ever-43733991e-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },

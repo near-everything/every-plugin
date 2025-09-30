@@ -1,9 +1,8 @@
-import { oc } from "@orpc/contract";
-import { eventIterator } from "@orpc/server";
 import { CommonPluginErrors } from "every-plugin";
-import { z } from "zod";
-import type { Update } from "telegraf/types";
+import { eventIterator, oc } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
 import type { Context } from "telegraf";
+import type { Update } from "telegraf/types";
 
 export const TelegramContextSchema = z.custom<Context>((val): val is Context => {
   return typeof val === 'object' && val !== null && 'update' in val && 'telegram' in val;

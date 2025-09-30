@@ -1,10 +1,10 @@
-import { implement } from "@orpc/server";
-import { Effect, Queue, Stream } from "effect";
 import { createPlugin } from "every-plugin";
+import { Effect, Queue, Stream } from "every-plugin/effect";
+import { implement } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
 import type { Context } from "telegraf";
 import { Telegraf } from "telegraf";
 import type { Update } from "telegraf/types";
-import z from "zod";
 import {
   telegramContract,
 } from "./schemas";

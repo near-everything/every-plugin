@@ -70,9 +70,9 @@
   },
   "dependencies": {
     "@better-fetch/fetch": "^1.1.18",
-    "@module-federation/enhanced": "^0.18.3",
+    "@module-federation/enhanced": "^0.19.1",
     "@module-federation/node": "^2.7.15",
-    "@module-federation/runtime-core": "^0.18.3",
+    "@module-federation/runtime-core": "^0.19.1",
     "@orpc/contract": "1.8.6",
     "@orpc/server": "1.8.6",
     "effect": "3.17.13",

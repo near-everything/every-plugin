@@ -6,6 +6,8 @@ const pkg = require("./package.json");
 
 const { getNormalizedRemoteName } = require("every-plugin/normalize");
 
+const everyPluginPkg = require("every-plugin/package.json");
+
 function getPluginInfo() {
   return {
     name: pkg.name,
@@ -63,29 +65,39 @@ module.exports = withZephyr()({
       },
       shared: {
         "every-plugin": {
+          version: everyPluginPkg.version,
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.version,
           strictVersion: false,
+          eager: false,
         },
-        effect: {
+        "effect": {
+          version: everyPluginPkg.dependencies.effect,
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.dependencies.effect,
           strictVersion: false,
+          eager: false,
         },
-        zod: {
+        "zod": {
+          version: everyPluginPkg.dependencies.zod,
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.dependencies.zod,
           strictVersion: false,
+          eager: false,
         },
         "@orpc/contract": {
+          version: everyPluginPkg.dependencies["@orpc/contract"],
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.dependencies["@orpc/contract"],
           strictVersion: false,
+          eager: false,
         },
         "@orpc/server": {
+          version: everyPluginPkg.dependencies["@orpc/server"],
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.dependencies["@orpc/server"],
           strictVersion: false,
+          eager: false,
         },
       },
     }),

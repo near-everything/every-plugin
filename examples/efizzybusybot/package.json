@@ -12,6 +12,7 @@
 		"db:studio": "drizzle-kit studio"
 	},
 	"devDependencies": {
+		"@effect/language-service": "^0.41.1",
 		"@types/bun": "^1.2.21",
 		"better-sqlite3": "^12.2.0",
 		"drizzle-kit": "^0.31.4",
@@ -23,7 +24,6 @@
 	"dependencies": {
 		"@orpc/server": "^1.8.9",
 		"drizzle-orm": "^0.44.5",
-		"effect": "^3.17.14",
 		"every-plugin": "link:every-plugin",
 		"hono": "^4.9.8"
 	}

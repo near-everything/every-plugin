@@ -3,21 +3,11 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import type { PluginBinding } from "../../src/plugin";
 import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
-import type { PluginRegistry } from "../../src/types";
 import TestPlugin from "../test-plugin/src/index";
 
 // Define typed registry bindings for the test plugin
 type TestBindings = {
   "test-plugin": PluginBinding<typeof TestPlugin>;
-};
-
-// Test registry for lifecycle unit tests
-const TEST_REGISTRY: PluginRegistry = {
-  "test-plugin": {
-    remoteUrl: "http://localhost:3999/remoteEntry.js",
-    type: "source",
-    version: "0.0.1",
-  },
 };
 
 const TEST_CONFIG = {
@@ -37,7 +27,13 @@ const TEST_PLUGIN_MAP: TestPluginMap = {
 
 describe("Plugin Lifecycle Unit Tests", () => {
   const { runtime, PluginRuntime } = createTestPluginRuntime<TestBindings>({
-    registry: TEST_REGISTRY,
+    registry: {
+      "test-plugin": {
+        remoteUrl: "http://localhost:3999/remoteEntry.js",
+        type: "source",
+        version: "0.0.1",
+      },
+    },
     secrets: {
       API_KEY: "test-api-key-value",
     },

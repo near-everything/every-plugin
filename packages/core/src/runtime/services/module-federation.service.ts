@@ -9,6 +9,8 @@ import type { AnyPlugin } from "../../types";
 import { ModuleFederationError } from "../errors";
 import { getNormalizedRemoteName } from "./normalize";
 
+const pkg = require("../../../package.json");
+
 export interface IModuleFederationService {
 	readonly registerRemote: (
 		pluginId: string,
@@ -31,41 +33,46 @@ const createModuleFederationInstance = Effect.cached(
 					remotes: [],
 					shared: {
 						"every-plugin": {
+							version: pkg.version,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: false,
+								requiredVersion: `^${pkg.version}`,
 								eager: true,
 								strictVersion: false,
 							},
 						},
 						effect: {
+							version: pkg.dependencies.effect,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: false,
+								requiredVersion: pkg.dependencies.effect,
 								eager: true,
 								strictVersion: false,
 							},
 						},
 						zod: {
+							version: pkg.dependencies.zod,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: false,
+								requiredVersion: pkg.dependencies.zod,
 								eager: true,
 								strictVersion: false,
 							},
 						},
 						"@orpc/contract": {
+							version: pkg.dependencies["@orpc/contract"],
 							shareConfig: {
 								singleton: true,
-								requiredVersion: false,
+								requiredVersion: pkg.dependencies["@orpc/contract"],
 								eager: true,
 								strictVersion: false,
 							},
 						},
 						"@orpc/server": {
+							version: pkg.dependencies["@orpc/server"],
 							shareConfig: {
 								singleton: true,
-								requiredVersion: false,
+								requiredVersion: pkg.dependencies["@orpc/server"],
 								eager: true,
 								strictVersion: false,
 							},

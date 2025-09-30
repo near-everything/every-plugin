@@ -10,7 +10,7 @@ export default defineConfig({
       "src/__tests__/integration/**/*.test.ts"
     ],
     exclude: [
-      "node_modules", 
+      "node_modules",
       "dist",
     ],
     testTimeout: 30000,
@@ -20,6 +20,9 @@ export default defineConfig({
       threads: {
         singleThread: true
       }
+    },
+    typecheck: {
+      enabled: false
     }
   },
   resolve: {
