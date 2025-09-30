@@ -2,8 +2,8 @@
 
 import { RPCHandler } from "@orpc/server/fetch";
 import { Effect, Logger, LogLevel, Stream } from "every-plugin/effect";
-import type { PluginBinding } from "every-plugin";
-import { createPluginRuntime } from "every-plugin/runtime";
+import type { PluginBinding, PluginOf } from "every-plugin";
+import { createPluginRuntime, type PluginResult } from "every-plugin/runtime";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
@@ -30,7 +30,7 @@ const useWebhooks = !!WEBHOOK_DOMAIN;
 const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
   registry: {
     "@curatedotfun/telegram-source": {
-      remoteUrl: "https://elliot-braem-51-curatedotfun-telegram-source-ever-43733991e-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-60-curatedotfun-telegram-source-ever-2be544a48-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },
@@ -41,7 +41,7 @@ const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
 });
 
 // Create HTTP server with plugin router integration
-const createHttpServer = (plugin) => Effect.gen(function* () {
+const createHttpServer = (plugin: PluginResult<PluginOf<TelegramBindings["@curatedotfun/telegram-source"]>>) => Effect.gen(function* () {
   const db = yield* DatabaseService;
 
   const app = new Hono();
@@ -110,7 +110,7 @@ const createHttpServer = (plugin) => Effect.gen(function* () {
   app.use("/telegram/*", async (c, next) => {
     const { matched, response } = await handler.handle(c.req.raw, {
       prefix: "/telegram",
-      context: plugin.initialized.context,
+      context: initialized.context,
     });
 
     if (matched) {

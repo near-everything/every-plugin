@@ -9,6 +9,10 @@ import type { AnyPlugin } from "../../types";
 import { ModuleFederationError } from "../errors";
 import { getNormalizedRemoteName } from "./normalize";
 
+type RemoteModule = 
+  | (new () => AnyPlugin)
+  | { default: new () => AnyPlugin };
+
 const pkg = require("../../../package.json");
 
 export interface IModuleFederationService {
@@ -38,43 +42,43 @@ const createModuleFederationInstance = Effect.cached(
 								singleton: true,
 								requiredVersion: `^${pkg.version}`,
 								eager: true,
-								strictVersion: false,
+								strictVersion: true,
 							},
 						},
 						effect: {
 							version: pkg.dependencies.effect,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: pkg.dependencies.effect,
+								requiredVersion: "^3.17.0", // Allow any 3.17.x patch version
 								eager: true,
-								strictVersion: false,
+								strictVersion: true, // Enforce major/minor compatibility
 							},
 						},
 						zod: {
 							version: pkg.dependencies.zod,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: pkg.dependencies.zod,
+								requiredVersion: "^4.1.0", // Allow any 4.1.x patch version
 								eager: true,
-								strictVersion: false,
+								strictVersion: true,
 							},
 						},
 						"@orpc/contract": {
 							version: pkg.dependencies["@orpc/contract"],
 							shareConfig: {
 								singleton: true,
-								requiredVersion: pkg.dependencies["@orpc/contract"],
+								requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
 								eager: true,
-								strictVersion: false,
+								strictVersion: true,
 							},
 						},
 						"@orpc/server": {
 							version: pkg.dependencies["@orpc/server"],
 							shareConfig: {
 								singleton: true,
-								requiredVersion: pkg.dependencies["@orpc/server"],
+								requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
 								eager: true,
-								strictVersion: false,
+								strictVersion: true,
 							},
 						}
 					},
@@ -152,7 +156,7 @@ export class ModuleFederationService extends Effect.Tag(
 						return yield* Effect.tryPromise({
 							try: async () => {
 
-								const container = await mf.loadRemote(modulePath);
+								const container = await mf.loadRemote<RemoteModule>(modulePath);
 								if (!container) {
 									throw new Error(`No container returned for ${modulePath}`);
 								}
@@ -160,7 +164,7 @@ export class ModuleFederationService extends Effect.Tag(
 								const Constructor =
 									typeof container === "function"
 										? container
-										: (container as any)?.default;
+										: container.default;
 
 								if (!Constructor || typeof Constructor !== "function") {
 									throw new Error(

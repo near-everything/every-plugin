@@ -234,5 +234,6 @@ export type {
 	ConfigOf,
 	InitializedPlugin,
 	PluginOf,
+	PluginResult,
 	RegistryBindings
 } from "../types";
