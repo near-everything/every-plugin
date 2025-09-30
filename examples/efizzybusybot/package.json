@@ -14,7 +14,6 @@
 	"devDependencies": {
 		"@effect/language-service": "^0.41.1",
 		"@types/bun": "^1.2.21",
-		"better-sqlite3": "^12.2.0",
 		"drizzle-kit": "^0.31.4",
 		"telegraf": "^4.16.3"
 	},
