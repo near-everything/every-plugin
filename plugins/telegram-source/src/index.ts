@@ -1,5 +1,5 @@
 import { createPlugin } from "every-plugin";
-import { Effect, Queue, Stream } from "every-plugin/effect";
+import { Effect, Queue, Stream, Ref } from "every-plugin/effect";
 import { implement } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 import type { Context } from "telegraf";
@@ -125,8 +125,7 @@ export default createPlugin({
 
           console.log(`📥 [Telegram] Update ${ctx.update.update_id}: ${updateType} from ${fromUser} in chat ${chatId}${messageText ? ` - "${messageText}"` : ''}`);
 
-          // Enqueue context using Effect.runFork to avoid blocking Telegraf's event loop
-          Effect.runFork(
+          void Effect.runPromise(
             Queue.offer(queue, ctx).pipe(
               Effect.tap(() => Effect.sync(() => console.log(`📋 [Queue] Added context to queue`))),
               Effect.tap(() => Queue.size(queue).pipe(
@@ -144,23 +143,62 @@ export default createPlugin({
           console.error("[Telegram] Bot error:", err);
         });
 
-        // Launch Telegraf polling in a scoped fiber so it's managed by the plugin scope
-        const pollingFiber = yield* Effect.forkScoped(
-          Effect.tryPromise({
-            try: () => bot.launch({
-              dropPendingUpdates: false,
-              allowedUpdates: ["message", "edited_message", "channel_post", "edited_channel_post"]
-            }),
-            catch: (error) => new Error(`Bot launch failed: ${error instanceof Error ? error.message : String(error)}`)
+        // Create manual polling loop to avoid cross-realm AbortSignal issues with Module Federation
+        const offset = yield* Ref.make(0);
+        
+        yield* Effect.forkScoped(
+          Effect.gen(function* () {
+            console.log("[Telegram] Starting manual polling loop");
+            
+            while (true) {
+              try {
+                const currentOffset = yield* Ref.get(offset);
+                
+                const updates = yield* Effect.tryPromise(() => 
+                  bot.telegram.getUpdates(
+                    30, // timeout
+                    100, // limit
+                    currentOffset, // offset
+                    ["message", "edited_message", "channel_post", "edited_channel_post"] // allowedUpdates
+                  )
+                ).pipe(
+                  Effect.catchAll((error) => {
+                    console.error("[Telegram] Polling error:", error);
+                    return Effect.succeed([]);
+                  })
+                );
+
+                for (const update of updates) {
+                  // Process update through Telegraf to trigger middleware
+                  yield* Effect.tryPromise(() => bot.handleUpdate(update)).pipe(
+                    Effect.catchAll((error) => {
+                      console.error(`[Telegram] Failed to handle update ${update.update_id}:`, error);
+                      return Effect.void;
+                    })
+                  );
+                  
+                  // Update offset to next update
+                  yield* Ref.set(offset, update.update_id + 1);
+                }
+
+                // Small delay if no updates to avoid hammering the API
+                if (updates.length === 0) {
+                  yield* Effect.sleep("1 second");
+                }
+              } catch (error) {
+                console.error("[Telegram] Polling loop error:", error);
+                yield* Effect.sleep("5 seconds"); // Back off on error
+              }
+            }
           })
         );
-        yield* Effect.sync(() => console.log("[Telegram] Polling started"));
+        
+        yield* Effect.sync(() => console.log("[Telegram] Manual polling started"));
 
         return {
           bot,
           queue,
-          isWebhookMode,
-          pollingFiber
+          isWebhookMode
         };
       }
     }),

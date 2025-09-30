@@ -1,24 +1,25 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
-import type { PluginBinding, PluginRegistry } from "every-plugin";
-import { createTestPluginRuntime, type TestPluginMap } from "every-plugin/testing";
+import type { PluginBinding } from "every-plugin";
+import { createPluginRuntime } from "every-plugin/runtime";
 import { beforeAll, describe } from "vitest";
-import TelegramSourcePlugin from "../../index";
+import type TelegramSourcePlugin from "../../index";
+import { TELEGRAM_REMOTE_ENTRY_URL } from "./global-setup";
 
 // Define typed registry bindings for the telegram plugin
 type TelegramBindings = {
   "@curatedotfun/telegram-source": PluginBinding<typeof TelegramSourcePlugin>;
 };
 
-// Test registry for integration tests
-const TEST_REGISTRY: PluginRegistry = {
+// Registry for integration tests
+const TEST_REGISTRY = {
   "@curatedotfun/telegram-source": {
-    remoteUrl: "http://localhost:3014/remoteEntry.js",
+    remoteUrl: TELEGRAM_REMOTE_ENTRY_URL,
     type: "source",
-    version: "1.0.0",
+    version: "0.0.1",
     description: "Telegram source plugin for webhook integration testing",
   },
-};
+} as const;
 
 // Load test configuration from .env.test
 const TEST_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -31,7 +32,7 @@ const INTEGRATION_CONFIG = {
     defaultMaxResults: 100,
   },
   secrets: {
-    botToken: TEST_BOT_TOKEN,
+    botToken: "{{TELEGRAM_BOT_TOKEN}}",
   },
 };
 
@@ -39,13 +40,8 @@ const SECRETS_CONFIG = {
   TELEGRAM_BOT_TOKEN: TEST_BOT_TOKEN,
 };
 
-// Plugin map for tests
-const TEST_PLUGIN_MAP: TestPluginMap = {
-  "@curatedotfun/telegram-source": TelegramSourcePlugin,
-};
-
 // Helper to create realistic webhook update from sent message
-const createWebhookUpdateFromSentMessage = (sentMessage: any, content: string) => ({
+const createWebhookUpdateFromSentMessage = (sentMessage: { messageId: number }, content: string) => ({
   update_id: Math.floor(Math.random() * 1000000),
   message: {
     message_id: sentMessage.messageId,
@@ -66,11 +62,11 @@ const createWebhookUpdateFromSentMessage = (sentMessage: any, content: string) =
   }
 });
 
-describe("Telegram Webhook Integration Tests", () => {
-  const { runtime, PluginRuntime } = createTestPluginRuntime<TelegramBindings>({
+describe.sequential("Telegram Webhook Integration Tests", () => {
+  const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
     registry: TEST_REGISTRY,
-    secrets: SECRETS_CONFIG,
-  }, TEST_PLUGIN_MAP);
+    secrets: SECRETS_CONFIG
+  });
 
   beforeAll(() => {
     if (!TEST_BOT_TOKEN) {
