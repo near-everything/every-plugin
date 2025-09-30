@@ -5,14 +5,15 @@ import {
 } from "@module-federation/enhanced/runtime";
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
 import { Effect, Layer } from "effect";
+import type { AnyPlugin } from "../../types";
 import { ModuleFederationError } from "../errors";
+import { getNormalizedRemoteName } from "./normalize";
 
-const normalizePluginId = (pluginId: string): string => {
-	return pluginId
-		.toLowerCase()
-		.replace(/^@/, "")
-		.replace(/\//g, "_");
-};
+type RemoteModule = 
+  | (new () => AnyPlugin)
+  | { default: new () => AnyPlugin };
+
+const pkg = require("../../../package.json");
 
 export interface IModuleFederationService {
 	readonly registerRemote: (
@@ -22,7 +23,7 @@ export interface IModuleFederationService {
 	readonly loadRemoteConstructor: (
 		pluginId: string,
 		url: string,
-	) => Effect.Effect<any, ModuleFederationError>;
+	) => Effect.Effect<new () => AnyPlugin, ModuleFederationError>;
 }
 
 const createModuleFederationInstance = Effect.cached(
@@ -36,43 +37,48 @@ const createModuleFederationInstance = Effect.cached(
 					remotes: [],
 					shared: {
 						"every-plugin": {
+							version: pkg.version,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: false,
+								requiredVersion: `^${pkg.version}`,
 								eager: true,
-								strictVersion: false,
+								strictVersion: true,
 							},
 						},
 						effect: {
+							version: pkg.dependencies.effect,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: false,
+								requiredVersion: "^3.17.0", // Allow any 3.17.x patch version
 								eager: true,
-								strictVersion: false,
+								strictVersion: true, // Enforce major/minor compatibility
 							},
 						},
 						zod: {
+							version: pkg.dependencies.zod,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: false,
+								requiredVersion: "^4.1.0", // Allow any 4.1.x patch version
 								eager: true,
-								strictVersion: false,
+								strictVersion: true,
 							},
 						},
 						"@orpc/contract": {
+							version: pkg.dependencies["@orpc/contract"],
 							shareConfig: {
 								singleton: true,
-								requiredVersion: false,
+								requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
 								eager: true,
-								strictVersion: false,
+								strictVersion: true,
 							},
 						},
 						"@orpc/server": {
+							version: pkg.dependencies["@orpc/server"],
 							shareConfig: {
 								singleton: true,
-								requiredVersion: false,
+								requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
 								eager: true,
-								strictVersion: false,
+								strictVersion: true,
 							},
 						}
 					},
@@ -124,11 +130,8 @@ export class ModuleFederationService extends Effect.Tag(
 							);
 						}
 
-						// Register remote
-						const remoteName = pluginId
-							.toLowerCase()
-							.replace(/^@/, "")
-							.replace(/\//g, "_");
+						// Register remote using normalized name
+						const remoteName = getNormalizedRemoteName(pluginId);
 
 						yield* Effect.try({
 							try: () => mf.registerRemotes([{ name: remoteName, entry: url }]),
@@ -146,14 +149,14 @@ export class ModuleFederationService extends Effect.Tag(
 
 				loadRemoteConstructor: (pluginId: string, url: string) =>
 					Effect.gen(function* () {
-						const remoteName = normalizePluginId(pluginId);
+						const remoteName = getNormalizedRemoteName(pluginId);
 						console.log(`[MF] Loading remote ${remoteName}`);
 						const modulePath = `${remoteName}/plugin`;
 
 						return yield* Effect.tryPromise({
 							try: async () => {
 
-								const container = await mf.loadRemote(modulePath);
+								const container = await mf.loadRemote<RemoteModule>(modulePath);
 								if (!container) {
 									throw new Error(`No container returned for ${modulePath}`);
 								}
@@ -161,7 +164,7 @@ export class ModuleFederationService extends Effect.Tag(
 								const Constructor =
 									typeof container === "function"
 										? container
-										: (container as any)?.default;
+										: container.default;
 
 								if (!Constructor || typeof Constructor !== "function") {
 									throw new Error(

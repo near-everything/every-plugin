@@ -13,9 +13,6 @@ export default defineConfig({
 			"**/node_modules/**",
 			"**/*.d.ts"
 		],
-		alias: {
-			"every-plugin": "./src/index.ts"
-		},
 		testTimeout: 30000,
 		// No globalSetup for unit tests - they use mocks
 	},

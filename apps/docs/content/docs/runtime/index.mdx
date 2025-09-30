@@ -84,7 +84,7 @@ Always dispose the runtime when shutting down:
 
 ```typescript
 process.on("SIGTERM", async () => {
-  await runtime.dispose();
+  await runtime.disposeRuntime();
   process.exit(0);
 });
 ```

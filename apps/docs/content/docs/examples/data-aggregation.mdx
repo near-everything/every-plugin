@@ -287,7 +287,7 @@ console.log("Pipeline completed successfully!");
 console.log("Summary:", result.summary);
 
 // Clean up
-await runtime.dispose();
+await runtime.disposeRuntime();
 ```
 
 ## Error Handling
@@ -527,7 +527,7 @@ async function runNewsAggregation() {
     console.error("Pipeline failed:", error);
     throw error;
   } finally {
-    await runtime.dispose();
+    await runtime.disposeRuntime();
   }
 }
 

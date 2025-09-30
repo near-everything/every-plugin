@@ -1,9 +1,9 @@
 import { Database } from "bun:sqlite";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { eq, and, desc, asc } from "drizzle-orm";
-import { Effect, Context, Layer } from "effect";
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import { items, processingQueue, streamState, type Item, type NewItem, type ProcessingTask, type NewProcessingTask, type StreamState, type NewStreamState } from "../schemas/database";
+import { Context, Effect, Layer } from "effect";
+import { items, processingQueue, streamState, type Item, type NewItem, type NewStreamState, type ProcessingTask, type StreamState } from "../schemas/database";
 
 // Database connection context
 export class DatabaseService extends Context.Tag("DatabaseService")<
@@ -28,13 +28,13 @@ const makeDatabaseService = Effect.gen(function* () {
   // Initialize SQLite database
   const sqlite = new Database("./database.db");
   const db = drizzle(sqlite);
-  
+
   // Configure SQLite settings (must be done before migrations)
   sqlite.exec("PRAGMA journal_mode = WAL;");
   sqlite.exec("PRAGMA synchronous = NORMAL;");
   sqlite.exec("PRAGMA cache_size = 1000;");
   sqlite.exec("PRAGMA foreign_keys = ON;");
-  
+
   // Run migrations (idempotent table creation)
   migrate(db, { migrationsFolder: './drizzle' });
 

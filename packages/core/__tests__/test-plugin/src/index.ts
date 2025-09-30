@@ -1,382 +1,352 @@
-import { oc } from "@orpc/contract";
-import { implement } from "@orpc/server";
-import { Effect } from "effect";
-import { z } from "zod";
 import {
 	CommonPluginErrors,
-	createConfigSchema,
-	createStateSchema,
+	createPlugin,
 	PluginConfigurationError,
-	SimplePlugin
-} from "../../../src/index";
-import { SourceTemplateClient } from "./client";
+} from "every-plugin";
+import { Effect, Queue } from "every-plugin/effect";
+import { type ContractRouterClient, eventIterator, implement, oc } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+import { TestClient, testItemSchema } from "./client";
 
-// Configuration schemas
-const VariablesSchema = z.object({
-	baseUrl: z.string().default("http://localhost:1337"),
-	timeout: z.number().optional(),
-});
-
-const SecretsSchema = z.object({
-	apiKey: z.string(),
-});
-
-const SourceTemplateConfigSchema = createConfigSchema(VariablesSchema, SecretsSchema);
-type SourceTemplateConfig = z.infer<typeof SourceTemplateConfigSchema>;
-
-// State schema for pagination (used in contract-based input generation)
-export const StateSchema = createStateSchema(
-	z.object({
-		phase: z.string(),
-		status: z.string().optional(),
-		jobId: z.string().optional(),
-		lastId: z.string().optional(),
+// Schema for streaming events
+const streamEventSchema = z.object({
+	item: testItemSchema,
+	state: z.object({
+		nextPollMs: z.number().nullable(),
+		lastId: z.string(),
+	}),
+	metadata: z.object({
+		itemIndex: z.number(),
 	})
-).nullable();
-
-// Source item schema that plugins return
-const sourceItemSchema = z.object({
-	externalId: z.string(),
-	content: z.string(),
-	contentType: z.string().optional(),
-	createdAt: z.string().optional(),
-	url: z.string().optional(),
-	authors: z.array(z.object({
-		id: z.string().optional(),
-		username: z.string().optional(),
-		displayName: z.string().optional(),
-		url: z.string().optional(),
-	})).optional(),
-	raw: z.unknown(), // Original API response
 });
 
-// Contract definition for the source plugin
-export const sourceContract = oc.router({
-	// Single item fetch by ID
+// Schema for background producer events
+const backgroundEventSchema = z.object({
+	id: z.string(),
+	index: z.number(),
+	timestamp: z.number(),
+});
+
+// Contract definition for the test plugin
+export const testContract = oc.router({
+	// Basic single item fetch
 	getById: oc
+		.route({ method: 'POST', path: '/getById' })
 		.input(z.object({
 			id: z.string()
 		}))
 		.output(z.object({
-			item: sourceItemSchema
+			item: testItemSchema
 		}))
 		.errors(CommonPluginErrors),
 
-	// Streamable search operation
-	search: oc
-		.input(z.object({
-			query: z.string(),
-			limit: z.number().optional(),
-		}))
-		.output(z.object({
-			items: z.array(sourceItemSchema),
-			nextState: StateSchema
-		}))
-		.errors(CommonPluginErrors),
-
-	// Bulk fetch operation
+	// Basic bulk fetch
 	getBulk: oc
+		.route({ method: 'POST', path: '/getBulk' })
 		.input(z.object({
 			ids: z.array(z.string()),
 		}))
 		.output(z.object({
-			items: z.array(sourceItemSchema),
+			items: z.array(testItemSchema),
+		}))
+		.errors(CommonPluginErrors),
+
+	// Simple streaming - returns fixed number of items
+	simpleStream: oc
+		.route({ method: 'POST', path: '/simpleStream' })
+		.input(z.object({
+			count: z.number().min(1).max(10).default(3),
+			prefix: z.string().default("item"),
+		}))
+		.output(eventIterator(streamEventSchema))
+		.errors(CommonPluginErrors),
+
+	// Empty stream - returns no items
+	emptyStream: oc
+		.route({ method: 'POST', path: '/emptyStream' })
+		.input(z.object({
+			reason: z.string().optional(),
+		}))
+		.output(eventIterator(streamEventSchema))
+		.errors(CommonPluginErrors),
+
+	// Consolidated error testing procedure
+	throwError: oc
+		.route({ method: 'POST', path: '/throwError' })
+		.input(z.object({
+			errorType: z.enum(['UNAUTHORIZED', 'FORBIDDEN', 'RATE_LIMITED', 'SERVICE_UNAVAILABLE']),
+			customMessage: z.string().optional()
+		}))
+		.output(z.object({ message: z.string() }))
+		.errors(CommonPluginErrors),
+
+	// Config validation testing
+	requiresSpecialConfig: oc
+		.route({ method: 'POST', path: '/requiresSpecialConfig' })
+		.input(z.object({
+			checkValue: z.string(),
+		}))
+		.output(z.object({
+			configValue: z.string(),
+			inputValue: z.string(),
+		}))
+		.errors(CommonPluginErrors),
+
+	// Background producer streaming - simulates long-lived process
+	listenBackground: oc
+		.route({ method: 'POST', path: '/listenBackground' })
+		.input(z.object({
+			maxResults: z.number().min(1).max(100).optional(),
+		}))
+		.output(eventIterator(backgroundEventSchema))
+		.errors(CommonPluginErrors),
+
+	// Utility to manually enqueue background events
+	enqueueBackground: oc
+		.route({ method: 'POST', path: '/enqueueBackground' })
+		.input(z.object({
+			id: z.string().optional(),
+		}))
+		.output(z.object({
+			ok: z.boolean(),
+		}))
+		.errors(CommonPluginErrors),
+
+	// Get current queue size for diagnostics
+	getQueueSize: oc
+		.route({ method: 'POST', path: '/getQueueSize' })
+		.output(z.object({
+			size: z.number(),
+		}))
+		.errors(CommonPluginErrors),
+
+	// Simple ping for testing client dispatch
+	ping: oc
+		.route({ method: 'POST', path: '/ping' })
+		.output(z.object({
+			ok: z.boolean(),
+			timestamp: z.number(),
 		}))
 		.errors(CommonPluginErrors),
 });
 
-// Export types for use in implementation
-export type SourceContract = typeof sourceContract;
-export type SourceItem = z.infer<typeof sourceItemSchema>;
+// Export the client type for typed oRPC clients
+export type TestPluginClient = ContractRouterClient<typeof testContract>;
 
-// Add missing helper functions
-function generateHistoricalItems(query: string, limit?: number) {
-
-	const count = limit !== undefined ? Math.min(limit, 3) : 3;
-	return Array.from({ length: count }, (_, i) => ({
-		externalId: `hist_${query}_${i}`,
-		content: `Historical ${query} item ${i}`,
-		contentType: "post",
-		createdAt: new Date().toISOString(),
-		url: `https://example.com/hist/${i}`,
-		authors: [{ username: "hist_user", displayName: "Historical User" }],
-		raw: { type: "historical", index: i, query }
-	}));
-}
-
-function generateRealtimeItems(query: string, lastId: string, limit?: number) {
-
-	// For mixed-results, sometimes return empty to test stopWhenEmpty=false
-	if (query === "mixed-results" && Math.random() < 0.5) {
-		return [];
-	}
-
-	// Return 0-2 random items to simulate real-time activity
-	const maxCount = limit !== undefined ? Math.min(limit, 2) : 2;
-	const count = Math.floor(Math.random() * (maxCount + 1));
-	return Array.from({ length: count }, (_, i) => ({
-		externalId: `rt_${query}_${Date.now()}_${i}`,
-		content: `Real-time ${query} item ${i}`,
-		contentType: "post",
-		createdAt: new Date().toISOString(),
-		url: `https://example.com/realtime/${i}`,
-		authors: [{ username: "rt_user", displayName: "Real-time User" }],
-		raw: { type: "realtime", index: i, query, lastId }
-	}));
-}
-
-export class SourceTemplatePlugin extends SimplePlugin<
-	typeof sourceContract,
-	typeof SourceTemplateConfigSchema,
-	typeof StateSchema
-> {
-	readonly id = "test-plugin" as const;
-	readonly type = "source" as const; // this is where the open api spec of the contract should be stored, asset
-	readonly contract = sourceContract;
-	readonly configSchema = SourceTemplateConfigSchema;
-	override readonly stateSchema = StateSchema;
-
-	// Export contract for client consumption
-	static readonly contract = sourceContract;
-
-	private client: SourceTemplateClient | null = null;
-
-	// Initialize the client - called by runtime after validation
-	override initialize(config?: SourceTemplateConfig) {
-		const self = this;
-		return Effect.gen(function* () {
-			if (!config?.secrets?.apiKey) {
-				return yield* Effect.fail(new PluginConfigurationError({ message: "API key is required", retryable: false }));
+// Create the test plugin
+export default createPlugin({
+	id: "test-plugin",
+	type: "source",
+	variables: z.object({
+		baseUrl: z.string(),
+		timeout: z.number().optional(),
+		backgroundEnabled: z.boolean().default(false).optional(),
+		backgroundIntervalMs: z.number().min(50).max(5000).default(500).optional(),
+		backgroundMaxItems: z.number().min(1).max(1000).optional(),
+	}),
+	secrets: z.object({
+		apiKey: z.string(),
+	}),
+	contract: testContract,
+	initialize: (config) =>
+		Effect.gen(function* () {
+			// Business logic validation - config structure is guaranteed by schema
+			if (config.secrets.apiKey === "invalid-key") {
+				yield* Effect.fail(new PluginConfigurationError({
+					message: "Invalid API key format",
+					retryable: false
+				}));
 			}
 
-			// Initialize SourceTemplate client
-			self.client = new SourceTemplateClient(
-				config.variables?.baseUrl || "http://localhost:1337",
+			// Initialize client
+			const client = new TestClient(
+				config.variables.baseUrl,
 				config.secrets.apiKey,
 			);
 
-			// Test connection
+			// Test connection (can throw for testing)
+			if (config.secrets.apiKey === "connection-fail") {
+				yield* Effect.fail(new Error("Failed to connect to service"));
+			}
+
 			yield* Effect.tryPromise({
-				try: () => self.client!.healthCheck(),
-				catch: (error) => new PluginConfigurationError({ message: `Health check failed: ${error instanceof Error ? error.message : String(error)}`, retryable: true })
-			});
-		});
-	}
-
-	override shutdown() {
-		this.client = null;
-		return Effect.void;
-	}
-
-	// Create pure oRPC router following oRPC docs pattern
-	createRouter() {
-		const self = this;
-
-		const os = implement(sourceContract)
-			.$context<{ state?: z.infer<typeof StateSchema> }>();
-
-		const stateMiddleware = os
-			.middleware(async ({ context, next }) => {
-				console.log(`[TEST-PLUGIN] Middleware called with context:`, JSON.stringify(context, null, 2));
-				const result = await next({
-					context: {
-						state: context.state
-					}
-				});
-				console.log(`[TEST-PLUGIN] Middleware completed`);
-				return result;
+				try: () => client.healthCheck(),
+				catch: (error) => new Error(`Health check failed: ${error instanceof Error ? error.message : String(error)}`)
 			});
 
+			// Create background queue as a scoped resource
+			const backgroundQueue = yield* Effect.acquireRelease(
+				Queue.bounded<{ id: string; index: number; timestamp: number }>(1000),
+				(q) => Queue.shutdown(q)
+			);
 
-		// Define individual procedure handlers
+			// Start background producer if enabled
+			if (config.variables.backgroundEnabled) {
+				const maxItems = config.variables.backgroundMaxItems;
+
+				yield* Effect.forkScoped(
+					Effect.gen(function* () {
+						let i = 0;
+						while (!maxItems || i < maxItems) {
+							i++;
+
+							const event = {
+								id: `bg-${i}`,
+								index: i,
+								timestamp: Date.now(),
+							};
+
+							yield* Queue.offer(backgroundQueue, event).pipe(
+								Effect.catchAll((error) => {
+									console.log(`[TestPlugin] Queue offer failed for event ${i}:`, error);
+									return Effect.void;
+								})
+							);
+
+							yield* Effect.tryPromise(() =>
+								new Promise(resolve => setTimeout(resolve, config.variables.backgroundIntervalMs))
+							);
+						}
+						console.log(`[TestPlugin] Background producer completed after ${i} events`);
+					})
+				);
+			}
+
+			// Return context object - this gets passed to createRouter
+			return {
+				client,
+				backgroundQueue
+			};
+		}),
+	createRouter: (context) => {
+		const { client, backgroundQueue } = context;
+		const os = implement(testContract).$context<typeof context>();
+
+		// Basic single item fetch
 		const getById = os.getById.handler(async ({ input }) => {
-			if (!self.client) {
-				throw new Error("Plugin not initialized");
-			}
-
-			// Mock single item fetch
-			const mockItem = {
-				apiId: input.id,
-				title: `Item ${input.id}`,
-				content: `Content for item ${input.id}`,
-				timestamp: new Date().toISOString(),
-			};
-
-			return {
-				item: {
-					externalId: mockItem.apiId,
-					content: mockItem.content,
-					contentType: "post",
-					createdAt: mockItem.timestamp,
-					url: `https://example.com/posts/${mockItem.apiId}`,
-					authors: [{
-						username: "mock_user",
-						displayName: "Mock User",
-					}],
-					raw: mockItem,
-				},
-			};
+			const item = await client.fetchById(input.id);
+			return { item };
 		});
 
-		const search = os.use(stateMiddleware).search.handler(async ({ input, context, errors }) => {
-			const state = context.state;
-
-			// Handle error test cases
-			if (input.query === "401-unauthorized") {
-				throw errors.UNAUTHORIZED({
-					message: "Invalid API key",
-					data: { apiKeyProvided: true, authType: 'apiKey' }
-				});
-			}
-
-			if (input.query === "403-forbidden") {
-				throw errors.FORBIDDEN({
-					message: "Access denied to resource",
-					data: { requiredPermissions: ['read:data'], action: 'search' }
-				});
-			}
-
-			if (input.query === "400-bad-request") {
-				throw errors.BAD_REQUEST({
-					message: "Invalid query parameters",
-					data: {
-						invalidFields: ['query'],
-						validationErrors: [{ field: 'query', message: 'Query cannot be empty', code: 'REQUIRED' }]
-					}
-				});
-			}
-
-			if (input.query === "429-rate-limit") {
-				throw errors.RATE_LIMITED({
-					message: "Too many requests",
-					data: {
-						retryAfter: 60,
-						remainingRequests: 0,
-						limitType: 'requests'
-					}
-				});
-			}
-
-			if (input.query === "503-service-unavailable") {
-				throw errors.SERVICE_UNAVAILABLE({
-					message: "Service temporarily unavailable",
-					data: {
-						retryAfter: 30,
-						maintenanceWindow: false
-					}
-				});
-			}
-
-			// Keep some legacy error state patterns for backward compatibility testing
-			if (input.query === "trigger-error-state") {
-				return {
-					items: [],
-					nextState: {
-						nextPollMs: null, // Signal termination
-						phase: "error",
-						errorMessage: "Non-retryable error detected in plugin state",
-						errorType: "PluginConfigurationError",
-					}
-				};
-			}
-
-			// Phase 1: Initial call - return immediate results and set up for streaming
-			if (!state) {
-				console.log(`[TEST-PLUGIN] Initial call for query: ${input.query}, limit: ${input.limit}`);
-				const initialItems = generateHistoricalItems(input.query, input.limit);
-				return {
-					items: initialItems, // Return items immediately for single-call compatibility
-					nextState: {
-						nextPollMs: 50, // Short delay for testing
-						phase: "historical",
-						jobId: `hist_${Date.now()}`,
-						lastId: initialItems.length > 0 ? initialItems[initialItems.length - 1].externalId : undefined,
-					}
-				};
-			}
-
-			// Phase 2: Historical data collection (simulate catching up)
-			if (state.phase === "historical") {
-				console.log(`[TEST-PLUGIN] Historical phase`);
-				const historicalItems = generateHistoricalItems(input.query, input.limit);
-				return {
-					items: historicalItems,
-					nextState: {
-						nextPollMs: 50, // Short delay for testing
-						phase: "realtime",
-						jobId: state.jobId,
-						lastId: historicalItems.length > 0 ? historicalItems[historicalItems.length - 1].externalId : state.lastId,
-					}
-				};
-			}
-
-			// Phase 3: Real-time polling (simulate ongoing data) - runs forever
-			if (state.phase === "realtime") {
-				console.log(`[TEST-PLUGIN] Realtime phase`);
-				const newItems = generateRealtimeItems(input.query, state.lastId || "", input.limit);
-
-				// Continue indefinitely - let maxInvocations stop the stream
-				return {
-					items: newItems,
-					nextState: {
-						nextPollMs: 50, // Short delay for testing
-						phase: "realtime",
-						jobId: state.jobId,
-						lastId: newItems.length > 0 ? newItems[newItems.length - 1].externalId : state.lastId,
-					}
-				};
-			}
-
-			// Fallback - should not reach here in normal operation
-			console.log(`[TEST-PLUGIN] Fallback case, phase: ${state?.phase}`);
-			return {
-				items: [],
-				nextState: {
-					nextPollMs: 50,
-					phase: "realtime",
-					jobId: state?.jobId || `fallback_${Date.now()}`,
-					lastId: state?.lastId,
-				}
-			};
-		});
-
+		// Basic bulk fetch
 		const getBulk = os.getBulk.handler(async ({ input }) => {
-			if (!self.client) {
-				throw new Error("Plugin not initialized");
+			const items = await client.fetchBulk(input.ids);
+			return { items };
+		});
+
+		// Simple predictable streaming
+		const simpleStream = os.simpleStream.handler(async function* ({ input }) {
+			yield* client.streamItems(input.count, input.prefix);
+		});
+
+		// Empty stream for testing
+		// biome-ignore lint/correctness/useYield: specific test case
+		const emptyStream = os.emptyStream.handler(async function* ({ input }) {
+			// Log why it's empty, do any setup/cleanup, but don't yield
+			console.log(`Empty stream: ${input.reason}`);
+			// Generator ends without yielding - creates empty AsyncIterable
+			return;
+		});
+
+		// Error testing procedure
+		const throwError = os.throwError.handler(async ({ input, errors }) => {
+			const message = input.customMessage || `Test ${input.errorType.toLowerCase()} error`;
+
+			switch (input.errorType) {
+				case 'UNAUTHORIZED':
+					throw errors.UNAUTHORIZED({
+						message,
+						data: { apiKeyProvided: true, authType: 'apiKey' as const }
+					});
+				case 'FORBIDDEN':
+					throw errors.FORBIDDEN({
+						message,
+						data: { requiredPermissions: ['read:data'], action: 'test' }
+					});
+				case 'RATE_LIMITED':
+					throw errors.RATE_LIMITED({
+						message,
+						data: {
+							retryAfter: 60,
+							remainingRequests: 0,
+							limitType: 'requests' as const
+						}
+					});
+				case 'SERVICE_UNAVAILABLE':
+					throw errors.SERVICE_UNAVAILABLE({
+						message,
+						data: {
+							retryAfter: 30,
+							maintenanceWindow: false
+						}
+					});
 			}
+		});
 
-			// Mock bulk fetch
-			const mockItems = input.ids.map(id => ({
-				apiId: id,
-				title: `Bulk item ${id}`,
-				content: `Bulk content for item ${id}`,
-				timestamp: new Date().toISOString(),
-			}));
-
+		// Config validation testing
+		const requiresSpecialConfig = os.requiresSpecialConfig.handler(async ({ input }) => {
 			return {
-				items: mockItems.map(item => ({
-					externalId: item.apiId,
-					content: item.content,
-					contentType: "post",
-					createdAt: item.timestamp,
-					url: `https://example.com/posts/${item.apiId}`,
-					authors: [{
-						username: "mock_user",
-						displayName: "Mock User",
-					}],
-					raw: item,
-				})),
+				configValue: client.getConfigValue(),
+				inputValue: input.checkValue,
 			};
 		});
 
-		// Return pure oRPC router following oRPC docs pattern
+		// Background producer streaming
+		const listenBackground = os.listenBackground.handler(async function* ({ input }) {
+			let count = 0;
+			const maxResults = input.maxResults;
+
+			while (!maxResults || count < maxResults) {
+				try {
+					const event = await Effect.runPromise(Queue.take(backgroundQueue));
+					yield event;
+					count++;
+				} catch (error) {
+					break;
+				}
+			}
+		});
+
+		// Manual enqueue utility
+		const enqueueBackground = os.enqueueBackground.handler(async ({ input }) => {
+			const event = {
+				id: input.id || `manual-${Date.now()}`,
+				index: -1, // Manual events use -1 to distinguish from auto-generated
+				timestamp: Date.now(),
+			};
+
+			await Effect.runPromise(
+				Queue.offer(backgroundQueue, event).pipe(
+					Effect.catchAll(() => Effect.succeed(false))
+				)
+			);
+
+			return { ok: true };
+		});
+
+		// Queue size diagnostic
+		const getQueueSize = os.getQueueSize.handler(async () => {
+			const size = await Effect.runPromise(Queue.size(backgroundQueue));
+			return { size };
+		});
+
+		// Simple ping for testing
+		const ping = os.ping.handler(async () => {
+			return { ok: true, timestamp: Date.now() };
+		});
+
+		// Return the oRPC router
 		return os.router({
 			getById,
-			search,
 			getBulk,
+			simpleStream,
+			emptyStream,
+			throwError,
+			requiresSpecialConfig,
+			listenBackground,
+			enqueueBackground,
+			getQueueSize,
+			ping,
 		});
 	}
-
-}
-
-export default SourceTemplatePlugin;
+});

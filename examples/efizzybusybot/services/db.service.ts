@@ -4,41 +4,26 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { Context, Effect, Layer } from "effect";
 import {
-  chats,
-  items,
-  processingQueue,
+  messages,
   streamState,
-  users,
-  type Item,
-  type NewChat,
-  type NewItem,
+  type Message,
+  type NewMessage,
   type NewStreamState,
-  type NewUser,
   type StreamState
 } from "../schemas/database";
 
-// Database service interface
+// Simplified database service interface
 export interface DatabaseService {
-  // Item operations
-  insertItem: (item: NewItem) => Effect.Effect<number, Error>;
-  getItemById: (id: number) => Effect.Effect<Item | null, Error>;
-  getItemsByChatId: (chatId: string, limit?: number) => Effect.Effect<Item[], Error>;
-  getItemsByUsername: (username: string, limit?: number) => Effect.Effect<Item[], Error>;
-
-  // Processing queue operations
-  enqueueProcessing: (itemId: number, type: 'submit' | 'command' | 'reaction') => Effect.Effect<void, Error>;
+  // Message operations
+  insertMessage: (message: NewMessage) => Effect.Effect<number, Error>;
+  getMessageById: (id: number) => Effect.Effect<Message | null, Error>;
+  getAllMessages: (limit?: number) => Effect.Effect<Message[], Error>;
+  getMessagesByChatId: (chatId: string, limit?: number) => Effect.Effect<Message[], Error>;
+  markMessageProcessed: (id: number) => Effect.Effect<void, Error>;
 
   // Stream state operations
   saveStreamState: (state: NewStreamState) => Effect.Effect<void, Error>;
   loadStreamState: () => Effect.Effect<StreamState | null, Error>;
-
-  // Chat operations
-  upsertChat: (chat: NewChat) => Effect.Effect<void, Error>;
-  getChatById: (chatId: string) => Effect.Effect<any, Error>;
-
-  // User operations
-  upsertUser: (user: NewUser) => Effect.Effect<void, Error>;
-  getUserById: (userId: string) => Effect.Effect<any, Error>;
 }
 
 export const DatabaseService = Context.GenericTag<DatabaseService>("DatabaseService");
@@ -51,14 +36,15 @@ export const DatabaseServiceLive = Layer.effect(
     const sqlite = new Database("database.db");
     const db = drizzle(sqlite);
 
+    // Run migrations
     migrate(db, { migrationsFolder: './drizzle' });
 
     return {
-      insertItem: (item: NewItem) =>
+      insertMessage: (message: NewMessage) =>
         Effect.tryPromise({
           try: async () => {
             try {
-              const result = await db.insert(items).values(item).returning({ id: items.id });
+              const result = await db.insert(messages).values(message).returning({ id: messages.id });
               return result[0]?.id || 0;
             } catch (error: any) {
               // Handle duplicate external_id (unique constraint violation)
@@ -68,52 +54,49 @@ export const DatabaseServiceLive = Layer.effect(
               throw error;
             }
           },
-          catch: (error) => new Error(`Failed to insert item: ${error}`)
+          catch: (error) => new Error(`Failed to insert message: ${error}`)
         }),
 
-      getItemById: (id: number) =>
+      getMessageById: (id: number) =>
         Effect.tryPromise({
           try: async () => {
-            const result = await db.select().from(items).where(eq(items.id, id)).limit(1);
+            const result = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
             return result[0] || null;
           },
-          catch: (error) => new Error(`Failed to get item: ${error}`)
+          catch: (error) => new Error(`Failed to get message: ${error}`)
         }),
 
-      getItemsByChatId: (chatId: string, limit = 100) =>
+      getAllMessages: (limit = 1000) =>
         Effect.tryPromise({
           try: async () => {
             return await db.select()
-              .from(items)
-              .where(eq(items.chatId, chatId))
-              .orderBy(desc(items.ingestedAt))
+              .from(messages)
+              .orderBy(desc(messages.ingestedAt))
               .limit(limit);
           },
-          catch: (error) => new Error(`Failed to get items by chat: ${error}`)
+          catch: (error) => new Error(`Failed to get all messages: ${error}`)
         }),
 
-      getItemsByUsername: (username: string, limit = 100) =>
+      getMessagesByChatId: (chatId: string, limit = 100) =>
         Effect.tryPromise({
           try: async () => {
             return await db.select()
-              .from(items)
-              .where(eq(items.originalAuthorUsername, username))
-              .orderBy(desc(items.ingestedAt))
+              .from(messages)
+              .where(eq(messages.chatId, chatId))
+              .orderBy(desc(messages.ingestedAt))
               .limit(limit);
           },
-          catch: (error) => new Error(`Failed to get items by username: ${error}`)
+          catch: (error) => new Error(`Failed to get messages by chat: ${error}`)
         }),
 
-      enqueueProcessing: (itemId: number, type: 'submit' | 'command' | 'reaction') =>
+      markMessageProcessed: (id: number) =>
         Effect.tryPromise({
           try: async () => {
-            await db.insert(processingQueue).values({
-              itemId,
-              submissionType: type,
-              status: 'pending'
-            });
+            await db.update(messages)
+              .set({ processed: true })
+              .where(eq(messages.id, id));
           },
-          catch: (error) => new Error(`Failed to enqueue processing: ${error}`)
+          catch: (error) => new Error(`Failed to mark message processed: ${error}`)
         }),
 
       saveStreamState: (state: NewStreamState) =>
@@ -133,80 +116,6 @@ export const DatabaseServiceLive = Layer.effect(
             return result[0] || null;
           },
           catch: (error) => new Error(`Failed to load stream state: ${error}`)
-        }),
-
-      upsertChat: (chat: NewChat) =>
-        Effect.tryPromise({
-          try: async () => {
-            // Try to insert, if it fails due to unique constraint, update
-            try {
-              await db.insert(chats).values(chat);
-            } catch (error: any) {
-              if (error.message?.includes('UNIQUE constraint failed')) {
-                // Update existing chat
-                await db.update(chats)
-                  .set({
-                    title: chat.title,
-                    username: chat.username,
-                    description: chat.description,
-                    memberCount: chat.memberCount,
-                    lastMessageAt: chat.lastMessageAt,
-                    updatedAt: new Date().toISOString()
-                  })
-                  .where(eq(chats.chatId, chat.chatId!));
-              } else {
-                throw error;
-              }
-            }
-          },
-          catch: (error) => new Error(`Failed to upsert chat: ${error}`)
-        }),
-
-      getChatById: (chatId: string) =>
-        Effect.tryPromise({
-          try: async () => {
-            const result = await db.select().from(chats).where(eq(chats.chatId, chatId)).limit(1);
-            return result[0] || null;
-          },
-          catch: (error) => new Error(`Failed to get chat: ${error}`)
-        }),
-
-      upsertUser: (user: NewUser) =>
-        Effect.tryPromise({
-          try: async () => {
-            // Try to insert, if it fails due to unique constraint, update
-            try {
-              await db.insert(users).values(user);
-            } catch (error: any) {
-              if (error.message?.includes('UNIQUE constraint failed')) {
-                // Update existing user
-                await db.update(users)
-                  .set({
-                    username: user.username,
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                    displayName: user.displayName,
-                    languageCode: user.languageCode,
-                    lastMessageAt: user.lastMessageAt,
-                    messageCount: user.messageCount,
-                    updatedAt: new Date().toISOString()
-                  })
-                  .where(eq(users.userId, user.userId!));
-              } else {
-                throw error;
-              }
-            }
-          },
-          catch: (error) => new Error(`Failed to upsert user: ${error}`)
-        }),
-
-      getUserById: (userId: string) =>
-        Effect.tryPromise({
-          try: async () => {
-            const result = await db.select().from(users).where(eq(users.userId, userId)).limit(1);
-            return result[0] || null;
-          },
-          catch: (error) => new Error(`Failed to get user: ${error}`)
         }),
     };
   })

@@ -58,7 +58,7 @@ const result = await runtime.runPromise(
 );
 
 console.log(result);
-await runtime.dispose();
+await runtime.disposeRuntime();
 ```
 
 ## Core Concepts
@@ -153,7 +153,7 @@ const posts = await runtime.runPromise(
 );
 
 console.log(`Found ${posts.items.length} posts`);
-await runtime.dispose();
+await runtime.disposeRuntime();
 ```
 
 ### Streaming Data
@@ -245,7 +245,7 @@ const worker = new Worker("my-queue", processJob);
 // Cleanup on shutdown
 process.on("SIGTERM", async () => {
   await worker.close();
-  await runtime.dispose();
+  await runtime.disposeRuntime();
 });
 ```
 

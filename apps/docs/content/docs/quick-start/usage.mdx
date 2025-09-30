@@ -43,7 +43,7 @@ const posts = await runtime.runPromise(
 );
 
 console.log(`Found ${posts.items.length} posts`);
-await runtime.dispose();
+await runtime.disposeRuntime();
 ```
 
 ## Streaming Example

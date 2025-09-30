@@ -3,17 +3,9 @@ const { rspack } = require("@rspack/core");
 
 const pkg = require("./package.json");
 
-// Check if we're running in test environment
-const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST || process.env.npm_lifecycle_event === 'test';
+const { getNormalizedRemoteName } = require("every-plugin/normalize");
 
-// Helper to get normalized remote name
-function getNormalizedRemoteName(name) {
-  return name
-    .toLowerCase()
-    .replace(/^@/, '')  // Remove leading @
-    .replace(/\//g, '_'); // Replace / with _
-    // Keep hyphens as-is
-}
+const everyPluginPkg = require("every-plugin/package.json");
 
 function getPluginInfo() {
   return {
@@ -70,32 +62,42 @@ module.exports = {
       exposes: {
         "./plugin": "./src/index.ts",
       },
-      shared: isTest ? {} : {
+      shared: {
         "every-plugin": {
+          version: everyPluginPkg.version,
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.version,
           strictVersion: false,
+          eager: false,
         },
-        effect: {
+        "effect": {
+          version: everyPluginPkg.dependencies.effect,
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.dependencies.effect,
           strictVersion: false,
+          eager: false,
         },
-        zod: {
+        "zod": {
+          version: everyPluginPkg.dependencies.zod,
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.dependencies.zod,
           strictVersion: false,
+          eager: false,
         },
         "@orpc/contract": {
+          version: everyPluginPkg.dependencies["@orpc/contract"],
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.dependencies["@orpc/contract"],
           strictVersion: false,
+          eager: false,
         },
         "@orpc/server": {
+          version: everyPluginPkg.dependencies["@orpc/server"],
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.dependencies["@orpc/server"],
           strictVersion: false,
-        }
+          eager: false,
+        },
       },
     }),
   ],

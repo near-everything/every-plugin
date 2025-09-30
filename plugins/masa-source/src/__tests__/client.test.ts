@@ -41,7 +41,7 @@ describe('MasaClient', () => {
 
     it('should include cursor for pagination', async () => {
       const jobId = await client.submitSearchJob(
-        'twitter-credential',
+        'twitter',
         'searchbyquery',
         'test query',
         25,

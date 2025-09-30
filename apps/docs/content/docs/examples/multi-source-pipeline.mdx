@@ -225,14 +225,14 @@ Ensure proper cleanup in production:
 // Graceful shutdown
 process.on("SIGTERM", async () => {
   console.log("Shutting down pipeline...");
-  await runtime.dispose();
+  await runtime.disposeRuntime();
   process.exit(0);
 });
 
 // Error handling
 process.on("unhandledRejection", async (error) => {
   console.error("Unhandled rejection:", error);
-  await runtime.dispose();
+  await runtime.disposeRuntime();
   process.exit(1);
 });
 ```

@@ -4,9 +4,26 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["src/**/*.test.ts", "src/**/*.spec.ts"],
-    exclude: ["node_modules", "dist"],
+    setupFiles: ["./src/__tests__/setup.ts"],
+    include: [
+      "src/__tests__/unit/**/*.test.ts",
+      "src/__tests__/integration/**/*.test.ts"
+    ],
+    exclude: [
+      "node_modules",
+      "dist",
+    ],
     testTimeout: 30000,
+    // Run integration tests sequentially to avoid polling conflicts
+    pool: "threads",
+    poolOptions: {
+      threads: {
+        singleThread: true
+      }
+    },
+    typecheck: {
+      enabled: false
+    }
   },
   resolve: {
     alias: {

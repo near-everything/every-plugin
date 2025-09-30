@@ -43,7 +43,7 @@ Proper cleanup and lifecycle management:
 ```typescript
 // Always dispose runtime when shutting down
 process.on("SIGTERM", async () => {
-  await runtime.dispose();
+  await runtime.disposeRuntime();
   process.exit(0);
 });
 ```

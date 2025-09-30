@@ -13,11 +13,6 @@ The Masa Source plugin enables comprehensive content ingestion from Twitter/X us
 - **Engagement Data**: Replies, retweets, and interaction metrics
 - **Trending Topics**: Current Twitter trends
 
-### **Flexible Data Sources**
-- `twitter-credential`: Twitter scraping with credentials
-- `twitter-api`: Twitter scraping with API keys  
-- `twitter`: General Twitter scraping (best available auth)
-
 ### **Advanced Search Methods**
 - `searchbyquery`: Live Twitter data
 - `searchbyfullarchive`: Historical tweets
