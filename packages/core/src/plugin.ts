@@ -101,7 +101,10 @@ export interface Plugin<
 	readonly configSchema: PluginConfigFor<TVariables, TSecrets>;
 
 	// Plugin lifecycle
-	initialize(config: { variables: z.infer<TVariables>; secrets: z.infer<TSecrets> }): Effect.Effect<TContext, unknown, Scope.Scope>;
+	initialize(
+		config: { variables: z.infer<TVariables>; secrets: z.infer<TSecrets> }
+	): Effect.Effect<TContext, unknown, Scope.Scope>;
+
 	shutdown(): Effect.Effect<void, never>;
 
 	/**
@@ -120,15 +123,17 @@ export function createPlugin<
 	V extends z.ZodTypeAny,
 	S extends z.ZodTypeAny,
 	TContract extends AnyContractRouter,
-	TContext extends Context
+	TContext extends Context = Record<never, never>
 >(config: {
 	id: string;
 	type?: string;
 	variables: V;
 	secrets: S;
 	contract: TContract;
-	initialize?: (config: { variables: z.infer<V>; secrets: z.infer<S> }) => Effect.Effect<TContext, Error, Scope.Scope>;
-	createRouter: (ctx: TContext) => Router<any, TContext>;
+	initialize?: (
+		config: { variables: z.infer<V>; secrets: z.infer<S> }
+	) => Effect.Effect<TContext, Error, Scope.Scope>;
+	createRouter: (ctx: TContext) => RouterFromContract<TContract, TContext>;
 	shutdown?: (ctx: TContext) => Effect.Effect<void, Error, never>;
 }) {
 	const configSchema = z.object({
@@ -144,7 +149,9 @@ export function createPlugin<
 
 		private _context: TContext | null = null;
 
-		initialize(pluginConfig: { variables: z.infer<V>; secrets: z.infer<S> }): Effect.Effect<TContext, unknown, Scope.Scope> {
+		initialize(
+			pluginConfig: { variables: z.infer<V>; secrets: z.infer<S> }
+		): Effect.Effect<TContext, unknown, Scope.Scope> {
 			const init = config.initialize ?? (() => Effect.succeed({} as TContext));
 
 			return init(pluginConfig).pipe(
@@ -165,12 +172,19 @@ export function createPlugin<
 			});
 		}
 
-		createRouter(ctx: TContext): RouterFromContract<TContract, TContext> {
-			return config.createRouter(ctx) as RouterFromContract<TContract, TContext>;
+		createRouter(context: TContext): RouterFromContract<TContract, TContext> {
+			return config.createRouter(context);
 		}
 	}
 
-	const PluginConstructor = CreatedPlugin as any;
+	const PluginConstructor = CreatedPlugin as unknown as {
+		new(): Plugin<TContract, V, S, TContext>;
+		binding: {
+			contract: TContract;
+			config: PluginConfigFor<V, S>;
+		};
+	};
+
 	PluginConstructor.binding = {
 		contract: config.contract,
 		config: configSchema

@@ -15,9 +15,9 @@ import type {
 	SecretsConfig
 } from "../types";
 import { PluginRuntimeError } from "./errors";
-import { type IPluginService, PluginService } from "./services/plugin.service";
-import { ModuleFederationService } from "./services/module-federation.service";
 import { SecretsService } from "./services";
+import { ModuleFederationService } from "./services/module-federation.service";
+import { type IPluginService, PluginService } from "./services/plugin.service";
 
 export interface IPluginRuntime<R extends RegistryBindings = RegistryBindings> {
 	readonly loadPlugin: <K extends keyof R>(
@@ -40,7 +40,7 @@ export interface IPluginRuntime<R extends RegistryBindings = RegistryBindings> {
 
 	readonly shutdown: () => Effect.Effect<void, never, never>;
 }
-export class PluginRuntime<R extends RegistryBindings = RegistryBindings> implements IPluginRuntime<R> {
+export class PluginRuntimeImpl<R extends RegistryBindings = RegistryBindings> implements IPluginRuntime<R> {
 	private pluginCache = new Map<string, Effect.Effect<PluginResult<AnyPlugin>, PluginRuntimeError>>();
 
 	constructor(
@@ -138,6 +138,38 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> implem
 	shutdown(): Effect.Effect<void, never, never> {
 		return this.pluginService.cleanup();
 	}
+
+	/**
+	 * Evict a plugin from cache and shutdown its instance
+	 */
+	evictPlugin<K extends keyof R>(
+		pluginId: K,
+		config: z.infer<PluginOf<R[K]>["configSchema"]>
+	): Effect.Effect<void, never> {
+		const cacheKey = this.generateCacheKey(String(pluginId), config);
+		const self = this;
+
+		return Effect.gen(function* () {
+			// Get cached plugin if it exists
+			const cachedPlugin = self.pluginCache.get(cacheKey);
+
+			if (cachedPlugin) {
+				// Remove from cache first
+				self.pluginCache.delete(cacheKey);
+
+				// Try to shutdown the plugin gracefully
+				const pluginResult = yield* cachedPlugin.pipe(Effect.catchAll(() => Effect.succeed(null)));
+
+				if (pluginResult?.initialized) {
+					yield* self.pluginService.shutdownPlugin(pluginResult.initialized).pipe(
+						Effect.catchAll(() => Effect.void) // Ignore shutdown errors during eviction
+					);
+				}
+			}
+		}).pipe(
+			Effect.catchAll(() => Effect.void) // Never fail
+		);
+	}
 }
 
 export class PluginRuntimeService extends Context.Tag("PluginRuntimeService")<
@@ -190,9 +222,9 @@ export function createPluginRuntime<R extends RegistryBindings = RegistryBinding
 
 	const runtime = ManagedRuntime.make(PluginRuntimeService.Live(runtimeConfig));
 
-	const createTypedRuntime: Effect.Effect<PluginRuntime<R>, never, never> = Effect.gen(function* () {
+	const createTypedRuntime: Effect.Effect<PluginRuntimeImpl<R>, never, never> = Effect.gen(function* () {
 		const pluginService = yield* PluginRuntimeService;
-		return new PluginRuntime<R>(pluginService, runtimeConfig.registry);
+		return new PluginRuntimeImpl<R>(pluginService, runtimeConfig.registry);
 	}).pipe(Effect.provide(runtime));
 
 	return { runtime, PluginRuntime: createTypedRuntime };

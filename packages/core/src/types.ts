@@ -1,8 +1,8 @@
 import type { AnyContractRouter } from "@orpc/contract";
 import type { Context, Router } from "@orpc/server";
+import { Scope } from "effect";
 import type { z } from "zod";
 import type { Plugin, PluginConfigFor, PluginConstructorWithBinding } from "./plugin";
-import { Scope } from "effect";
 
 export type AnyContract = Router<AnyContractRouter, any>
 
@@ -154,9 +154,8 @@ export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
     readonly type?: string;
   };
   readonly config: z.infer<T["configSchema"]>;
-  readonly context: Context;
-  readonly scope: Scope.CloseableScope
-;
+  readonly context: ContextOf<T>;
+  readonly scope: Scope.CloseableScope;
 }
 
 /**

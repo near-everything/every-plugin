@@ -3,7 +3,6 @@
 import { RPCHandler } from "@orpc/server/fetch";
 import { Effect, Logger, LogLevel, Stream } from "effect";
 import type { PluginBinding } from "every-plugin";
-import { createPluginClient, getPluginRouter } from "every-plugin/client";
 import { createPluginRuntime } from "every-plugin/runtime";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -31,7 +30,7 @@ const useWebhooks = !!WEBHOOK_DOMAIN;
 const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
   registry: {
     "@curatedotfun/telegram-source": {
-      remoteUrl: "https://elliot-braem-37--curatedotfun-telegram-source-eve-43d4b5b4e-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-38--curatedotfun-telegram-source-eve-3e573bb33-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },
@@ -42,7 +41,7 @@ const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
 });
 
 // Create HTTP server with plugin router integration
-const createHttpServer = (telegramPlugin) => Effect.gen(function* () {
+const createHttpServer = (plugin) => Effect.gen(function* () {
   const db = yield* DatabaseService;
 
   const app = new Hono();
@@ -103,13 +102,15 @@ const createHttpServer = (telegramPlugin) => Effect.gen(function* () {
   });
 
   // Mount plugin router for telegram endpoints using Hono pattern
-  const router = getPluginRouter(telegramPlugin);
+
+  const { initialized, router } = plugin;
+
   const handler = new RPCHandler(router);
 
   app.use("/telegram/*", async (c, next) => {
     const { matched, response } = await handler.handle(c.req.raw, {
       prefix: "/telegram",
-      context: telegramPlugin.context,
+      context: plugin.initialized.context,
     });
 
     if (matched) {
@@ -180,7 +181,7 @@ const program = Effect.gen(function* () {
 
   // Initialize plugin at program root level
   const pluginRuntime = yield* PluginRuntime;
-  const telegramPlugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", {
+  const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", {
     variables: {
       timeout: 30000,
       defaultMaxResults: 100,
@@ -202,13 +203,13 @@ const program = Effect.gen(function* () {
   }
 
   // Start HTTP server with plugin as dependency
-  const { server } = yield* createHttpServer(telegramPlugin);
-  const pluginClient = createPluginClient(telegramPlugin);
+  const { server } = yield* createHttpServer(plugin);
+  const { client } = plugin;
 
   // Create reply function for worker
   const sendReply = (chatId: string, text: string, replyToMessageId?: number) =>
     Effect.tryPromise(() =>
-      pluginClient.sendMessage({
+      client.sendMessage({
         chatId,
         text,
         replyToMessageId,
@@ -223,7 +224,7 @@ const program = Effect.gen(function* () {
 
   // Start message streaming and processing
   const asyncIterable = yield* Effect.tryPromise(() =>
-    pluginClient.listen({
+    client.listen({
       // chatId: TARGET_CHAT_ID,
       // maxResults: 100,
       messageTypes: ['text', 'photo', 'document', 'video', 'voice', 'audio', 'sticker', 'location', 'contact', 'animation', 'video_note'],

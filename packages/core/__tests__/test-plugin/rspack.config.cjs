@@ -3,10 +3,9 @@ const { rspack } = require("@rspack/core");
 
 const pkg = require("./package.json");
 
-// Check if we're running in test environment
-const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST || process.env.npm_lifecycle_event === 'test';
-
 const { getNormalizedRemoteName } = require("every-plugin/normalize");
+
+const everyPluginPkg = require("every-plugin/package.json");
 
 function getPluginInfo() {
   return {
@@ -63,32 +62,13 @@ module.exports = {
       exposes: {
         "./plugin": "./src/index.ts",
       },
-      shared: isTest ? {} : {
+      shared: {
         "every-plugin": {
           singleton: true,
-          requiredVersion: false,
+          requiredVersion: everyPluginPkg.version,
           strictVersion: false,
+          eager: false,
         },
-        effect: {
-          singleton: true,
-          requiredVersion: false,
-          strictVersion: false,
-        },
-        zod: {
-          singleton: true,
-          requiredVersion: false,
-          strictVersion: false,
-        },
-        "@orpc/contract": {
-          singleton: true,
-          requiredVersion: false,
-          strictVersion: false,
-        },
-        "@orpc/server": {
-          singleton: true,
-          requiredVersion: false,
-          strictVersion: false,
-        }
       },
     }),
   ],

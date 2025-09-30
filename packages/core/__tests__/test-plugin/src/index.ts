@@ -1,12 +1,11 @@
-import { type ContractRouterClient, oc } from "@orpc/contract";
-import { eventIterator, implement } from "@orpc/server";
-import { Effect } from "effect";
-import { z } from "zod";
 import {
 	CommonPluginErrors,
 	createPlugin,
 	PluginConfigurationError,
-} from "../../../src/index";
+} from "every-plugin";
+import { Effect, Queue } from "every-plugin/effect";
+import { type ContractRouterClient, eventIterator, implement, oc } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
 import { TestClient, testItemSchema } from "./client";
 
 // Schema for streaming events
@@ -19,6 +18,13 @@ const streamEventSchema = z.object({
 	metadata: z.object({
 		itemIndex: z.number(),
 	})
+});
+
+// Schema for background producer events
+const backgroundEventSchema = z.object({
+	id: z.string(),
+	index: z.number(),
+	timestamp: z.number(),
 });
 
 // Contract definition for the test plugin
@@ -85,6 +91,43 @@ export const testContract = oc.router({
 			inputValue: z.string(),
 		}))
 		.errors(CommonPluginErrors),
+
+	// Background producer streaming - simulates long-lived process
+	listenBackground: oc
+		.route({ method: 'POST', path: '/listenBackground' })
+		.input(z.object({
+			maxResults: z.number().min(1).max(100).optional(),
+		}))
+		.output(eventIterator(backgroundEventSchema))
+		.errors(CommonPluginErrors),
+
+	// Utility to manually enqueue background events
+	enqueueBackground: oc
+		.route({ method: 'POST', path: '/enqueueBackground' })
+		.input(z.object({
+			id: z.string().optional(),
+		}))
+		.output(z.object({
+			ok: z.boolean(),
+		}))
+		.errors(CommonPluginErrors),
+
+	// Get current queue size for diagnostics
+	getQueueSize: oc
+		.route({ method: 'POST', path: '/getQueueSize' })
+		.output(z.object({
+			size: z.number(),
+		}))
+		.errors(CommonPluginErrors),
+
+	// Simple ping for testing client dispatch
+	ping: oc
+		.route({ method: 'POST', path: '/ping' })
+		.output(z.object({
+			ok: z.boolean(),
+			timestamp: z.number(),
+		}))
+		.errors(CommonPluginErrors),
 });
 
 // Export the client type for typed oRPC clients
@@ -97,6 +140,9 @@ export default createPlugin({
 	variables: z.object({
 		baseUrl: z.string(),
 		timeout: z.number().optional(),
+		backgroundEnabled: z.boolean().default(false).optional(),
+		backgroundIntervalMs: z.number().min(50).max(5000).default(500).optional(),
+		backgroundMaxItems: z.number().min(1).max(1000).optional(),
 	}),
 	secrets: z.object({
 		apiKey: z.string(),
@@ -128,29 +174,69 @@ export default createPlugin({
 				catch: (error) => new Error(`Health check failed: ${error instanceof Error ? error.message : String(error)}`)
 			});
 
+			// Create background queue as a scoped resource
+			const backgroundQueue = yield* Effect.acquireRelease(
+				Queue.bounded<{ id: string; index: number; timestamp: number }>(1000),
+				(q) => Queue.shutdown(q)
+			);
+
+			// Start background producer if enabled
+			if (config.variables.backgroundEnabled) {
+				const maxItems = config.variables.backgroundMaxItems;
+
+				yield* Effect.forkScoped(
+					Effect.gen(function* () {
+						let i = 0;
+						while (!maxItems || i < maxItems) {
+							i++;
+
+							const event = {
+								id: `bg-${i}`,
+								index: i,
+								timestamp: Date.now(),
+							};
+
+							yield* Queue.offer(backgroundQueue, event).pipe(
+								Effect.catchAll((error) => {
+									console.log(`[TestPlugin] Queue offer failed for event ${i}:`, error);
+									return Effect.void;
+								})
+							);
+
+							yield* Effect.tryPromise(() =>
+								new Promise(resolve => setTimeout(resolve, config.variables.backgroundIntervalMs))
+							);
+						}
+						console.log(`[TestPlugin] Background producer completed after ${i} events`);
+					})
+				);
+			}
+
 			// Return context object - this gets passed to createRouter
 			return {
-				client
+				client,
+				backgroundQueue
 			};
 		}),
-	createRouter: (context: { client: TestClient }) => {
-		const os = implement(testContract).$context<{ client: TestClient }>();
+	createRouter: (context) => {
+		const { client, backgroundQueue } = context;
+		const os = implement(testContract).$context<typeof context>();
 
 		// Basic single item fetch
 		const getById = os.getById.handler(async ({ input }) => {
-			const item = await context.client.fetchById(input.id);
+			const item = await client.fetchById(input.id);
 			return { item };
 		});
 
 		// Basic bulk fetch
 		const getBulk = os.getBulk.handler(async ({ input }) => {
-			const items = await context.client.fetchBulk(input.ids);
+			const items = await client.fetchBulk(input.ids);
 			return { items };
 		});
 
 		// Simple predictable streaming
 		const simpleStream = os.simpleStream.handler(async function* ({ input }) {
-			yield* context.client.streamItems(input.count, input.prefix);
+			yield* client.streamItems(input.count, input.prefix);
 		});
 
 		// Empty stream for testing
@@ -200,9 +286,53 @@ export default createPlugin({
 		// Config validation testing
 		const requiresSpecialConfig = os.requiresSpecialConfig.handler(async ({ input }) => {
 			return {
-				configValue: context.client.getConfigValue(),
+				configValue: client.getConfigValue(),
 				inputValue: input.checkValue,
 			};
+		});
+
+		// Background producer streaming
+		const listenBackground = os.listenBackground.handler(async function* ({ input }) {
+			let count = 0;
+			const maxResults = input.maxResults;
+
+			while (!maxResults || count < maxResults) {
+				try {
+					const event = await Effect.runPromise(Queue.take(backgroundQueue));
+					yield event;
+					count++;
+				} catch (error) {
+					break;
+				}
+			}
+		});
+
+		// Manual enqueue utility
+		const enqueueBackground = os.enqueueBackground.handler(async ({ input }) => {
+			const event = {
+				id: input.id || `manual-${Date.now()}`,
+				index: -1, // Manual events use -1 to distinguish from auto-generated
+				timestamp: Date.now(),
+			};
+
+			await Effect.runPromise(
+				Queue.offer(backgroundQueue, event).pipe(
+					Effect.catchAll(() => Effect.succeed(false))
+				)
+			);
+
+			return { ok: true };
+		});
+
+		// Queue size diagnostic
+		const getQueueSize = os.getQueueSize.handler(async () => {
+			const size = await Effect.runPromise(Queue.size(backgroundQueue));
+			return { size };
+		});
+
+		// Simple ping for testing
+		const ping = os.ping.handler(async () => {
+			return { ok: true, timestamp: Date.now() };
 		});
 
 		// Return the oRPC router
@@ -213,6 +343,10 @@ export default createPlugin({
 			emptyStream,
 			throwError,
 			requiresSpecialConfig,
+			listenBackground,
+			enqueueBackground,
+			getQueueSize,
+			ping,
 		});
 	}
 });

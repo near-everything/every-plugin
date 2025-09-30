@@ -13,10 +13,7 @@
     "@module-federation/enhanced": "^0.18.3",
     "@module-federation/node": "^2.7.15",
     "@module-federation/runtime-core": "^0.18.3",
-    "@orpc/client": "^1.9.0",
-    "@orpc/openapi": "^1.9.0",
-    "@orpc/zod": "^1.9.0",
-    "every-plugin": "link:every-plugin",
+    "every-plugin": "workspace:*",
     "@rspack/cli": "^1.5.2",
     "@rspack/core": "^1.5.2",
     "@types/node": "^20.0.0",
@@ -25,8 +22,5 @@
   "scripts": {
     "build": "rspack build && tsc -p tsconfig.build.json",
     "dev": "rspack serve"
-  },
-  "dependencies": {
-    "@orpc/contract": "^1.8.6"
   }
 }

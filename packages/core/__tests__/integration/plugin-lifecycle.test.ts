@@ -25,7 +25,7 @@ const TEST_REGISTRY = {
 const TEST_CONFIG = {
   variables: {
     baseUrl: "http://localhost:1337",
-    timeout: 5000,
+    timeout: 5000
   },
   secrets: {
     apiKey: "test-api-key-value",

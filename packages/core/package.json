@@ -24,7 +24,20 @@
       "types": "./dist/runtime/services/normalize.d.ts",
       "require": "./dist/runtime/services/normalize.js",
       "default": "./dist/runtime/services/normalize.js"
-    }
+    },
+    "./effect": {
+      "types": "./dist/effect.d.ts",
+      "default": "./dist/effect.js"
+    },
+    "./zod": {
+      "types": "./dist/zod.d.ts",
+      "default": "./dist/zod.js"
+    },
+    "./orpc": {
+      "types": "./dist/orpc.d.ts",
+      "default": "./dist/orpc.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
@@ -60,10 +73,10 @@
     "@module-federation/enhanced": "^0.18.3",
     "@module-federation/node": "^2.7.15",
     "@module-federation/runtime-core": "^0.18.3",
-    "@orpc/contract": "^1.8.6",
-    "@orpc/server": "^1.8.6",
-    "effect": "^3.17.13",
-    "zod": "^4.1.5"
+    "@orpc/contract": "1.8.6",
+    "@orpc/server": "1.8.6",
+    "effect": "3.17.13",
+    "zod": "4.1.5"
   },
   "keywords": [
     "plugin",
