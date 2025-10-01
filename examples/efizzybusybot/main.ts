@@ -12,6 +12,7 @@ import { DatabaseService } from "./services/db.service";
 import { EmbeddingsService } from "./services/embeddings.service";
 import { EntityExtractionService } from "./services/entity-extraction.service";
 import { KnowledgeGraphService } from "./services/knowledge-graph.service";
+import { LoggerService } from "./services/logger.service";
 import { NearAiService } from "./services/nearai.service";
 import { processMessage } from "./worker";
 
@@ -245,7 +246,8 @@ const program = Effect.gen(function* () {
 
 const MainLayer = Layer.mergeAll(
   DatabaseService.Default,
-  EmbeddingsService.Default
+  EmbeddingsService.Default,
+  LoggerService.Default
 );
 
 const DependentLayer = Layer.mergeAll(
