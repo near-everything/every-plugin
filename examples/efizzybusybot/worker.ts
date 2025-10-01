@@ -209,10 +209,11 @@ export const processMessage = (
       const entityExtraction = yield* EntityExtractionService;
       yield* entityExtraction.processAndStore(content, messageId).pipe(
         Effect.catchAll((error) =>
-          Effect.logDebug("Entity extraction failed (non-critical)").pipe(
+          Effect.logWarning("⚠️ Entity extraction failed (non-critical)").pipe(
             Effect.annotateLogs({ 
               error: error instanceof Error ? error.message : String(error),
-              messageId 
+              messageId,
+              preview: content.slice(0, 100)
             }),
             Effect.as(Effect.void)
           )

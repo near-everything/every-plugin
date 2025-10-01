@@ -42,13 +42,14 @@ export class EntityExtractionService extends Effect.Service<EntityExtractionServ
           }
 
           const hasNearAccount = message.match(/\w+\.near/i);
-          const hasRelationshipKeywords = /work|build|found|collaborate|member|develop|create|partner/i.test(message);
+          const hasMention = message.match(/@\w+/);
+          const hasRelationshipKeywords = /work|build|found|collaborate|member|develop|create|partner|team/i.test(message);
 
-          if (!hasNearAccount && !hasRelationshipKeywords) {
+          if (!hasNearAccount && !hasMention && !hasRelationshipKeywords) {
             return { nearAccounts: [], relationships: [] };
           }
 
-          yield* Effect.logDebug("🔍 Extracting entities and relationships").pipe(
+          yield* Effect.logInfo("🔍 Extracting entities and relationships").pipe(
             Effect.annotateLogs({ messageLength: message.length })
           );
 
@@ -57,16 +58,38 @@ export class EntityExtractionService extends Effect.Service<EntityExtractionServ
               const { object } = await generateObject({
                 model: nearai('deepseek-v3.1'),
                 schema: ExtractionSchema,
-                prompt: `Extract NEAR accounts and relationships from this message.
+                prompt: `Extract NEAR accounts, projects, people, and their relationships from this message.
 
 Message: "${message}"
 
-Instructions:
-- Identify any NEAR accounts (format: name.near)
-- Identify relationships between people and projects/organizations
-- Common predicates: works_on, founded, collaborates_with, member_of, leads, contributes_to
-- Be precise and only extract explicitly stated information
-- If nothing relevant is found, return empty arrays`,
+CRITICAL Instructions:
+1. Extract NEAR accounts in ANY format:
+   - Full format: "name.near" 
+   - Shorthand: "crosspost.near" mentioned as just "crosspost"
+   - In parentheses: "(crosspost.near)"
+   
+2. Extract people mentioned by:
+   - Telegram handles: @username
+   - Names: "Jay", "John Smith"
+   - With NEAR accounts: "efiz.near" or "efiz"
+   
+3. Extract projects/organizations:
+   - With handles: @open_crosspost
+   - Project names: "Open Crosspost"
+   - DAO names, organization names
+   
+4. Identify ALL relationships:
+   - Team membership: "X works on Y", "X is on Y team", "team members: A, B, C"
+   - Leadership: "X founded Y", "X leads Y"
+   - Collaboration: "X collaborates with Y"
+   - For team lists, create relationship for EACH member
+   
+5. BE AGGRESSIVE in extraction:
+   - If someone mentions a project and people in same sentence, assume relationship
+   - "my project X with teammates A, B" = create relationships for A and B to X
+   - Team lists = each person works_on the project
+
+Return empty arrays ONLY if truly nothing is mentioned.`,
                 temperature: 0.3,
               });
 
@@ -75,7 +98,7 @@ Instructions:
             catch: (error) => new Error(`Entity extraction failed: ${error instanceof Error ? error.message : String(error)}`)
           });
 
-          yield* Effect.logDebug("✅ Entity extraction completed").pipe(
+          yield* Effect.logInfo("✅ Entity extraction completed").pipe(
             Effect.annotateLogs({ 
               nearAccounts: result.nearAccounts.length,
               relationships: result.relationships.length 
@@ -92,32 +115,40 @@ Instructions:
           Effect.gen(function* () {
             const extracted = yield* extractFromMessage(message);
 
+            if (extracted.nearAccounts.length === 0 && extracted.relationships.length === 0) {
+              yield* Effect.logDebug("No entities or relationships extracted");
+              return;
+            }
+
             for (const nearAccount of extracted.nearAccounts) {
-              if (nearAccount.type === 'person' && nearAccount.associatedWith) {
+              if (nearAccount.type === 'person') {
+                const name = nearAccount.associatedWith || nearAccount.account.replace('.near', '');
                 const personaId = yield* db.findOrCreatePersona(
-                  nearAccount.associatedWith,
+                  name,
                   nearAccount.account,
                   'human'
                 );
 
-                yield* Effect.logDebug("👤 Created/found persona").pipe(
+                yield* Effect.logInfo("👤 Created/found persona").pipe(
                   Effect.annotateLogs({ 
-                    name: nearAccount.associatedWith,
+                    name,
                     nearAccount: nearAccount.account,
                     personaId 
                   })
                 );
-              } else if (nearAccount.type !== 'person') {
+              } else {
+                const name = nearAccount.associatedWith || nearAccount.account.replace('.near', '');
                 const entityId = yield* db.findOrCreateEntity(
-                  nearAccount.associatedWith || nearAccount.account,
+                  name,
                   nearAccount.account,
                   nearAccount.type
                 );
 
-                yield* Effect.logDebug("🏢 Created/found entity").pipe(
+                yield* Effect.logInfo("🏢 Created/found entity").pipe(
                   Effect.annotateLogs({ 
-                    name: nearAccount.associatedWith || nearAccount.account,
+                    name,
                     nearAccount: nearAccount.account,
+                    type: nearAccount.type,
                     entityId 
                   })
                 );
@@ -151,7 +182,7 @@ Instructions:
                 sourceMessageId: messageId,
               });
 
-              yield* Effect.logDebug("🔗 Created relationship").pipe(
+              yield* Effect.logInfo("🔗 Created relationship").pipe(
                 Effect.annotateLogs({ 
                   subject: rel.subject,
                   predicate: rel.predicate,
