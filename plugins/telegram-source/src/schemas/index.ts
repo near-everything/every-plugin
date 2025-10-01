@@ -22,7 +22,7 @@ export const telegramContract = oc.router({
     .route({ method: 'POST', path: '/listen' })
     .input(z.object({
       chatId: z.string().optional(),
-      maxResults: z.number().min(1).optional().default(100),
+      maxResults: z.number().min(1).optional(),
       messageTypes: z.array(z.enum(['text', 'photo', 'document', 'video', 'voice', 'audio', 'sticker', 'location', 'contact', 'animation', 'video_note'])).optional(),
       chatTypes: z.array(z.enum(['private', 'group', 'supergroup', 'channel'])).optional(),
       commands: z.array(z.string()).optional(),

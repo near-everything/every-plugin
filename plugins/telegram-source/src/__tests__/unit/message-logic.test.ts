@@ -24,8 +24,7 @@ const TEST_REGISTRY: PluginRegistry = {
 // Shared config for all tests - enables instance reuse and prevents polling conflicts
 const SHARED_TEST_CONFIG = {
   variables: {
-    timeout: 30000,
-    defaultMaxResults: 100,
+    timeout: 30000
   },
   secrets: {
     botToken: process.env.TELEGRAM_BOT_TOKEN!,

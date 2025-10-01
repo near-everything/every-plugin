@@ -63,7 +63,6 @@ export default createPlugin({
   variables: z.object({
     domain: z.string().min(1).optional(), // Optional - if not provided, use polling mode
     timeout: z.number().default(30000),
-    defaultMaxResults: z.number().min(1).max(1000).default(100),
   }),
   secrets: z.object({
     webhookToken: z.string().optional(),

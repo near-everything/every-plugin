@@ -17,9 +17,12 @@ export interface DatabaseService {
   // Message operations
   insertMessage: (message: NewMessage) => Effect.Effect<number, Error>;
   getMessageById: (id: number) => Effect.Effect<Message | null, Error>;
-  getAllMessages: (limit?: number) => Effect.Effect<Message[], Error>;
+  getAllMessages: (limit?: number, offset?: number) => Effect.Effect<Message[], Error>;
   getMessagesByChatId: (chatId: string, limit?: number) => Effect.Effect<Message[], Error>;
+  getConversationHistory: (chatId: string, limit?: number) => Effect.Effect<Message[], Error>;
+  getMessagesByThreadId: (threadId: string, limit?: number) => Effect.Effect<Message[], Error>;
   markMessageProcessed: (id: number) => Effect.Effect<void, Error>;
+  markMessageRespondedTo: (id: number) => Effect.Effect<void, Error>;
 
   // Stream state operations
   saveStreamState: (state: NewStreamState) => Effect.Effect<void, Error>;
@@ -66,13 +69,14 @@ export const DatabaseServiceLive = Layer.effect(
           catch: (error) => new Error(`Failed to get message: ${error}`)
         }),
 
-      getAllMessages: (limit = 1000) =>
+      getAllMessages: (limit = 1000, offset = 0) =>
         Effect.tryPromise({
           try: async () => {
             return await db.select()
               .from(messages)
               .orderBy(desc(messages.ingestedAt))
-              .limit(limit);
+              .limit(limit)
+              .offset(offset);
           },
           catch: (error) => new Error(`Failed to get all messages: ${error}`)
         }),
@@ -89,6 +93,30 @@ export const DatabaseServiceLive = Layer.effect(
           catch: (error) => new Error(`Failed to get messages by chat: ${error}`)
         }),
 
+      getConversationHistory: (chatId: string, limit = 20) =>
+        Effect.tryPromise({
+          try: async () => {
+            return await db.select()
+              .from(messages)
+              .where(eq(messages.chatId, chatId))
+              .orderBy(desc(messages.createdAt))
+              .limit(limit);
+          },
+          catch: (error) => new Error(`Failed to get conversation history: ${error}`)
+        }),
+
+      getMessagesByThreadId: (threadId: string, limit = 50) =>
+        Effect.tryPromise({
+          try: async () => {
+            return await db.select()
+              .from(messages)
+              .where(eq(messages.conversationThreadId, threadId))
+              .orderBy(desc(messages.createdAt))
+              .limit(limit);
+          },
+          catch: (error) => new Error(`Failed to get messages by thread: ${error}`)
+        }),
+
       markMessageProcessed: (id: number) =>
         Effect.tryPromise({
           try: async () => {
@@ -97,6 +125,16 @@ export const DatabaseServiceLive = Layer.effect(
               .where(eq(messages.id, id));
           },
           catch: (error) => new Error(`Failed to mark message processed: ${error}`)
+        }),
+
+      markMessageRespondedTo: (id: number) =>
+        Effect.tryPromise({
+          try: async () => {
+            await db.update(messages)
+              .set({ respondedTo: true })
+              .where(eq(messages.id, id));
+          },
+          catch: (error) => new Error(`Failed to mark message responded to: ${error}`)
         }),
 
       saveStreamState: (state: NewStreamState) =>

@@ -1,12 +1,14 @@
 import { Effect } from "effect";
+import type { Context } from "telegraf";
+import type { Update } from "telegraf/types";
 import type { NewMessage } from "./schemas/database";
 import { DatabaseService } from "./services/db.service";
+import { NearAiService } from "./services/nearai.service";
 
-// Constants
-const EJLBRAEM_USER_ID = "1893641782";
+const BOT_OWNER_ID = Bun.env.BOT_OWNER_ID;
 
 // Utility functions to extract data from Telegraf Context
-const extractMessageContent = (ctx) => {
+const extractMessageContent = (ctx: Context<Update>) => {
   if (ctx.message && 'text' in ctx.message) {
     return ctx.message.text || '';
   }
@@ -16,7 +18,7 @@ const extractMessageContent = (ctx) => {
   return '';
 };
 
-const extractContentType = (ctx) => {
+const extractContentType = (ctx: Context<Update>) => {
   if (!ctx.message) return 'unknown';
   
   if ('text' in ctx.message) return 'text';
@@ -34,13 +36,13 @@ const extractContentType = (ctx) => {
   return 'unknown';
 };
 
-const extractExternalId = (ctx) => {
+const extractExternalId = (ctx: Context<Update>) => {
   const chatId = ctx.chat?.id || 0;
   const messageId = ctx.message?.message_id || 0;
   return `${chatId}-${messageId}`;
 };
 
-const extractMessageUrl = (ctx) => {
+const extractMessageUrl = (ctx: Context<Update>) => {
   if (!ctx.chat || !ctx.message) return undefined;
   
   // For channels and supergroups with usernames
@@ -53,16 +55,16 @@ const extractMessageUrl = (ctx) => {
   return undefined;
 };
 
-const isCommand = (ctx) => {
+const isCommand = (ctx: Context<Update>) => {
   const content = extractMessageContent(ctx);
   return content.startsWith('/');
 };
 
-const isReply = (ctx) => {
+const isReply = (ctx: Context<Update>) => {
   return !!(ctx.message && 'reply_to_message' in ctx.message && ctx.message.reply_to_message);
 };
 
-const hasMedia = (ctx) => {
+const hasMedia = (ctx: Context<Update>) => {
   if (!ctx.message) return false;
   
   return !!(
@@ -78,11 +80,12 @@ const hasMedia = (ctx) => {
 };
 
 // Convert Telegraf Context to database message format
-const convertToDbMessage = (ctx): NewMessage => {
+const convertToDbMessage = (ctx: Context<Update>): NewMessage => {
   const content = extractMessageContent(ctx);
   const contentType = extractContentType(ctx);
   const externalId = extractExternalId(ctx);
   const url = extractMessageUrl(ctx);
+  const isCmd = isCommand(ctx);
   
   return {
     externalId,
@@ -100,119 +103,113 @@ const convertToDbMessage = (ctx): NewMessage => {
     chatId: ctx.chat?.id?.toString() || '0',
     messageId: ctx.message?.message_id || 0,
     chatType: ctx.chat?.type || 'unknown',
-    isCommand: isCommand(ctx),
+    isCommand: isCmd,
     isReply: isReply(ctx),
     hasMedia: hasMedia(ctx),
+    commandType: isCmd ? extractCommand(content) : null,
     
     processed: false,
     rawData: JSON.stringify(ctx.update),
   };
 };
 
-// Check if bot is mentioned in the message
-const isBotMentioned = (ctx) => {
+const isBotMentioned = (ctx: Context<Update>) => {
   const content = extractMessageContent(ctx).toLowerCase();
   return content.includes('@efizzybusybot') || content.includes('efizzybusybot');
 };
 
-// Check if message is from ejlbraem
-const isFromEjlbraem = (ctx) => {
-  return ctx.from?.id?.toString() === EJLBRAEM_USER_ID;
+const isFromOwner = (ctx: Context<Update>) => {
+  return ctx.from?.id?.toString() === BOT_OWNER_ID;
 };
 
-// Check if message is a reply to the bot
-const isReplyToBot = (ctx) => {
+const isReplyToBot = (ctx: Context<Update>) => {
   if (!ctx.message || !('reply_to_message' in ctx.message) || !ctx.message.reply_to_message) {
     return false;
   }
-  
-  // Check if the replied-to message is from the bot
   return ctx.message.reply_to_message.from?.is_bot === true;
 };
 
-// Generate reply text based on message analysis
-const generateReply = (ctx) => {
-  const username = ctx.from?.username || ctx.from?.first_name || 'friend';
-  
-  // Priority 1: Check if from ejlbraem
-  if (isFromEjlbraem(ctx)) {
-    return "daddy!";
-  }
-  
-  // Priority 2: Check if bot is mentioned
-  if (isBotMentioned(ctx)) {
-    return `hey! ${username}`;
-  }
-  
-  // Priority 3: Check if replying to the bot
-  if (isReplyToBot(ctx)) {
-    return "what's up?";
-  }
-  
-  // No reply needed
-  return null;
+const shouldRespond = (ctx: Context<Update>) => {
+  return isFromOwner(ctx) || isBotMentioned(ctx) || isReplyToBot(ctx);
 };
 
-// Main worker function to process a telegram message
+const extractCommand = (text: string) => {
+  if (!text.startsWith('/')) return null;
+  const parts = text.split(' ');
+  return parts[0]?.substring(1); // Remove the "/" and return the command word
+};
+
+const generateAiResponse = (
+  message: string,
+  ctx: Context<Update>,
+  conversationHistory: any[]
+) =>
+  Effect.gen(function* () {
+    const nearAi = yield* NearAiService;
+    const content = extractMessageContent(ctx);
+    const isOwner = isFromOwner(ctx);
+
+    const context = {
+      chatId: ctx.chat?.id?.toString() || '0',
+      authorId: ctx.from?.id?.toString(),
+      authorUsername: ctx.from?.username,
+      isFromOwner: isOwner,
+      conversationHistory
+    };
+
+    const response = yield* nearAi.generateResponse(content, context);
+    return { response, commandType: null };
+  });
+
 export const processMessage = (
-  ctx: any,
-  sendReply: (chatId: string, text: string, replyToMessageId?: number) => Effect.Effect<void, Error>
+  ctx: Context<Update>
 ) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
     
     try {
-      // Always save to database first
       const dbMessage = convertToDbMessage(ctx);
       const messageId = yield* db.insertMessage(dbMessage);
       
       if (messageId === 0) {
-        console.log(`📝 Duplicate message skipped: ${dbMessage.externalId}`);
         return;
       }
       
       const content = extractMessageContent(ctx);
       const username = ctx.from?.username || 'unknown';
-      console.log(`📝 Saved message ${messageId}: ${username} - "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`);
       
-      // Check if we need to reply
-      const replyText = generateReply(ctx);
-      
-      if (replyText) {
-        // Send reply
+      if (shouldRespond(ctx)) {
         const chatId = ctx.chat?.id?.toString() || '0';
-        const replyToMessageId = ctx.message?.message_id;
+        const conversationHistory = yield* db.getConversationHistory(chatId, 10);
         
-        yield* sendReply(chatId, replyText, replyToMessageId).pipe(
-          Effect.catchAll((error) => {
-            console.error(`❌ Failed to send reply: ${error}`);
-            return Effect.void;
-          })
-        );
+        const { response, commandType } = yield* generateAiResponse(content, ctx, conversationHistory);
         
-        console.log(`💬 Replied to ${username}: "${replyText}"`);
+        if (response) {
+          // Use Telegraf's built-in reply method instead of custom sendReply
+          yield* Effect.tryPromise(() => ctx.reply(response)).pipe(
+            Effect.catchAll((error) => {
+              console.error(`Failed to send reply: ${error}`);
+              return Effect.void;
+            })
+          );
+          
+          console.log(`AI replied to ${username}${commandType ? ` (${commandType} command)` : ''}`);
+          
+          yield* db.markMessageRespondedTo(messageId);
+        }
       }
       
-      // Mark as processed
       yield* db.markMessageProcessed(messageId);
       
     } catch (error) {
-      console.error(`❌ Error processing message ${extractExternalId(ctx)}:`, error);
+      console.error(`Error processing message: ${error}`);
       throw error;
     }
   });
 
-// Batch process multiple messages
-export const processMessages = (
-  contexts,
-  sendReply: (chatId: string, text: string, replyToMessageId?: number) => Effect.Effect<void, Error>
-) =>
+export const processMessages = (contexts: Context<Update>[]) =>
   Effect.gen(function* () {
-    console.log(`🔄 Processing batch of ${contexts.length} messages`);
-    
     for (const ctx of contexts) {
-      yield* processMessage(ctx, sendReply);
+      yield* processMessage(ctx);
     }
-    
-    console.log(`✅ Completed processing ${contexts.length} messages`);
   });

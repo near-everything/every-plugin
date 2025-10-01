@@ -9,6 +9,7 @@ import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
 import type TelegramPlugin from "../../plugins/telegram-source/src";
 import { DatabaseService, DatabaseServiceLive } from "./services/db.service";
+import { NearAiServiceLive } from "./services/nearai.service";
 import { processMessage } from "./worker";
 
 // Define typed registry bindings for the telegram plugin
@@ -30,7 +31,7 @@ const useWebhooks = !!WEBHOOK_DOMAIN;
 const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
   registry: {
     "@curatedotfun/telegram-source": {
-      remoteUrl: "https://elliot-braem-60-curatedotfun-telegram-source-ever-2be544a48-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-61-curatedotfun-telegram-source-ever-42ebc08c0-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },
@@ -119,21 +120,12 @@ const createHttpServer = (plugin: PluginResult<PluginOf<TelegramBindings["@curat
     await next();
   });
 
-  // Start HTTP server
-  console.log(`🌐 Starting HTTP server on port ${HTTP_PORT}...`);
-  console.log(`📡 Mode: ${useWebhooks ? 'Webhook' : 'Polling'}`);
-
   const server = Bun.serve({
     port: HTTP_PORT,
     fetch: app.fetch,
   });
 
-  console.log(`✅ HTTP server running on http://localhost:${HTTP_PORT}`);
-  console.log(`📊 Messages endpoint: http://localhost:${HTTP_PORT}/messages`);
-  console.log(`🔗 Telegram endpoints: http://localhost:${HTTP_PORT}/telegram/*`);
-  if (useWebhooks) {
-    console.log(`🪝 Webhook endpoint: http://localhost:${HTTP_PORT}/telegram/webhook`);
-  }
+  console.log(`✅ HTTP server running on http://localhost:${HTTP_PORT} (${useWebhooks ? 'webhook' : 'polling'} mode)`);
 
   return { server };
 });
@@ -167,7 +159,7 @@ const loadState = () =>
 // Main program
 const program = Effect.gen(function* () {
   const shutdown = () => {
-    console.log('\n🛑 Shutting down bot gracefully...');
+    console.log('Shutting down...');
     runtime.runPromise(Effect.gen(function* () {
       const pluginRuntime = yield* PluginRuntime;
       yield* pluginRuntime.shutdown();
@@ -177,14 +169,11 @@ const program = Effect.gen(function* () {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  console.log('🤖 Starting efizzybusybot with new telegram plugin...\n');
-
   // Initialize plugin at program root level
   const pluginRuntime = yield* PluginRuntime;
   const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", {
     variables: {
       timeout: 30000,
-      defaultMaxResults: 100,
       ...(useWebhooks && WEBHOOK_DOMAIN && { domain: WEBHOOK_DOMAIN })
     },
     secrets: {
@@ -193,42 +182,20 @@ const program = Effect.gen(function* () {
     }
   });
 
-  // Load initial state
   const initialState = yield* loadState();
 
   if (initialState) {
-    console.log(`📂 Resuming from saved state (${initialState.totalProcessed || 0} messages total)`);
-  } else {
-    console.log('📂 Starting fresh message collection');
+    console.log(`Resuming from saved state: ${initialState.totalProcessed || 0} messages processed`);
   }
 
   // Start HTTP server with plugin as dependency
   const { server } = yield* createHttpServer(plugin);
   const { client } = plugin;
 
-  // Create reply function for worker
-  const sendReply = (chatId: string, text: string, replyToMessageId?: number) =>
-    Effect.tryPromise(() =>
-      client.sendMessage({
-        chatId,
-        text,
-        replyToMessageId,
-      })
-    ).pipe(
-      Effect.map(() => void 0),
-      Effect.catchAll((error) => {
-        console.error(`Failed to send reply: ${error}`);
-        return Effect.fail(new Error(`Reply failed: ${error}`));
-      })
-    );
 
-  // Start message streaming and processing
   const asyncIterable = yield* Effect.tryPromise(() =>
     client.listen({
-      // chatId: TARGET_CHAT_ID,
-      // maxResults: 100,
-      messageTypes: ['text', 'photo', 'document', 'video', 'voice', 'audio', 'sticker', 'location', 'contact', 'animation', 'video_note'],
-      // commands: ['/start', '/help'], // Include common commands
+      messageTypes: ['text'],
     })
   );
 
@@ -240,22 +207,13 @@ const program = Effect.gen(function* () {
       Effect.gen(function* () {
         messageCount++;
 
-        // Diagnostic logging matching test patterns
-        console.log(`🔍 Received message via stream: Update ${ctx.update?.update_id}`);
-        
-        if (ctx.message && 'text' in ctx.message && ctx.message.text) {
-          console.log(`📝 Message text: "${ctx.message.text}"`);
-        }
+        yield* processMessage(ctx).pipe(
+          Effect.catchAll((error) => {
+            console.error(`Failed to process message ${ctx.message?.message_id || 'unknown'} from ${ctx.from?.username || 'unknown'}:`, error);
+            return Effect.void; // Continue stream despite error
+          })
+        );
 
-        const username = ctx.from?.username || ctx.from?.first_name || 'unknown';
-        const chatType = ctx.chat?.type || 'unknown';
-
-        console.log(`📨 Message ${messageCount}: ${username} in ${chatType}`);
-
-        // Process message with worker
-        yield* processMessage(ctx, sendReply);
-
-        // Save state periodically
         if (messageCount % 10 === 0) {
           yield* saveState({
             totalProcessed: messageCount,
@@ -270,18 +228,12 @@ const program = Effect.gen(function* () {
 
 }).pipe(
   Effect.provide(Logger.minimumLogLevel(LogLevel.Info)),
+  Effect.provide(NearAiServiceLive),
   Effect.provide(DatabaseServiceLive),
   Effect.provide(runtime)
 );
 
-// Display configuration info
-console.log('🔧 Environment Configuration:');
-console.log(`🔧 TELEGRAM_BOT_TOKEN: ${BOT_TOKEN ? '✅ Set' : '❌ Missing'}`);
-console.log(`🔧 WEBHOOK_DOMAIN: ${WEBHOOK_DOMAIN || '❌ Not set (using polling)'}`);
-console.log(`🔧 WEBHOOK_TOKEN: ${WEBHOOK_TOKEN ? '✅ Set' : '❌ Not set'}`);
-console.log(`🔧 HTTP_PORT: ${HTTP_PORT}`);
-console.log(`🔧 TELEGRAM_CHAT_ID: ${TARGET_CHAT_ID || '❌ Not set (monitoring all chats)'}`);
-console.log('🔧 Bot must be added to groups/channels to see messages\n');
+console.log('🤖 Starting efizzybusybot...');
 
 // Run the program
 await runtime.runPromise(program);

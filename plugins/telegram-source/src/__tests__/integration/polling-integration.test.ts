@@ -24,8 +24,7 @@ const TEST_CHAT_ID = process.env.TELEGRAM_TEST_CHAT_ID || "-4956736324";
 
 const POLLING_CONFIG = {
   variables: {
-    timeout: 30000,
-    defaultMaxResults: 100,
+    timeout: 30000
   },
   secrets: {
     botToken: "{{TELEGRAM_BOT_TOKEN}}",

@@ -29,6 +29,12 @@ export const messages = sqliteTable("messages", {
   ingestedAt: text("ingested_at").default(sql`CURRENT_TIMESTAMP`),
   processed: integer("processed", { mode: "boolean" }).default(false),
   
+  // Conversation and AI fields
+  embedding: text("embedding"), // JSON array of embeddings for vectorization
+  conversationThreadId: text("conversation_thread_id"), // Track conversation context
+  respondedTo: integer("responded_to", { mode: "boolean" }).default(false),
+  commandType: text("command_type"), // Type of command if isCommand=true
+  
   // Raw data for debugging/analysis
   rawData: text("raw_data"), // Full TelegramItem JSON
 }, (table) => ([
@@ -39,6 +45,9 @@ export const messages = sqliteTable("messages", {
   index("messages_ingested_at_idx").on(table.ingestedAt),
   index("messages_is_command_idx").on(table.isCommand),
   index("messages_processed_idx").on(table.processed),
+  index("messages_conversation_thread_idx").on(table.conversationThreadId),
+  index("messages_responded_to_idx").on(table.respondedTo),
+  index("messages_command_type_idx").on(table.commandType),
 ]));
 
 // Simple stream state tracking
