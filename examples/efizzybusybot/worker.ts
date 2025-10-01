@@ -1,9 +1,10 @@
-import { Effect } from "effect";
+import { Effect } from "every-plugin/effect";
 import type { Context } from "telegraf";
 import type { Update } from "telegraf/types";
 import type { NewMessage } from "./schemas/database";
 import { DatabaseService } from "./services/db.service";
 import { EmbeddingsService } from "./services/embeddings.service";
+import { EntityExtractionService } from "./services/entity-extraction.service";
 import { NearAiService } from "./services/nearai.service";
 
 const BOT_OWNER_ID = Bun.env.BOT_OWNER_ID;
@@ -180,73 +181,77 @@ export const processMessage = (
     const db = yield* DatabaseService;
     const embeddings = yield* EmbeddingsService;
     
-    try {
-      const dbMessage = convertToDbMessage(ctx);
-      const messageId = yield* db.insertMessage(dbMessage);
-      
-      if (messageId === 0) {
-        return;
-      }
-      
-      const content = extractMessageContent(ctx);
-      const username = ctx.from?.username || 'unknown';
-      
-      // Log incoming message
-      yield* Effect.logInfo("📥 Message received").pipe(
-        Effect.annotateLogs({
-          from: username,
-          chatId: ctx.chat?.id?.toString(),
-          preview: content.slice(0, 50) + (content.length > 50 ? "..." : ""),
-          updateId: ctx.update.update_id
-        })
-      );
-      
-      // Generate and store embedding for this message (for future context retrieval)
-      if (content.trim().length > 0) {
-        const messageEmbedding = yield* embeddings.generateEmbedding(content);
-        yield* db.updateMessageEmbedding(messageId, messageEmbedding);
-      }
-      
-      if (shouldRespond(ctx)) {
-        const chatId = ctx.chat?.id?.toString() || '0';
-        const conversationHistory = yield* db.getConversationHistory(chatId, 10);
-        
-        const { response, commandType } = yield* generateAiResponse(content, ctx, conversationHistory);
-        
-        if (response) {
-          // Use Telegraf's built-in reply method instead of custom sendReply
-          yield* Effect.tryPromise(() => ctx.reply(response)).pipe(
-            Effect.catchAll((error) => 
-              Effect.logError("Failed to send reply").pipe(
-                Effect.annotateLogs({ 
-                  error: error instanceof Error ? error.message : String(error),
-                  username 
-                }),
-                Effect.as(Effect.void)
-              )
-            )
-          );
-          
-          yield* Effect.logInfo("💬 AI response sent").pipe(
-            Effect.annotateLogs({
-              to: username,
-              preview: response.slice(0, 50) + (response.length > 50 ? "..." : ""),
-              commandType: commandType || undefined
-            })
-          );
-          
-          yield* db.markMessageRespondedTo(messageId);
-        }
-      }
-      
-      yield* db.markMessageProcessed(messageId);
-      
-    } catch (error) {
-      yield* Effect.logError("Error processing message").pipe(
-        Effect.annotateLogs({ error: error instanceof Error ? error.message : String(error) })
-      );
-      throw error;
+    const dbMessage = convertToDbMessage(ctx);
+    const messageId = yield* db.insertMessage(dbMessage);
+    
+    if (messageId === 0) {
+      return;
     }
+    
+    const content = extractMessageContent(ctx);
+    const username = ctx.from?.username || 'unknown';
+    
+    yield* Effect.logInfo("📥 Message received").pipe(
+      Effect.annotateLogs({
+        from: username,
+        chatId: ctx.chat?.id?.toString(),
+        preview: content.slice(0, 50) + (content.length > 50 ? "..." : ""),
+        updateId: ctx.update.update_id
+      })
+    );
+    
+    if (content.trim().length > 0) {
+      const messageEmbedding = yield* embeddings.generateEmbedding(content);
+      yield* db.updateMessageEmbedding(messageId, messageEmbedding);
+    }
+    
+    if (content.trim().length > 10) {
+      const entityExtraction = yield* EntityExtractionService;
+      yield* entityExtraction.processAndStore(content, messageId).pipe(
+        Effect.catchAll((error) =>
+          Effect.logDebug("Entity extraction failed (non-critical)").pipe(
+            Effect.annotateLogs({ 
+              error: error instanceof Error ? error.message : String(error),
+              messageId 
+            }),
+            Effect.as(Effect.void)
+          )
+        )
+      );
+    }
+    
+    if (shouldRespond(ctx)) {
+      const chatId = ctx.chat?.id?.toString() || '0';
+      const conversationHistory = yield* db.getConversationHistory(chatId, 10);
+      
+      const { response, commandType } = yield* generateAiResponse(content, ctx, conversationHistory);
+      
+      if (response) {
+        yield* Effect.tryPromise(() => ctx.reply(response)).pipe(
+          Effect.catchAll((error) => 
+            Effect.logError("Failed to send reply").pipe(
+              Effect.annotateLogs({ 
+                error: error instanceof Error ? error.message : String(error),
+                username 
+              }),
+              Effect.as(Effect.void)
+            )
+          )
+        );
+        
+        yield* Effect.logInfo("💬 AI response sent").pipe(
+          Effect.annotateLogs({
+            to: username,
+            preview: response.slice(0, 50) + (response.length > 50 ? "..." : ""),
+            commandType: commandType || undefined
+          })
+        );
+        
+        yield* db.markMessageRespondedTo(messageId);
+      }
+    }
+    
+    yield* db.markMessageProcessed(messageId);
   });
 
 export const processMessages = (contexts: Context<Update>[]) =>

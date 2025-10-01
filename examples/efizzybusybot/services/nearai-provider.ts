@@ -76,11 +76,6 @@ export class NearAiLanguageModel implements LanguageModelV2 {
       temperature: settings.temperature ?? this.settings.temperature ?? 0.7,
     };
 
-    // Better formatted logging
-    console.log('[NearAI] Request:', {
-      url: `${this.config.baseURL}/chat/completions`,
-      body: JSON.stringify(requestBody, null, 2)
-    });
 
     try {
       const response = await fetch(`${this.config.baseURL}/chat/completions`, {
@@ -93,20 +88,13 @@ export class NearAiLanguageModel implements LanguageModelV2 {
         signal: options.abortSignal,
       });
 
-      console.log(`[NearAI] Response Status: ${response.status} ${response.statusText}`);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[NearAI] Error Response:', errorText);
         throw new Error(`NEAR AI API error: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const data = await response.json() as NearAIResponse;
-
-      console.log('[NearAI] Response:', {
-        choices: data.choices?.length || 0,
-        usage: data.usage
-      });
 
       const choice = data.choices[0];
       if (!choice || !choice.message) {
@@ -128,7 +116,6 @@ export class NearAiLanguageModel implements LanguageModelV2 {
         rawCall: { rawPrompt: prompt, rawSettings: settings },
       };
     } catch (error) {
-      console.error('[NearAI] Error:', error);
       if (error instanceof Error) {
         throw error;
       }

@@ -23,7 +23,8 @@
     "zephyr-rspack-plugin": "^0.0.59"
   },
   "scripts": {
-    "build": "rspack build && tsc -p tsconfig.build.json",
+    "build": "rspack build",
+    "type-check": "tsc -p tsconfig.build.json",
     "dev": "rspack serve",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -8,9 +8,11 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
 import type TelegramPlugin from "../../plugins/telegram-source/src";
-import { DatabaseService, DatabaseServiceLive } from "./services/db.service";
-import { EmbeddingsServiceLive } from "./services/embeddings.service";
-import { NearAiServiceLive } from "./services/nearai.service";
+import { DatabaseService } from "./services/db.service";
+import { EmbeddingsService } from "./services/embeddings.service";
+import { EntityExtractionService } from "./services/entity-extraction.service";
+import { KnowledgeGraphService } from "./services/knowledge-graph.service";
+import { NearAiService } from "./services/nearai.service";
 import { processMessage } from "./worker";
 
 // Define typed registry bindings for the telegram plugin
@@ -32,7 +34,7 @@ const useWebhooks = !!WEBHOOK_DOMAIN;
 const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
   registry: {
     "@curatedotfun/telegram-source": {
-      remoteUrl: "https://elliot-braem-61-curatedotfun-telegram-source-ever-42ebc08c0-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-64-curatedotfun-telegram-source-ever-d4a8166e2-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },
@@ -241,18 +243,23 @@ const program = Effect.gen(function* () {
 
 });
 
-// Run the main program with all services
+const MainLayer = Layer.mergeAll(
+  DatabaseService.Default,
+  EmbeddingsService.Default
+);
+
+const DependentLayer = Layer.mergeAll(
+  EntityExtractionService.Default,
+  KnowledgeGraphService.Default,
+  NearAiService.Default
+).pipe(Layer.provide(MainLayer));
+
+const AppLayer = Layer.merge(MainLayer, DependentLayer);
+
 await Effect.runPromise(
   program.pipe(
-    Effect.provide(
-      NearAiServiceLive.pipe(
-        Layer.provide(DatabaseServiceLive),
-        Layer.provide(EmbeddingsServiceLive),
-        Layer.merge(DatabaseServiceLive),
-        Layer.merge(EmbeddingsServiceLive),
-        Layer.merge(Logger.minimumLogLevel(LogLevel.Info))
-      )
-    ),
+    Effect.provide(AppLayer),
+    Effect.provide(Logger.minimumLogLevel(LogLevel.Info)),
     Effect.provide(runtime)
   )
 );

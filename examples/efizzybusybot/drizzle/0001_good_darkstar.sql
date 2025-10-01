@@ -61,36 +61,40 @@ CREATE INDEX `relationships_subject_idx` ON `relationships` (`subject_type`,`sub
 CREATE INDEX `relationships_object_idx` ON `relationships` (`object_type`,`object_id`);--> statement-breakpoint
 CREATE INDEX `relationships_predicate_idx` ON `relationships` (`predicate`);--> statement-breakpoint
 CREATE INDEX `relationships_source_message_idx` ON `relationships` (`source_message_id`);--> statement-breakpoint
-DROP INDEX "entities_near_account_unique";--> statement-breakpoint
-DROP INDEX "entities_name_idx";--> statement-breakpoint
-DROP INDEX "entities_near_account_idx";--> statement-breakpoint
-DROP INDEX "entities_entity_type_idx";--> statement-breakpoint
-DROP INDEX "messages_external_id_unique";--> statement-breakpoint
-DROP INDEX "messages_external_id_idx";--> statement-breakpoint
-DROP INDEX "messages_persona_id_idx";--> statement-breakpoint
-DROP INDEX "messages_platform_account_id_idx";--> statement-breakpoint
-DROP INDEX "messages_plugin_id_idx";--> statement-breakpoint
-DROP INDEX "messages_chat_id_idx";--> statement-breakpoint
-DROP INDEX "messages_author_id_idx";--> statement-breakpoint
-DROP INDEX "messages_author_username_idx";--> statement-breakpoint
-DROP INDEX "messages_ingested_at_idx";--> statement-breakpoint
-DROP INDEX "messages_is_command_idx";--> statement-breakpoint
-DROP INDEX "messages_processed_idx";--> statement-breakpoint
-DROP INDEX "messages_conversation_thread_idx";--> statement-breakpoint
-DROP INDEX "messages_responded_to_idx";--> statement-breakpoint
-DROP INDEX "messages_command_type_idx";--> statement-breakpoint
-DROP INDEX "personas_near_account_unique";--> statement-breakpoint
-DROP INDEX "personas_near_account_idx";--> statement-breakpoint
-DROP INDEX "personas_persona_type_idx";--> statement-breakpoint
-DROP INDEX "personas_display_name_idx";--> statement-breakpoint
-DROP INDEX "platform_accounts_unique";--> statement-breakpoint
-DROP INDEX "platform_accounts_persona_id_idx";--> statement-breakpoint
-DROP INDEX "platform_accounts_plugin_id_idx";--> statement-breakpoint
-DROP INDEX "platform_accounts_platform_username_idx";--> statement-breakpoint
-DROP INDEX "relationships_subject_idx";--> statement-breakpoint
-DROP INDEX "relationships_object_idx";--> statement-breakpoint
-DROP INDEX "relationships_predicate_idx";--> statement-breakpoint
-DROP INDEX "relationships_source_message_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "entities_near_account_unique";--> statement-breakpoint
+DROP INDEX IF EXISTS "entities_name_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "entities_near_account_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "entities_entity_type_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_external_id_unique";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_external_id_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_persona_id_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_platform_account_id_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_plugin_id_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_chat_id_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_author_id_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_author_username_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_ingested_at_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_is_command_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_processed_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_conversation_thread_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_responded_to_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "messages_command_type_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "personas_near_account_unique";--> statement-breakpoint
+DROP INDEX IF EXISTS "personas_near_account_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "personas_persona_type_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "personas_display_name_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "platform_accounts_unique";--> statement-breakpoint
+DROP INDEX IF EXISTS "platform_accounts_persona_id_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "platform_accounts_plugin_id_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "platform_accounts_platform_username_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "relationships_subject_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "relationships_object_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "relationships_predicate_idx";--> statement-breakpoint
+DROP INDEX IF EXISTS "relationships_source_message_idx";--> statement-breakpoint
+ALTER TABLE `messages` ADD `persona_id` integer REFERENCES personas(id);--> statement-breakpoint
+ALTER TABLE `messages` ADD `platform_account_id` integer REFERENCES platform_accounts(id);--> statement-breakpoint
+ALTER TABLE `messages` ADD `plugin_id` text NOT NULL DEFAULT '@curatedotfun/telegram-source';--> statement-breakpoint
+ALTER TABLE `stream_state` ADD `plugin_id` text;--> statement-breakpoint
 ALTER TABLE `messages` ALTER COLUMN "embedding" TO "embedding" F32_BLOB(384);--> statement-breakpoint
 CREATE UNIQUE INDEX `messages_external_id_unique` ON `messages` (`external_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `messages_external_id_idx` ON `messages` (`external_id`);--> statement-breakpoint
@@ -105,8 +109,4 @@ CREATE INDEX `messages_is_command_idx` ON `messages` (`is_command`);--> statemen
 CREATE INDEX `messages_processed_idx` ON `messages` (`processed`);--> statement-breakpoint
 CREATE INDEX `messages_conversation_thread_idx` ON `messages` (`conversation_thread_id`);--> statement-breakpoint
 CREATE INDEX `messages_responded_to_idx` ON `messages` (`responded_to`);--> statement-breakpoint
-CREATE INDEX `messages_command_type_idx` ON `messages` (`command_type`);--> statement-breakpoint
-ALTER TABLE `messages` ADD `persona_id` integer REFERENCES personas(id);--> statement-breakpoint
-ALTER TABLE `messages` ADD `platform_account_id` integer REFERENCES platform_accounts(id);--> statement-breakpoint
-ALTER TABLE `messages` ADD `plugin_id` text NOT NULL;--> statement-breakpoint
-ALTER TABLE `stream_state` ADD `plugin_id` text;
+CREATE INDEX `messages_command_type_idx` ON `messages` (`command_type`);
