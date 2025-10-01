@@ -29,7 +29,7 @@
 		"@xenova/transformers": "^2.17.2",
 		"ai": "^5.0.59",
 		"drizzle-orm": "^0.44.5",
-		"every-plugin": "link:every-plugin",
+		"every-plugin": "0.1.5",
 		"hono": "^4.9.8"
 	}
 }
