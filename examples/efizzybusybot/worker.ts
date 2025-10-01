@@ -129,8 +129,17 @@ const isReplyToBot = (ctx: Context<Update>) => {
   return ctx.message.reply_to_message.from?.is_bot === true;
 };
 
+const isPrivateChat = (ctx: Context<Update>) => {
+  return ctx.chat?.type === 'private';
+};
+
 const shouldRespond = (ctx: Context<Update>) => {
-  return isFromOwner(ctx) || isBotMentioned(ctx) || isReplyToBot(ctx);
+  return (
+    isFromOwner(ctx) || 
+    isBotMentioned(ctx) || 
+    isReplyToBot(ctx) ||
+    isPrivateChat(ctx)
+  );
 };
 
 const extractCommand = (text: string) => {
