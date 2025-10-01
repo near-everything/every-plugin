@@ -3,6 +3,7 @@ import type { Context } from "telegraf";
 import type { Update } from "telegraf/types";
 import type { NewMessage } from "./schemas/database";
 import { DatabaseService } from "./services/db.service";
+import { EmbeddingsService } from "./services/embeddings.service";
 import { NearAiService } from "./services/nearai.service";
 
 const BOT_OWNER_ID = Bun.env.BOT_OWNER_ID;
@@ -175,6 +176,7 @@ export const processMessage = (
 ) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
+    const embeddings = yield* EmbeddingsService;
     
     try {
       const dbMessage = convertToDbMessage(ctx);
@@ -186,6 +188,13 @@ export const processMessage = (
       
       const content = extractMessageContent(ctx);
       const username = ctx.from?.username || 'unknown';
+      
+      // Generate and store embedding for this message (for future context retrieval)
+      if (content.trim().length > 0) {
+        const messageEmbedding = yield* embeddings.generateEmbedding(content);
+        yield* db.updateMessageEmbedding(messageId, messageEmbedding);
+        console.log(`[Memory] Generated and stored embedding for message from ${username}`);
+      }
       
       if (shouldRespond(ctx)) {
         const chatId = ctx.chat?.id?.toString() || '0';

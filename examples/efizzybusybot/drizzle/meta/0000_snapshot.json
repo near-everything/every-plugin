@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f8c1f4c6-9a14-4d3f-b56e-1f839d6d7b06",
+  "id": "52d31552-5123-4ef0-a69f-ca0966ffc7b0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "messages": {
@@ -131,6 +131,35 @@
           "autoincrement": false,
           "default": false
         },
+        "embedding": {
+          "name": "embedding",
+          "type": "F32_BLOB(512)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "conversation_thread_id": {
+          "name": "conversation_thread_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "responded_to": {
+          "name": "responded_to",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": false
+        },
+        "command_type": {
+          "name": "command_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "raw_data": {
           "name": "raw_data",
           "type": "text",
@@ -193,6 +222,27 @@
           "name": "messages_processed_idx",
           "columns": [
             "processed"
+          ],
+          "isUnique": false
+        },
+        "messages_conversation_thread_idx": {
+          "name": "messages_conversation_thread_idx",
+          "columns": [
+            "conversation_thread_id"
+          ],
+          "isUnique": false
+        },
+        "messages_responded_to_idx": {
+          "name": "messages_responded_to_idx",
+          "columns": [
+            "responded_to"
+          ],
+          "isUnique": false
+        },
+        "messages_command_type_idx": {
+          "name": "messages_command_type_idx",
+          "columns": [
+            "command_type"
           ],
           "isUnique": false
         }

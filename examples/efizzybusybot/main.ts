@@ -1,14 +1,15 @@
 #!/usr/bin/env bun
 
 import { RPCHandler } from "@orpc/server/fetch";
-import { Effect, Logger, LogLevel, Stream } from "every-plugin/effect";
 import type { PluginBinding, PluginOf } from "every-plugin";
+import { Effect, Layer, Logger, LogLevel, Stream } from "every-plugin/effect";
 import { createPluginRuntime, type PluginResult } from "every-plugin/runtime";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
 import type TelegramPlugin from "../../plugins/telegram-source/src";
 import { DatabaseService, DatabaseServiceLive } from "./services/db.service";
+import { EmbeddingsServiceLive } from "./services/embeddings.service";
 import { NearAiServiceLive } from "./services/nearai.service";
 import { processMessage } from "./worker";
 
@@ -68,7 +69,7 @@ const createHttpServer = (plugin: PluginResult<PluginOf<TelegramBindings["@curat
     try {
       const limit = parseInt(c.req.query("limit") || "100");
       const messagesResult = await Effect.runPromise(
-        db.getAllMessages(limit).pipe(Effect.provide(DatabaseServiceLive))
+        db.getAllMessages(limit)
       );
 
       return c.json({
@@ -156,20 +157,9 @@ const loadState = () =>
     };
   });
 
-// Main program
+console.log('🤖 Starting efizzybusybot...');
+
 const program = Effect.gen(function* () {
-  const shutdown = () => {
-    console.log('Shutting down...');
-    runtime.runPromise(Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      yield* pluginRuntime.shutdown();
-    }).pipe(Effect.provide(runtime))).finally(() => process.exit(0));
-  };
-
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-
-  // Initialize plugin at program root level
   const pluginRuntime = yield* PluginRuntime;
   const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", {
     variables: {
@@ -182,6 +172,18 @@ const program = Effect.gen(function* () {
     }
   });
 
+  const shutdown = () => {
+    console.log('Shutting down...');
+    runtime.runPromise(
+      Effect.andThen(PluginRuntime, (pluginRuntime) => pluginRuntime.shutdown()).pipe(
+        Effect.provide(runtime)
+      )
+    ).finally(() => process.exit(0));
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
   const initialState = yield* loadState();
 
   if (initialState) {
@@ -191,7 +193,6 @@ const program = Effect.gen(function* () {
   // Start HTTP server with plugin as dependency
   const { server } = yield* createHttpServer(plugin);
   const { client } = plugin;
-
 
   const asyncIterable = yield* Effect.tryPromise(() =>
     client.listen({
@@ -226,14 +227,20 @@ const program = Effect.gen(function* () {
     Stream.runDrain
   );
 
-}).pipe(
-  Effect.provide(Logger.minimumLogLevel(LogLevel.Info)),
-  Effect.provide(NearAiServiceLive),
-  Effect.provide(DatabaseServiceLive),
-  Effect.provide(runtime)
+});
+
+// Run the main program with all services
+await Effect.runPromise(
+  program.pipe(
+    Effect.provide(
+      NearAiServiceLive.pipe(
+        Layer.provide(DatabaseServiceLive),
+        Layer.provide(EmbeddingsServiceLive),
+        Layer.merge(DatabaseServiceLive),
+        Layer.merge(EmbeddingsServiceLive),
+        Layer.merge(Logger.minimumLogLevel(LogLevel.Info))
+      )
+    ),
+    Effect.provide(runtime)
+  )
 );
-
-console.log('🤖 Starting efizzybusybot...');
-
-// Run the program
-await runtime.runPromise(program);

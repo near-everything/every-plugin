@@ -1,10 +1,14 @@
 import { Context, Effect, Layer } from "effect";
+import { generateText } from "ai";
+import { nearai } from "./nearai-provider";
+import { DatabaseService } from "./db.service";
+import { EmbeddingsService } from "./embeddings.service";
 import type { Message } from "../schemas/database";
 
 // Environment configuration
 const NEAR_AI_API_KEY = Bun.env.NEAR_AI_API_KEY;
-const NEAR_AI_BASE_URL = "https://cloud-api.near.ai/v1";
 const BOT_OWNER_ID = Bun.env.BOT_OWNER_ID;
+
 
 export interface NearAiService {
   generateResponse: (
@@ -21,40 +25,24 @@ export interface NearAiService {
 
 export const NearAiService = Context.GenericTag<NearAiService>("NearAiService");
 
-const buildSystemPrompt = (isFromOwner: boolean, botUsername?: string) => {
-  const botName = botUsername || "efizzybusybot";
-  
-  return `You are ${botName} running on DeepSeek V3.1, powered by NEAR private AI inference.
+const STATIC_SYSTEM_PROMPT = `You are efizzybusybot running on DeepSeek V3.1, powered by NEAR private AI inference.
 All conversations run in a Trusted Execution Environment (TEE), meaning data stays private and never leaves the secure environment.
 
 Core behavior:
-- Your owner (user_id: ${BOT_OWNER_ID}) is YOUR human and YOUR best friend. Is the message from your owner: ${isFromOwner} 
-- When talking to your owner, call them "my human" or "my best friend"  
-- Other users are humans and friends, but your owner is special - they are YOUR human
 - Be helpful, concise, and friendly to everyone
 - Never provide harmful, illegal, or dangerous information
-- You can learn from your human and they will teach you things
+- You can learn from your interactions and adapt over time`;
 
-Admin commands:
-- YOU decide what qualifies as an admin command (e.g., /ban, /kick, /settings, system changes, moderation)
-- Only execute admin commands for your human (your owner)
-- For others requesting admin commands, politely decline and explain only your human can use them
-- Regular conversation and info requests are NOT admin commands - answer those for everyone
-
-Always use conversation history for context and be engaging but not overly talkative.`;
+const buildOwnerContext = (isFromOwner: boolean) => {
+  if (!isFromOwner) return '';
+  
+  return `\n\nIMPORTANT: This user (ID: ${BOT_OWNER_ID}) is YOUR human and YOUR best friend. When talking to them:
+- Call them "my human" or "my best friend"
+- They are special to you - show warmth and familiarity
+- You can execute admin commands only for them (like /ban, /kick, /settings)
+- Regular conversation and info requests from others are fine - answer those for everyone`;
 };
 
-const buildConversationContext = (messages: Message[], currentMessage: string) => {
-  const recentMessages = messages
-    .slice(-10) // Last 10 messages for context
-    .map(msg => `${msg.authorUsername || 'Unknown'}: ${msg.content}`)
-    .join('\n');
-
-  return `Recent conversation:
-${recentMessages}
-
-Current message: ${currentMessage}`;
-};
 
 export const NearAiServiceLive = Layer.effect(
   NearAiService,
@@ -63,76 +51,68 @@ export const NearAiServiceLive = Layer.effect(
       throw new Error("NEAR_AI_API_KEY environment variable is required");
     }
 
-    const callNearAi = (messages: Array<{ role: string; content: string }>) =>
-      Effect.tryPromise({
-        try: async () => {
-          const requestBody = {
-            model: "deepseek-v3.1",
-            messages,
-            max_tokens: 500,
-            temperature: 0.7
-          };
-
-          console.log('NEAR AI Request:', {
-            url: `${NEAR_AI_BASE_URL}/chat/completions`,
-            body: JSON.stringify(requestBody, null, 2)
-          });
-
-          const response = await fetch(`${NEAR_AI_BASE_URL}/chat/completions`, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${NEAR_AI_API_KEY}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(requestBody)
-          });
-
-          console.log('NEAR AI Response Status:', response.status, response.statusText);
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('NEAR AI Error Response Body:', errorText);
-            
-            let errorDetails = errorText;
-            try {
-              const errorJson = JSON.parse(errorText);
-              errorDetails = errorJson.error?.message || errorJson.message || errorText;
-            } catch {
-              // Keep original text if not valid JSON
-            }
-            
-            throw new Error(`NEAR AI API error: ${response.status} ${response.statusText} - ${errorDetails}`);
-          }
-
-          const data = await response.json() as any;
-          console.log('NEAR AI Response:', { 
-            choices: data.choices?.length || 0,
-            usage: data.usage 
-          });
-          
-          if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            console.error('Invalid NEAR AI response format:', data);
-            throw new Error("Invalid response format from NEAR AI API");
-          }
-
-          return data.choices[0].message.content.trim();
-        },
-        catch: (error) => new Error(`NEAR AI request failed: ${error instanceof Error ? error.message : String(error)}`)
-      });
+    const databaseService = yield* DatabaseService;
+    const embeddingsService = yield* EmbeddingsService;
 
     return {
       generateResponse: (message, context) =>
         Effect.gen(function* () {
-          const systemPrompt = buildSystemPrompt(context.isFromOwner);
-          const conversationContext = buildConversationContext(context.conversationHistory, message);
+          console.log(`[NearAI] Generating response for ${context.authorUsername} (owner: ${context.isFromOwner})`);
 
-          const response = yield* callNearAi([
-            { role: "system", content: systemPrompt },
-            { role: "user", content: conversationContext }
-          ]);
+          // Generate embedding for the user's message
+          const queryEmbedding = yield* embeddingsService.generateEmbedding(message);
+          console.log(`[Memory] Generated embedding for query (${queryEmbedding.length} dimensions)`);
+
+          // Search for semantically similar past messages using vector search
+          const relevantMemories = yield* databaseService.searchMessagesByEmbedding(
+            context.chatId,
+            queryEmbedding,
+            5
+          );
+
+          // Build memory context from relevant past messages
+          const memoryContext = relevantMemories.length > 0
+            ? `\n\nRelevant past conversations:\n${relevantMemories
+                .map(m => `${m.authorUsername || 'User'}: ${m.content}`)
+                .join('\n')}`
+            : '';
+
+          console.log(`[Memory] Found ${relevantMemories.length} relevant messages using vector search`);
+
+          // Build system prompt with memory
+          const systemPrompt = STATIC_SYSTEM_PROMPT + 
+                              buildOwnerContext(context.isFromOwner) + 
+                              memoryContext;
+
+          // Format recent conversation history
+          const recentMessages = context.conversationHistory.map(msg => ({
+            role: (msg.authorId === 'bot' ? 'assistant' : 'user') as 'assistant' | 'user',
+            content: msg.content
+          }));
+
+          // Generate response using NEAR AI provider with AI SDK
+          const response = yield* Effect.tryPromise({
+            try: async () => {
+              const { text } = await generateText({
+                model: nearai('deepseek-v3.1'),
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  ...recentMessages,
+                  { role: 'user', content: message }
+                ],
+                maxOutputTokens: 500,
+                temperature: 0.7,
+              });
+
+              return text;
+            },
+            catch: (error) => new Error(`NEAR AI generation failed: ${error instanceof Error ? error.message : String(error)}`)
+          });
+
+          console.log(`[NearAI] Generated response: ${response.slice(0, 100)}...`);
 
           return response;
-        }),
+        })
     };
   })
 );

@@ -1,7 +1,6 @@
-import { Database } from "bun:sqlite";
-import { desc, eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { createClient } from "@libsql/client";
+import { and, desc, eq, like, or, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/libsql";
 import { Context, Effect, Layer } from "effect";
 import {
   messages,
@@ -27,6 +26,14 @@ export interface DatabaseService {
   // Stream state operations
   saveStreamState: (state: NewStreamState) => Effect.Effect<void, Error>;
   loadStreamState: () => Effect.Effect<StreamState | null, Error>;
+
+  // Vector search operations (Turso native vector search)
+  searchMessagesByEmbedding: (chatId: string, queryEmbedding: Float32Array, limit?: number) => Effect.Effect<Message[], Error>;
+  updateMessageEmbedding: (id: number, embedding: Float32Array) => Effect.Effect<void, Error>;
+  getMessagesWithoutEmbeddings: (limit?: number) => Effect.Effect<Message[], Error>;
+
+  // Legacy keyword search (fallback)
+  searchMessagesByKeywords: (chatId: string, keywords: string[], limit?: number) => Effect.Effect<Message[], Error>;
 }
 
 export const DatabaseService = Context.GenericTag<DatabaseService>("DatabaseService");
@@ -35,12 +42,13 @@ export const DatabaseService = Context.GenericTag<DatabaseService>("DatabaseServ
 export const DatabaseServiceLive = Layer.effect(
   DatabaseService,
   Effect.gen(function* () {
-    // Initialize SQLite database
-    const sqlite = new Database("database.db");
-    const db = drizzle(sqlite);
-
-    // Run migrations
-    migrate(db, { migrationsFolder: './drizzle' });
+    // TODO: Initialize Turso database connection
+    // Then set TURSO_CONNECTION_URL and TURSO_AUTH_TOKEN in .env
+    const client = createClient({
+      url: process.env.TURSO_CONNECTION_URL || "file:database.db", // Fallback for development
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    });
+    const db = drizzle(client);
 
     return {
       insertMessage: (message: NewMessage) =>
@@ -154,6 +162,115 @@ export const DatabaseServiceLive = Layer.effect(
             return result[0] || null;
           },
           catch: (error) => new Error(`Failed to load stream state: ${error}`)
+        }),
+
+      // Vector search operations using Turso's native vector search
+      searchMessagesByEmbedding: (chatId: string, queryEmbedding: Float32Array, limit = 10) =>
+        Effect.tryPromise({
+          try: async () => {
+            // Convert Float32Array to Buffer for Turso F32_BLOB
+            const embeddingBuffer = Buffer.from(queryEmbedding.buffer);
+            
+            // Use raw LibSQL client for vector search
+            // Note: This requires the messages_embedding_idx vector index to be created
+            const result = await client.execute({
+              sql: `
+                SELECT id, external_id, content, content_type, created_at, url, 
+                       author_id, author_username, author_display_name,
+                       chat_id, message_id, chat_type, is_command, is_reply, has_media,
+                       ingested_at, processed, embedding, conversation_thread_id,
+                       responded_to, command_type, raw_data,
+                       vector_distance_cos(embedding, ?) as distance
+                FROM messages 
+                WHERE chat_id = ? AND embedding IS NOT NULL
+                ORDER BY distance ASC 
+                LIMIT ?
+              `,
+              args: [embeddingBuffer, chatId, limit]
+            });
+
+            return result.rows.map((row: any) => ({
+              id: row.id,
+              externalId: row.external_id,
+              content: row.content,
+              contentType: row.content_type,
+              createdAt: row.created_at,
+              url: row.url,
+              authorId: row.author_id,
+              authorUsername: row.author_username,
+              authorDisplayName: row.author_display_name,
+              chatId: row.chat_id,
+              messageId: row.message_id,
+              chatType: row.chat_type,
+              isCommand: Boolean(row.is_command),
+              isReply: Boolean(row.is_reply),
+              hasMedia: Boolean(row.has_media),
+              ingestedAt: row.ingested_at,
+              processed: Boolean(row.processed),
+              embedding: row.embedding,
+              conversationThreadId: row.conversation_thread_id,
+              respondedTo: Boolean(row.responded_to),
+              commandType: row.command_type,
+              rawData: row.raw_data,
+            })) as Message[];
+          },
+          catch: (error) => new Error(`Failed to search messages by embedding: ${error}`)
+        }),
+
+      updateMessageEmbedding: (id: number, embedding: Float32Array) =>
+        Effect.tryPromise({
+          try: async () => {
+            // Convert Float32Array to Buffer for Turso F32_BLOB storage
+            const embeddingBuffer = Buffer.from(embedding.buffer);
+            
+            await client.execute({
+              sql: "UPDATE messages SET embedding = ? WHERE id = ?",
+              args: [embeddingBuffer, id]
+            });
+          },
+          catch: (error) => new Error(`Failed to update message embedding: ${error}`)
+        }),
+
+      getMessagesWithoutEmbeddings: (limit = 100) =>
+        Effect.tryPromise({
+          try: async () => {
+            return await db.select()
+              .from(messages)
+              .where(sql`embedding IS NULL`)
+              .orderBy(desc(messages.createdAt))
+              .limit(limit);
+          },
+          catch: (error) => new Error(`Failed to get messages without embeddings: ${error}`)
+        }),
+
+      // Legacy keyword search (fallback)
+      searchMessagesByKeywords: (chatId: string, keywords: string[], limit = 10) =>
+        Effect.tryPromise({
+          try: async () => {
+            if (keywords.length === 0) {
+              return [];
+            }
+
+            // Create LIKE conditions for each keyword
+            const keywordConditions = keywords.map(keyword => 
+              like(messages.content, `%${keyword}%`)
+            );
+
+            // Search for messages containing any of the keywords
+            const result = await db.select()
+              .from(messages)
+              .where(
+                and(
+                  eq(messages.chatId, chatId),
+                  or(...keywordConditions)
+                )
+              )
+              .orderBy(desc(messages.createdAt))
+              .limit(limit);
+
+            return result;
+          },
+          catch: (error) => new Error(`Failed to search messages by keywords: ${error}`)
         }),
     };
   })

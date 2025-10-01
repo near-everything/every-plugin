@@ -16,6 +16,10 @@ CREATE TABLE `messages` (
 	`has_media` integer DEFAULT false,
 	`ingested_at` text DEFAULT CURRENT_TIMESTAMP,
 	`processed` integer DEFAULT false,
+	`embedding` F32_BLOB(384),
+	`conversation_thread_id` text,
+	`responded_to` integer DEFAULT false,
+	`command_type` text,
 	`raw_data` text
 );
 --> statement-breakpoint
@@ -27,10 +31,18 @@ CREATE INDEX `messages_author_username_idx` ON `messages` (`author_username`);--
 CREATE INDEX `messages_ingested_at_idx` ON `messages` (`ingested_at`);--> statement-breakpoint
 CREATE INDEX `messages_is_command_idx` ON `messages` (`is_command`);--> statement-breakpoint
 CREATE INDEX `messages_processed_idx` ON `messages` (`processed`);--> statement-breakpoint
+CREATE INDEX `messages_conversation_thread_idx` ON `messages` (`conversation_thread_id`);--> statement-breakpoint
+CREATE INDEX `messages_responded_to_idx` ON `messages` (`responded_to`);--> statement-breakpoint
+CREATE INDEX `messages_command_type_idx` ON `messages` (`command_type`);--> statement-breakpoint
 CREATE TABLE `stream_state` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`last_update_id` integer,
 	`total_processed` integer DEFAULT 0,
 	`chat_id` text,
 	`updated_at` text DEFAULT CURRENT_TIMESTAMP
-);
+);--> statement-breakpoint
+
+CREATE INDEX IF NOT EXISTS embedding_index
+ON messages (
+     libsql_vector_idx(embedding, 'metric=cosine')
+)

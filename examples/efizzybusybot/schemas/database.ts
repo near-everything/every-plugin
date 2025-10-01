@@ -1,5 +1,23 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { customType, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+// Custom embedding type for Turso F32_BLOB with proper dimensions
+const embedding = customType<{
+  data: number[];
+  config: { dimensions: number };
+  configRequired: true;
+  driverData: Buffer;
+}>({
+  dataType(config) {
+    return `F32_BLOB(${config.dimensions})`;
+  },
+  fromDriver(value: Buffer) {
+    return Array.from(new Float32Array(value.buffer));
+  },
+  toDriver(value: number[]) {
+    return sql`vector32(${JSON.stringify(value)})`;
+  },
+});
 
 // Simplified messages table that directly maps to TelegramItem
 export const messages = sqliteTable("messages", {
@@ -30,7 +48,7 @@ export const messages = sqliteTable("messages", {
   processed: integer("processed", { mode: "boolean" }).default(false),
   
   // Conversation and AI fields
-  embedding: text("embedding"), // JSON array of embeddings for vectorization
+  embedding: embedding("embedding", { dimensions: 384 }), // F32_BLOB for Turso vector search
   conversationThreadId: text("conversation_thread_id"), // Track conversation context
   respondedTo: integer("responded_to", { mode: "boolean" }).default(false),
   commandType: text("command_type"), // Type of command if isCommand=true
