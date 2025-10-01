@@ -5,6 +5,8 @@ import type { NewMessage } from "./schemas/database";
 import { DatabaseService } from "./services/db.service";
 import { EmbeddingsService } from "./services/embeddings.service";
 import { EntityExtractionService } from "./services/entity-extraction.service";
+import type { LogContext } from "./services/logger.service";
+import { LoggerService } from "./services/logger.service";
 import { NearAiService } from "./services/nearai.service";
 
 const BOT_OWNER_ID = Bun.env.BOT_OWNER_ID;
@@ -156,7 +158,8 @@ const generateAiResponse = (
   message: string,
   ctx: Context<Update>,
   conversationHistory: any[],
-  messageId: number
+  messageId: number,
+  logContext: LogContext
 ) =>
   Effect.gen(function* () {
     const nearAi = yield* NearAiService;
@@ -169,7 +172,8 @@ const generateAiResponse = (
       authorUsername: ctx.from?.username,
       isFromOwner: isOwner,
       conversationHistory,
-      messageId
+      messageId,
+      logContext
     };
 
     const response = yield* nearAi.generateResponse(content, context);
@@ -182,6 +186,14 @@ export const processMessage = (
   Effect.gen(function* () {
     const db = yield* DatabaseService;
     const embeddings = yield* EmbeddingsService;
+    const logger = yield* LoggerService;
+
+    const username = ctx.from?.username || 'unknown';
+    const chatId = ctx.chat?.id?.toString() || '0';
+    const userId = ctx.from?.id?.toString();
+    const updateId = ctx.update.update_id;
+
+    const logContext = logger.createContext(chatId, userId, username, updateId);
 
     const dbMessage = convertToDbMessage(ctx);
     const messageId = yield* db.insertMessage(dbMessage);
@@ -191,63 +203,77 @@ export const processMessage = (
     }
 
     const content = extractMessageContent(ctx);
-    const username = ctx.from?.username || 'unknown';
 
-    yield* Effect.logInfo("📥 Message received").pipe(
-      Effect.annotateLogs({
-        from: username,
-        chatId: ctx.chat?.id?.toString(),
-        preview: content.slice(0, 50) + (content.length > 50 ? "..." : ""),
-        updateId: ctx.update.update_id
-      })
+    yield* logger.info(
+      logContext,
+      "Worker",
+      "processMessage",
+      "Message received",
+      {
+        contentLength: content.length,
+        contentPreview: content.slice(0, 100),
+        contentType: dbMessage.contentType,
+      }
     );
 
     if (content.trim().length > 0) {
       const messageEmbedding = yield* embeddings.generateEmbedding(content);
       yield* db.updateMessageEmbedding(messageId, messageEmbedding);
+      yield* logger.debug(
+        logContext,
+        "Worker",
+        "processMessage",
+        "Embedding generated and stored",
+        { embeddingDimensions: messageEmbedding.length }
+      );
     }
 
     if (content.trim().length > 10) {
       const entityExtraction = yield* EntityExtractionService;
-      yield* entityExtraction.processAndStore(content, messageId).pipe(
+      yield* entityExtraction.processAndStore(content, messageId, logContext).pipe(
         Effect.catchAll((error) =>
-          Effect.logWarning("⚠️ Entity extraction failed (non-critical)").pipe(
-            Effect.annotateLogs({
+          logger.warn(
+            logContext,
+            "Worker",
+            "processMessage",
+            "Entity extraction failed (non-critical)",
+            {
               error: error instanceof Error ? error.message : String(error),
-              messageId,
-              preview: content.slice(0, 100)
-            }),
-            Effect.as(Effect.void)
-          )
+              contentPreview: content.slice(0, 100),
+            }
+          ).pipe(Effect.as(Effect.void))
         )
       );
     }
 
     if (shouldRespond(ctx)) {
-      const chatId = ctx.chat?.id?.toString() || '0';
       const conversationHistory = yield* db.getConversationHistory(chatId, 10);
 
-      const { response, commandType } = yield* generateAiResponse(content, ctx, conversationHistory, messageId);
+      const { response, commandType } = yield* generateAiResponse(content, ctx, conversationHistory, messageId, logContext);
 
       if (response) {
         yield* Effect.tryPromise(() => ctx.reply(response)).pipe(
           Effect.catchAll((error) =>
-            Effect.logError("Failed to send reply").pipe(
-              Effect.annotateLogs({
-                error: error instanceof Error ? error.message : String(error),
-                username
-              }),
-              Effect.as(Effect.void)
-            )
+            logger.error(
+              logContext,
+              "Worker",
+              "processMessage",
+              "Failed to send reply",
+              { error: error instanceof Error ? error.message : String(error) }
+            ).pipe(Effect.as(Effect.void))
           )
         );
 
-        yield* Effect.logInfo("💬 AI response sent").pipe(
-          Effect.annotateLogs({
-            to: username,
-            preview: response.slice(0, 50) + (response.length > 50 ? "..." : ""),
-            commandType: commandType || undefined
-          })
+        yield* logger.info(
+          logContext,
+          "Worker",
+          "processMessage",
+          "AI response sent",
+          {
+            responseLength: response.length,
+            responsePreview: response.slice(0, 100),
+            commandType: commandType || undefined,
+          }
         );
 
         yield* db.markMessageRespondedTo(messageId);
@@ -255,6 +281,14 @@ export const processMessage = (
     }
 
     yield* db.markMessageProcessed(messageId);
+
+    yield* logger.info(
+      logContext,
+      "Worker",
+      "processMessage",
+      "Message processing completed",
+      { messageId }
+    );
   });
 
 export const processMessages = (contexts: Context<Update>[]) =>

@@ -9,6 +9,8 @@ import {
 import { DatabaseService } from "./db.service";
 import { EmbeddingsService } from "./embeddings.service";
 import { KnowledgeGraphService } from "./knowledge-graph.service";
+import type { LogContext } from "./logger.service";
+import { LoggerService } from "./logger.service";
 import { nearai } from "./nearai-provider";
 
 const NEAR_AI_API_KEY = Bun.env.NEAR_AI_API_KEY;
@@ -37,12 +39,41 @@ const buildOwnerContext = (isFromOwner: boolean) => {
 - Regular conversation and info requests from others are fine - answer those for everyone`;
 };
 
+interface ToolResult {
+  toolName: string;
+  success: boolean;
+  result: Record<string, unknown>;
+}
 
+const formatToolRecap = (toolResults: ToolResult[]): string => {
+  if (toolResults.length === 0) return "";
+
+  const lines = ["I've recorded the following information:"];
+  
+  for (const tool of toolResults) {
+    if (!tool.success) continue;
+
+    if (tool.toolName === "create_persona") {
+      lines.push(`• Added person: ${tool.result.displayName}`);
+    } else if (tool.toolName === "create_entity") {
+      lines.push(`• Added project/org: ${tool.result.name}`);
+    } else if (tool.toolName === "create_relationship") {
+      lines.push(`• Recorded relationship: ${tool.result.relationship}`);
+    }
+  }
+
+  return lines.join("\n");
+};
 
 export class NearAiService extends Effect.Service<NearAiService>()(
   "NearAiService",
   {
-    dependencies: [DatabaseService.Default, EmbeddingsService.Default, KnowledgeGraphService.Default],
+    dependencies: [
+      DatabaseService.Default,
+      EmbeddingsService.Default,
+      KnowledgeGraphService.Default,
+      LoggerService.Default,
+    ],
     effect: Effect.gen(function* () {
       if (!NEAR_AI_API_KEY) {
         yield* Effect.die(new Error("NEAR_AI_API_KEY environment variable is required"));
@@ -51,6 +82,7 @@ export class NearAiService extends Effect.Service<NearAiService>()(
       const databaseService = yield* DatabaseService;
       const embeddingsService = yield* EmbeddingsService;
       const knowledgeGraphService = yield* KnowledgeGraphService;
+      const logger = yield* LoggerService;
 
       return {
         generateResponse: (
@@ -62,15 +94,20 @@ export class NearAiService extends Effect.Service<NearAiService>()(
             isFromOwner: boolean;
             conversationHistory: Message[];
             messageId?: number;
+            logContext: LogContext;
           }
         ) =>
           Effect.gen(function* () {
-            yield* Effect.logInfo("🤖 Generating AI response").pipe(
-              Effect.annotateLogs({
+            yield* logger.info(
+              context.logContext,
+              "NearAiService",
+              "generateResponse",
+              "Generating AI response",
+              {
+                chatId: context.chatId,
                 username: context.authorUsername,
                 isOwner: context.isFromOwner,
-                chatId: context.chatId
-              })
+              }
             );
 
             const queryEmbedding = yield* embeddingsService.generateEmbedding(message);
@@ -87,11 +124,15 @@ export class NearAiService extends Effect.Service<NearAiService>()(
               : '';
 
             if (relevantMemories.length > 0) {
-              yield* Effect.logDebug("Memory search completed").pipe(
-                Effect.annotateLogs({
+              yield* logger.debug(
+                context.logContext,
+                "NearAiService",
+                "generateResponse",
+                "Memory search completed",
+                {
                   relevantMessages: relevantMemories.length,
-                  embeddingDimensions: queryEmbedding.length
-                })
+                  embeddingDimensions: queryEmbedding.length,
+                }
               );
             }
 
@@ -114,11 +155,15 @@ export class NearAiService extends Effect.Service<NearAiService>()(
 
                 if (nodeInfo) {
                   graphContext = `\n\nKnown relationships: ${nodeInfo}`;
-                  yield* Effect.logDebug("Knowledge graph context added").pipe(
-                    Effect.annotateLogs({
+                  yield* logger.debug(
+                    context.logContext,
+                    "NearAiService",
+                    "generateResponse",
+                    "Knowledge graph context added",
+                    {
                       personaId: authorPersonaResult.id,
-                      info: nodeInfo.slice(0, 100)
-                    })
+                      contextPreview: nodeInfo.slice(0, 100),
+                    }
                   );
                 }
               }
@@ -148,96 +193,121 @@ Examples:
               content: msg.content
             }));
 
+            const toolResults: ToolResult[] = [];
+
             const tools = {
               create_persona: tool({
                 description: 'Create or update a person in the knowledge graph. Use this when learning about people from conversations.',
                 inputSchema: CreatePersonaParamsSchema,
                 execute: async ({ displayName, nearAccount, personaType }) => {
-                  const personaId = await Effect.runPromise(
-                    databaseService.findOrCreatePersona(displayName, nearAccount, personaType)
-                  );
-                  await Effect.runPromise(
-                    Effect.logInfo("👤 Created/found persona via tool").pipe(
-                      Effect.annotateLogs({ displayName, nearAccount, personaType, personaId })
+                  const result = await Effect.runPromise(
+                    Effect.gen(function* () {
+                      const personaId = yield* databaseService.findOrCreatePersona(displayName, nearAccount, personaType);
+                      yield* logger.info(
+                        context.logContext,
+                        "NearAiService",
+                        "create_persona",
+                        "Created/found persona",
+                        { displayName, nearAccount, personaType, personaId }
+                      );
+                      return { success: true as const, personaId, displayName };
+                    }).pipe(
+                      Effect.catchAll((error) =>
+                        Effect.succeed({ success: false as const, error: String(error) })
+                      )
                     )
                   );
-                  return { success: true, personaId, displayName };
+                  toolResults.push({ toolName: "create_persona", success: result.success, result });
+                  return result;
                 },
               }),
               create_entity: tool({
                 description: 'Create or update a project, organization, or DAO in the knowledge graph. Use this when learning about projects/orgs.',
                 inputSchema: CreateEntityParamsSchema,
                 execute: async ({ name, nearAccount, entityType }) => {
-                  const entityId = await Effect.runPromise(
-                    databaseService.findOrCreateEntity(name, nearAccount, entityType)
-                  );
-                  await Effect.runPromise(
-                    Effect.logInfo("🏢 Created/found entity via tool").pipe(
-                      Effect.annotateLogs({ name, nearAccount, entityType, entityId })
+                  const result = await Effect.runPromise(
+                    Effect.gen(function* () {
+                      const entityId = yield* databaseService.findOrCreateEntity(name, nearAccount, entityType);
+                      yield* logger.info(
+                        context.logContext,
+                        "NearAiService",
+                        "create_entity",
+                        "Created/found entity",
+                        { name, nearAccount, entityType, entityId }
+                      );
+                      return { success: true as const, entityId, name };
+                    }).pipe(
+                      Effect.catchAll((error) =>
+                        Effect.succeed({ success: false as const, error: String(error) })
+                      )
                     )
                   );
-                  return { success: true, entityId, name };
+                  toolResults.push({ toolName: "create_entity", success: result.success, result });
+                  return result;
                 },
               }),
               create_relationship: tool({
                 description: 'Create a relationship between two entities or people. Use this to record connections like "works on", "founded", "collaborates with".',
                 inputSchema: CreateRelationshipParamsSchema,
                 execute: async ({ subjectName, subjectType, predicate, objectName, objectType, context: relContext }) => {
-                  let subjectId: number;
-                  let objectId: number;
+                  const result = await Effect.runPromise(
+                    Effect.gen(function* () {
+                      let subjectId: number;
+                      let objectId: number;
 
-                  if (subjectType === 'person') {
-                    subjectId = await Effect.runPromise(
-                      databaseService.findOrCreatePersona(subjectName, undefined, 'human')
-                    );
-                  } else {
-                    subjectId = await Effect.runPromise(
-                      databaseService.findOrCreateEntity(subjectName, undefined, 'project')
-                    );
-                  }
+                      if (subjectType === 'person') {
+                        subjectId = yield* databaseService.findOrCreatePersona(subjectName, undefined, 'human');
+                      } else {
+                        subjectId = yield* databaseService.findOrCreateEntity(subjectName, undefined, 'project');
+                      }
 
-                  if (objectType === 'person') {
-                    objectId = await Effect.runPromise(
-                      databaseService.findOrCreatePersona(objectName, undefined, 'human')
-                    );
-                  } else {
-                    objectId = await Effect.runPromise(
-                      databaseService.findOrCreateEntity(objectName, undefined, 'project')
-                    );
-                  }
+                      if (objectType === 'person') {
+                        objectId = yield* databaseService.findOrCreatePersona(objectName, undefined, 'human');
+                      } else {
+                        objectId = yield* databaseService.findOrCreateEntity(objectName, undefined, 'project');
+                      }
 
-                  const relationshipId = await Effect.runPromise(
-                    databaseService.insertRelationship({
-                      subjectType,
-                      subjectId,
-                      predicate,
-                      objectType,
-                      objectId,
-                      context: relContext || null,
-                      confidenceScore: 0.8,
-                      sourceMessageId: context.messageId || null,
-                    })
-                  );
-
-                  await Effect.runPromise(
-                    Effect.logInfo("🔗 Created relationship via tool").pipe(
-                      Effect.annotateLogs({
-                        subject: subjectName,
+                      const relationshipId = yield* databaseService.insertRelationship({
+                        subjectType,
+                        subjectId,
                         predicate,
-                        object: objectName,
-                        relationshipId
-                      })
+                        objectType,
+                        objectId,
+                        context: relContext || null,
+                        confidenceScore: 0.8,
+                        sourceMessageId: context.messageId || null,
+                      });
+
+                      yield* logger.info(
+                        context.logContext,
+                        "NearAiService",
+                        "create_relationship",
+                        "Created relationship",
+                        {
+                          subject: subjectName,
+                          predicate,
+                          object: objectName,
+                          relationshipId,
+                        }
+                      );
+
+                      const relationship = `${subjectName} ${predicate} ${objectName}`;
+                      return { success: true as const, relationshipId, relationship };
+                    }).pipe(
+                      Effect.catchAll((error) =>
+                        Effect.succeed({ success: false as const, error: String(error) })
+                      )
                     )
                   );
-
-                  return { success: true, relationshipId, relationship: `${subjectName} ${predicate} ${objectName}` };
+                  toolResults.push({ toolName: "create_relationship", success: result.success, result });
+                  return result;
                 },
               }),
             };
 
-            const response = yield* Effect.tryPromise({
+            const { text, toolCalls } = yield* Effect.tryPromise({
               try: async () => {
-                const { text, toolCalls } = await generateText({
+                return await generateText({
                   model: nearai('deepseek-v3.1'),
                   messages: [
                     { role: 'system', content: systemPrompt },
@@ -248,33 +318,49 @@ Examples:
                   maxOutputTokens: 500,
                   temperature: 0.7,
                 });
-
-                if (toolCalls && toolCalls.length > 0) {
-                  await Effect.runPromise(
-                    Effect.logInfo("🔧 Tools used").pipe(
-                      Effect.annotateLogs({
-                        toolCount: toolCalls.length,
-                        tools: toolCalls.map(tc => tc.toolName).join(', ')
-                      })
-                    )
-                  );
-                }
-
-                return text;
               },
               catch: (error) => new Error(`NEAR AI generation failed: ${error instanceof Error ? error.message : String(error)}`)
             });
 
-            yield* Effect.logInfo("✅ AI response generated").pipe(
-              Effect.annotateLogs({
-                username: context.authorUsername,
+            if (toolCalls && toolCalls.length > 0) {
+              yield* logger.info(
+                context.logContext,
+                "NearAiService",
+                "generateResponse",
+                "Tools executed",
+                {
+                  toolCount: toolCalls.length,
+                  tools: toolCalls.map(tc => tc.toolName),
+                }
+              );
+            }
+
+            let finalResponse = text;
+
+            if (toolCalls && toolCalls.length > 0 && (!text || text.trim().length === 0)) {
+              finalResponse = formatToolRecap(toolResults);
+              yield* logger.info(
+                context.logContext,
+                "NearAiService",
+                "generateResponse",
+                "Generated tool recap (no text response from model)",
+                { recapLength: finalResponse.length }
+              );
+            }
+
+            yield* logger.info(
+              context.logContext,
+              "NearAiService",
+              "generateResponse",
+              "AI response generated",
+              {
                 model: "deepseek-v3.1",
-                responseLength: response.length,
-                preview: response.slice(0, 100) + (response.length > 100 ? "..." : "")
-              })
+                responseLength: finalResponse.length,
+                toolsUsed: toolCalls?.length || 0,
+              }
             );
 
-            return response;
+            return finalResponse;
           })
       };
     })

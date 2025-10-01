@@ -2,6 +2,8 @@ import { generateObject } from "ai";
 import { Effect } from "every-plugin/effect";
 import { z } from "zod";
 import { DatabaseService } from "./db.service";
+import type { LogContext } from "./logger.service";
+import { LoggerService } from "./logger.service";
 import { nearai } from "./nearai-provider";
 
 const NEAR_AI_API_KEY = Bun.env.NEAR_AI_API_KEY;
@@ -27,15 +29,16 @@ type ExtractionResult = z.infer<typeof ExtractionSchema>;
 export class EntityExtractionService extends Effect.Service<EntityExtractionService>()(
   "EntityExtractionService",
   {
-    dependencies: [DatabaseService.Default],
+    dependencies: [DatabaseService.Default, LoggerService.Default],
     effect: Effect.gen(function* () {
       if (!NEAR_AI_API_KEY) {
         yield* Effect.die(new Error("NEAR_AI_API_KEY environment variable is required"));
       }
 
       const db = yield* DatabaseService;
+      const logger = yield* LoggerService;
 
-      const extractFromMessage = (message: string): Effect.Effect<ExtractionResult, Error> =>
+      const extractFromMessage = (message: string, logContext: LogContext): Effect.Effect<ExtractionResult, Error> =>
         Effect.gen(function* () {
           if (message.length < 10) {
             return { nearAccounts: [], relationships: [] };
@@ -49,8 +52,12 @@ export class EntityExtractionService extends Effect.Service<EntityExtractionServ
             return { nearAccounts: [], relationships: [] };
           }
 
-          yield* Effect.logInfo("🔍 Extracting entities and relationships").pipe(
-            Effect.annotateLogs({ messageLength: message.length })
+          yield* logger.info(
+            logContext,
+            "EntityExtractionService",
+            "extractFromMessage",
+            "Extracting entities and relationships",
+            { messageLength: message.length }
           );
 
           const result = yield* Effect.tryPromise({
@@ -98,11 +105,15 @@ Return empty arrays ONLY if truly nothing is mentioned.`,
             catch: (error) => new Error(`Entity extraction failed: ${error instanceof Error ? error.message : String(error)}`)
           });
 
-          yield* Effect.logInfo("✅ Entity extraction completed").pipe(
-            Effect.annotateLogs({
+          yield* logger.info(
+            logContext,
+            "EntityExtractionService",
+            "extractFromMessage",
+            "Entity extraction completed",
+            {
               nearAccounts: result.nearAccounts.length,
-              relationships: result.relationships.length
-            })
+              relationships: result.relationships.length,
+            }
           );
 
           return result;
@@ -111,12 +122,17 @@ Return empty arrays ONLY if truly nothing is mentioned.`,
       return {
         extractFromMessage,
 
-        processAndStore: (message: string, messageId: number) =>
+        processAndStore: (message: string, messageId: number, logContext: LogContext) =>
           Effect.gen(function* () {
-            const extracted = yield* extractFromMessage(message);
+            const extracted = yield* extractFromMessage(message, logContext);
 
             if (extracted.nearAccounts.length === 0 && extracted.relationships.length === 0) {
-              yield* Effect.logDebug("No entities or relationships extracted");
+              yield* logger.debug(
+                logContext,
+                "EntityExtractionService",
+                "processAndStore",
+                "No entities or relationships extracted"
+              );
               return;
             }
 
@@ -129,12 +145,16 @@ Return empty arrays ONLY if truly nothing is mentioned.`,
                   'human'
                 );
 
-                yield* Effect.logInfo("👤 Created/found persona").pipe(
-                  Effect.annotateLogs({
+                yield* logger.info(
+                  logContext,
+                  "EntityExtractionService",
+                  "processAndStore",
+                  "Created/found persona",
+                  {
                     name,
                     nearAccount: nearAccount.account,
-                    personaId
-                  })
+                    personaId,
+                  }
                 );
               } else {
                 const name = nearAccount.associatedWith || nearAccount.account.replace('.near', '');
@@ -144,13 +164,17 @@ Return empty arrays ONLY if truly nothing is mentioned.`,
                   nearAccount.type
                 );
 
-                yield* Effect.logInfo("🏢 Created/found entity").pipe(
-                  Effect.annotateLogs({
+                yield* logger.info(
+                  logContext,
+                  "EntityExtractionService",
+                  "processAndStore",
+                  "Created/found entity",
+                  {
                     name,
                     nearAccount: nearAccount.account,
                     type: nearAccount.type,
-                    entityId
-                  })
+                    entityId,
+                  }
                 );
               }
             }
@@ -182,12 +206,16 @@ Return empty arrays ONLY if truly nothing is mentioned.`,
                 sourceMessageId: messageId,
               });
 
-              yield* Effect.logInfo("🔗 Created relationship").pipe(
-                Effect.annotateLogs({
+              yield* logger.info(
+                logContext,
+                "EntityExtractionService",
+                "processAndStore",
+                "Created relationship",
+                {
                   subject: rel.subject,
                   predicate: rel.predicate,
-                  object: rel.object
-                })
+                  object: rel.object,
+                }
               );
             }
           }),
