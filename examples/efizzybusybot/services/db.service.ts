@@ -1,6 +1,7 @@
 import { createClient } from "@libsql/client";
-import { and, desc, eq, like, or, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/libsql";
+import { migrate } from "drizzle-orm/libsql/migrator";
 import { Context, Effect, Layer } from "effect";
 import {
   messages,
@@ -31,9 +32,6 @@ export interface DatabaseService {
   searchMessagesByEmbedding: (chatId: string, queryEmbedding: Float32Array, limit?: number) => Effect.Effect<Message[], Error>;
   updateMessageEmbedding: (id: number, embedding: Float32Array) => Effect.Effect<void, Error>;
   getMessagesWithoutEmbeddings: (limit?: number) => Effect.Effect<Message[], Error>;
-
-  // Legacy keyword search (fallback)
-  searchMessagesByKeywords: (chatId: string, keywords: string[], limit?: number) => Effect.Effect<Message[], Error>;
 }
 
 export const DatabaseService = Context.GenericTag<DatabaseService>("DatabaseService");
@@ -49,6 +47,17 @@ export const DatabaseServiceLive = Layer.effect(
       authToken: process.env.TURSO_AUTH_TOKEN,
     });
     const db = drizzle(client);
+
+    // Run migrations
+    yield* Effect.tryPromise({
+      try: () => {
+        console.log("Migrating database...");
+        return migrate(db, {
+          migrationsFolder: './drizzle',
+        });
+      },
+      catch: (error) => new Error(`Database migration failed: ${error}`),
+    });
 
     return {
       insertMessage: (message: NewMessage) =>
@@ -170,7 +179,7 @@ export const DatabaseServiceLive = Layer.effect(
           try: async () => {
             // Convert Float32Array to Buffer for Turso F32_BLOB
             const embeddingBuffer = Buffer.from(queryEmbedding.buffer);
-            
+
             // Use raw LibSQL client for vector search
             // Note: This requires the messages_embedding_idx vector index to be created
             const result = await client.execute({
@@ -222,7 +231,7 @@ export const DatabaseServiceLive = Layer.effect(
           try: async () => {
             // Convert Float32Array to Buffer for Turso F32_BLOB storage
             const embeddingBuffer = Buffer.from(embedding.buffer);
-            
+
             await client.execute({
               sql: "UPDATE messages SET embedding = ? WHERE id = ?",
               args: [embeddingBuffer, id]
@@ -243,35 +252,6 @@ export const DatabaseServiceLive = Layer.effect(
           catch: (error) => new Error(`Failed to get messages without embeddings: ${error}`)
         }),
 
-      // Legacy keyword search (fallback)
-      searchMessagesByKeywords: (chatId: string, keywords: string[], limit = 10) =>
-        Effect.tryPromise({
-          try: async () => {
-            if (keywords.length === 0) {
-              return [];
-            }
-
-            // Create LIKE conditions for each keyword
-            const keywordConditions = keywords.map(keyword => 
-              like(messages.content, `%${keyword}%`)
-            );
-
-            // Search for messages containing any of the keywords
-            const result = await db.select()
-              .from(messages)
-              .where(
-                and(
-                  eq(messages.chatId, chatId),
-                  or(...keywordConditions)
-                )
-              )
-              .orderBy(desc(messages.createdAt))
-              .limit(limit);
-
-            return result;
-          },
-          catch: (error) => new Error(`Failed to search messages by keywords: ${error}`)
-        }),
     };
   })
 );
