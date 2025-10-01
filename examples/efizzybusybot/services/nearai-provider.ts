@@ -2,9 +2,18 @@ import type {
   LanguageModelV2,
   LanguageModelV2CallOptions,
   LanguageModelV2CallWarning,
+  LanguageModelV2Content,
   LanguageModelV2FinishReason,
-  LanguageModelV2StreamPart
+  LanguageModelV2StreamPart,
+  LanguageModelV2TextPart,
+  LanguageModelV2ToolCallPart,
+  LanguageModelV2ToolChoice
 } from '@ai-sdk/provider';
+import type {
+  ChatCompletion,
+  ChatCompletionMessageParam,
+  ChatCompletionTool
+} from 'openai/resources/chat';
 
 interface NearAiConfig {
   apiKey: string;
@@ -14,20 +23,6 @@ interface NearAiConfig {
 interface NearAiSettings {
   maxTokens?: number;
   temperature?: number;
-}
-
-interface NearAIResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-    finish_reason: string;
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
 }
 
 export class NearAiLanguageModel implements LanguageModelV2 {
@@ -49,32 +44,79 @@ export class NearAiLanguageModel implements LanguageModelV2 {
   async doGenerate(options: LanguageModelV2CallOptions) {
     const { prompt, ...settings } = options;
 
-    // Convert AI SDK prompt format to NEAR AI format
-    const messages = prompt.map((msg) => {
+    const messages: ChatCompletionMessageParam[] = prompt.flatMap((msg): ChatCompletionMessageParam[] => {
       if (msg.role === 'system') {
-        return { role: 'system', content: msg.content };
+        return [{ role: 'system' as const, content: msg.content }];
       }
       if (msg.role === 'user') {
         const content = msg.content
           .map((part) => part.type === 'text' ? part.text : '')
           .join('\n');
-        return { role: 'user', content };
+        return [{ role: 'user' as const, content }];
       }
       if (msg.role === 'assistant') {
-        const content = msg.content
-          .map((part) => part.type === 'text' ? part.text : '')
+        const textContent = msg.content
+          .filter((part): part is LanguageModelV2TextPart => part.type === 'text')
+          .map((part) => part.text)
           .join('\n');
-        return { role: 'assistant', content };
-      }
-      return null;
-    }).filter(Boolean);
 
-    const requestBody = {
+        const toolCalls = msg.content
+          .filter((part): part is LanguageModelV2ToolCallPart => part.type === 'tool-call')
+          .map((part) => ({
+            id: part.toolCallId,
+            type: 'function' as const,
+            function: {
+              name: part.toolName,
+              arguments: typeof part.input === 'string' ? part.input : JSON.stringify(part.input),
+            },
+          }));
+
+        if (toolCalls.length > 0) {
+          return [{
+            role: 'assistant' as const,
+            content: textContent || null,
+            tool_calls: toolCalls,
+          }];
+        }
+
+        return [{ role: 'assistant' as const, content: textContent }];
+      }
+      if (msg.role === 'tool') {
+        return msg.content.map((part) => ({
+          role: 'tool' as const,
+          tool_call_id: part.toolCallId,
+          content: typeof part.output === 'string' ? part.output : JSON.stringify(part.output),
+        }));
+      }
+      return [];
+    });
+
+    const tools: ChatCompletionTool[] | undefined = options.tools && options.tools.length > 0
+      ? options.tools
+        .filter((tool) => tool.type === 'function')
+        .map((tool) => ({
+          type: 'function' as const,
+          function: {
+            name: tool.name,
+            description: tool.description || '',
+            parameters: tool.inputSchema as Record<string, unknown>,
+          },
+        }))
+      : undefined;
+
+    const requestBody: Record<string, unknown> = {
       model: this.modelId,
       messages,
       max_tokens: settings.maxOutputTokens ?? this.settings.maxTokens ?? 500,
       temperature: settings.temperature ?? this.settings.temperature ?? 0.7,
     };
+
+    if (tools) {
+      requestBody.tools = tools;
+      if (options.toolChoice) {
+        requestBody.tool_choice = this.convertToolChoice(options.toolChoice);
+      }
+    }
 
 
     try {
@@ -94,18 +136,39 @@ export class NearAiLanguageModel implements LanguageModelV2 {
         throw new Error(`NEAR AI API error: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
-      const data = await response.json() as NearAIResponse;
+      const data = await response.json() as ChatCompletion;
 
       const choice = data.choices[0];
       if (!choice || !choice.message) {
         throw new Error('Invalid response format from NEAR AI API');
       }
 
-      const text = choice.message.content || '';
+      const content: LanguageModelV2Content[] = [];
+
+      if (choice.message.content) {
+        content.push({
+          type: 'text' as const,
+          text: choice.message.content
+        });
+      }
+
+      if (choice.message.tool_calls) {
+        for (const toolCall of choice.message.tool_calls) {
+          if (toolCall.type === 'function') {
+            content.push({
+              type: 'tool-call' as const,
+              toolCallId: toolCall.id,
+              toolName: toolCall.function.name,
+              input: JSON.parse(toolCall.function.arguments),
+            });
+          }
+        }
+      }
+
       const finishReason = this.mapFinishReason(choice.finish_reason);
 
       return {
-        content: [{ type: 'text' as const, text }],
+        content,
         usage: {
           inputTokens: data.usage?.prompt_tokens || 0,
           outputTokens: data.usage?.completion_tokens || 0,
@@ -160,8 +223,23 @@ export class NearAiLanguageModel implements LanguageModelV2 {
     };
   }
 
+  private convertToolChoice(toolChoice: LanguageModelV2ToolChoice): string | { type: string; function?: { name: string } } {
+    if (toolChoice.type === 'auto') {
+      return 'auto';
+    }
+    if (toolChoice.type === 'none') {
+      return 'none';
+    }
+    if (toolChoice.type === 'required') {
+      return 'required';
+    }
+    return {
+      type: 'function',
+      function: { name: toolChoice.toolName },
+    };
+  }
+
   private mapFinishReason(finishReason: string | null | undefined): LanguageModelV2FinishReason {
-    // could be enum
     switch (finishReason) {
       case 'stop':
         return 'stop';

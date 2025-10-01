@@ -18,6 +18,7 @@ import {
   type NewRelationship,
   type NewStreamState
 } from "../schemas/database";
+import type { PersonaType, EntityType } from "../schemas/types";
 
 export class DatabaseService extends Effect.Service<DatabaseService>()(
   "DatabaseService",
@@ -287,7 +288,7 @@ export class DatabaseService extends Effect.Service<DatabaseService>()(
             catch: (error) => new Error(`Failed to update persona last active: ${error}`)
           }),
 
-        findOrCreatePersona: (displayName: string, nearAccount?: string, personaType: string = 'human') =>
+        findOrCreatePersona: (displayName: string, nearAccount?: string, personaType: PersonaType = 'human') =>
           Effect.tryPromise({
             try: async () => {
               if (nearAccount) {
@@ -392,7 +393,7 @@ export class DatabaseService extends Effect.Service<DatabaseService>()(
             catch: (error) => new Error(`Failed to get all entities: ${error}`)
           }),
 
-        findOrCreateEntity: (name: string, nearAccount?: string, entityType: string = 'project') =>
+        findOrCreateEntity: (name: string, nearAccount?: string, entityType: EntityType = 'project') =>
           Effect.tryPromise({
             try: async () => {
               if (nearAccount) {

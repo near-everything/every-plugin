@@ -1,19 +1,19 @@
-import { Effect } from "every-plugin/effect";
 import { generateObject } from "ai";
+import { Effect } from "every-plugin/effect";
 import { z } from "zod";
-import { nearai } from "./nearai-provider";
 import { DatabaseService } from "./db.service";
+import { nearai } from "./nearai-provider";
 
 const NEAR_AI_API_KEY = Bun.env.NEAR_AI_API_KEY;
 
 const ExtractionSchema = z.object({
   nearAccounts: z.array(z.object({
-    account: z.string().describe("NEAR account name (e.g., 'jaytthew.near')"),
+    account: z.string().describe("NEAR account name (e.g., 'efiz.near')"),
     associatedWith: z.string().optional().describe("Name of person or entity this account belongs to"),
     type: z.enum(['person', 'project', 'organization', 'dao']).describe("Type of entity"),
   })),
   relationships: z.array(z.object({
-    subject: z.string().describe("Person or entity name (e.g., 'Jay')"),
+    subject: z.string().describe("Person or entity name (e.g., 'Elliot')"),
     subjectType: z.enum(['person', 'entity']),
     predicate: z.string().describe("Relationship type (e.g., 'works_on', 'founded', 'collaborates_with')"),
     object: z.string().describe("Person or entity name"),
@@ -70,7 +70,7 @@ CRITICAL Instructions:
    
 2. Extract people mentioned by:
    - Telegram handles: @username
-   - Names: "Jay", "John Smith"
+   - Names: "Elliot", "John Smith"
    - With NEAR accounts: "efiz.near" or "efiz"
    
 3. Extract projects/organizations:
@@ -99,9 +99,9 @@ Return empty arrays ONLY if truly nothing is mentioned.`,
           });
 
           yield* Effect.logInfo("✅ Entity extraction completed").pipe(
-            Effect.annotateLogs({ 
+            Effect.annotateLogs({
               nearAccounts: result.nearAccounts.length,
-              relationships: result.relationships.length 
+              relationships: result.relationships.length
             })
           );
 
@@ -130,10 +130,10 @@ Return empty arrays ONLY if truly nothing is mentioned.`,
                 );
 
                 yield* Effect.logInfo("👤 Created/found persona").pipe(
-                  Effect.annotateLogs({ 
+                  Effect.annotateLogs({
                     name,
                     nearAccount: nearAccount.account,
-                    personaId 
+                    personaId
                   })
                 );
               } else {
@@ -145,11 +145,11 @@ Return empty arrays ONLY if truly nothing is mentioned.`,
                 );
 
                 yield* Effect.logInfo("🏢 Created/found entity").pipe(
-                  Effect.annotateLogs({ 
+                  Effect.annotateLogs({
                     name,
                     nearAccount: nearAccount.account,
                     type: nearAccount.type,
-                    entityId 
+                    entityId
                   })
                 );
               }
@@ -183,15 +183,15 @@ Return empty arrays ONLY if truly nothing is mentioned.`,
               });
 
               yield* Effect.logInfo("🔗 Created relationship").pipe(
-                Effect.annotateLogs({ 
+                Effect.annotateLogs({
                   subject: rel.subject,
                   predicate: rel.predicate,
-                  object: rel.object 
+                  object: rel.object
                 })
               );
             }
           }),
-        };
+      };
     })
   }
-) {}
+) { }

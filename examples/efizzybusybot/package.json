@@ -31,6 +31,7 @@
 		"drizzle-orm": "^0.44.5",
 		"every-plugin": "0.1.6",
 		"fast-check": "^4.3.0",
-		"hono": "^4.9.8"
+		"hono": "^4.9.8",
+		"openai": "^6.0.0"
 	}
 }

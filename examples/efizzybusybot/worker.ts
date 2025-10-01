@@ -22,7 +22,7 @@ const extractMessageContent = (ctx: Context<Update>) => {
 
 const extractContentType = (ctx: Context<Update>) => {
   if (!ctx.message) return 'unknown';
-  
+
   if ('text' in ctx.message) return 'text';
   if ('photo' in ctx.message) return 'photo';
   if ('document' in ctx.message) return 'document';
@@ -34,7 +34,7 @@ const extractContentType = (ctx: Context<Update>) => {
   if ('contact' in ctx.message) return 'contact';
   if ('animation' in ctx.message) return 'animation';
   if ('video_note' in ctx.message) return 'video_note';
-  
+
   return 'unknown';
 };
 
@@ -46,14 +46,14 @@ const extractExternalId = (ctx: Context<Update>) => {
 
 const extractMessageUrl = (ctx: Context<Update>) => {
   if (!ctx.chat || !ctx.message) return undefined;
-  
+
   // For channels and supergroups with usernames
   if (ctx.chat.type === 'channel' || ctx.chat.type === 'supergroup') {
     if ('username' in ctx.chat && ctx.chat.username) {
       return `https://t.me/${ctx.chat.username}/${ctx.message.message_id}`;
     }
   }
-  
+
   return undefined;
 };
 
@@ -68,7 +68,7 @@ const isReply = (ctx: Context<Update>) => {
 
 const hasMedia = (ctx: Context<Update>) => {
   if (!ctx.message) return false;
-  
+
   return !!(
     ('photo' in ctx.message) ||
     ('document' in ctx.message) ||
@@ -88,22 +88,22 @@ const convertToDbMessage = (ctx: Context<Update>): NewMessage => {
   const externalId = extractExternalId(ctx);
   const url = extractMessageUrl(ctx);
   const isCmd = isCommand(ctx);
-  
+
   return {
     externalId,
     content,
     contentType,
     createdAt: new Date(ctx.message?.date ? ctx.message.date * 1000 : Date.now()).toISOString(),
     url,
-    
+
     pluginId: "@curatedotfun/telegram-source",
-    
+
     authorId: ctx.from?.id?.toString(),
     authorUsername: ctx.from?.username,
-    authorDisplayName: ctx.from?.first_name ? 
-      `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}` : 
+    authorDisplayName: ctx.from?.first_name ?
+      `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}` :
       undefined,
-    
+
     chatId: ctx.chat?.id?.toString() || '0',
     messageId: ctx.message?.message_id || 0,
     chatType: ctx.chat?.type || 'unknown',
@@ -111,7 +111,7 @@ const convertToDbMessage = (ctx: Context<Update>): NewMessage => {
     isReply: isReply(ctx),
     hasMedia: hasMedia(ctx),
     commandType: isCmd ? extractCommand(content) : null,
-    
+
     processed: false,
     rawData: JSON.stringify(ctx.update),
   };
@@ -139,8 +139,8 @@ const isPrivateChat = (ctx: Context<Update>) => {
 
 const shouldRespond = (ctx: Context<Update>) => {
   return (
-    isFromOwner(ctx) || 
-    isBotMentioned(ctx) || 
+    isFromOwner(ctx) ||
+    isBotMentioned(ctx) ||
     isReplyToBot(ctx) ||
     isPrivateChat(ctx)
   );
@@ -155,7 +155,8 @@ const extractCommand = (text: string) => {
 const generateAiResponse = (
   message: string,
   ctx: Context<Update>,
-  conversationHistory: any[]
+  conversationHistory: any[],
+  messageId: number
 ) =>
   Effect.gen(function* () {
     const nearAi = yield* NearAiService;
@@ -167,7 +168,8 @@ const generateAiResponse = (
       authorId: ctx.from?.id?.toString(),
       authorUsername: ctx.from?.username,
       isFromOwner: isOwner,
-      conversationHistory
+      conversationHistory,
+      messageId
     };
 
     const response = yield* nearAi.generateResponse(content, context);
@@ -180,17 +182,17 @@ export const processMessage = (
   Effect.gen(function* () {
     const db = yield* DatabaseService;
     const embeddings = yield* EmbeddingsService;
-    
+
     const dbMessage = convertToDbMessage(ctx);
     const messageId = yield* db.insertMessage(dbMessage);
-    
+
     if (messageId === 0) {
       return;
     }
-    
+
     const content = extractMessageContent(ctx);
     const username = ctx.from?.username || 'unknown';
-    
+
     yield* Effect.logInfo("📥 Message received").pipe(
       Effect.annotateLogs({
         from: username,
@@ -199,18 +201,18 @@ export const processMessage = (
         updateId: ctx.update.update_id
       })
     );
-    
+
     if (content.trim().length > 0) {
       const messageEmbedding = yield* embeddings.generateEmbedding(content);
       yield* db.updateMessageEmbedding(messageId, messageEmbedding);
     }
-    
+
     if (content.trim().length > 10) {
       const entityExtraction = yield* EntityExtractionService;
       yield* entityExtraction.processAndStore(content, messageId).pipe(
         Effect.catchAll((error) =>
           Effect.logWarning("⚠️ Entity extraction failed (non-critical)").pipe(
-            Effect.annotateLogs({ 
+            Effect.annotateLogs({
               error: error instanceof Error ? error.message : String(error),
               messageId,
               preview: content.slice(0, 100)
@@ -220,26 +222,26 @@ export const processMessage = (
         )
       );
     }
-    
+
     if (shouldRespond(ctx)) {
       const chatId = ctx.chat?.id?.toString() || '0';
       const conversationHistory = yield* db.getConversationHistory(chatId, 10);
-      
-      const { response, commandType } = yield* generateAiResponse(content, ctx, conversationHistory);
-      
+
+      const { response, commandType } = yield* generateAiResponse(content, ctx, conversationHistory, messageId);
+
       if (response) {
         yield* Effect.tryPromise(() => ctx.reply(response)).pipe(
-          Effect.catchAll((error) => 
+          Effect.catchAll((error) =>
             Effect.logError("Failed to send reply").pipe(
-              Effect.annotateLogs({ 
+              Effect.annotateLogs({
                 error: error instanceof Error ? error.message : String(error),
-                username 
+                username
               }),
               Effect.as(Effect.void)
             )
           )
         );
-        
+
         yield* Effect.logInfo("💬 AI response sent").pipe(
           Effect.annotateLogs({
             to: username,
@@ -247,11 +249,11 @@ export const processMessage = (
             commandType: commandType || undefined
           })
         );
-        
+
         yield* db.markMessageRespondedTo(messageId);
       }
     }
-    
+
     yield* db.markMessageProcessed(messageId);
   });
 
