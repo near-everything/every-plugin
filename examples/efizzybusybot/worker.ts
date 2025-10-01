@@ -95,6 +95,8 @@ const convertToDbMessage = (ctx: Context<Update>): NewMessage => {
     createdAt: new Date(ctx.message?.date ? ctx.message.date * 1000 : Date.now()).toISOString(),
     url,
     
+    pluginId: "@curatedotfun/telegram-source",
+    
     authorId: ctx.from?.id?.toString(),
     authorUsername: ctx.from?.username,
     authorDisplayName: ctx.from?.first_name ? 
@@ -189,11 +191,20 @@ export const processMessage = (
       const content = extractMessageContent(ctx);
       const username = ctx.from?.username || 'unknown';
       
+      // Log incoming message
+      yield* Effect.logInfo("📥 Message received").pipe(
+        Effect.annotateLogs({
+          from: username,
+          chatId: ctx.chat?.id?.toString(),
+          preview: content.slice(0, 50) + (content.length > 50 ? "..." : ""),
+          updateId: ctx.update.update_id
+        })
+      );
+      
       // Generate and store embedding for this message (for future context retrieval)
       if (content.trim().length > 0) {
         const messageEmbedding = yield* embeddings.generateEmbedding(content);
         yield* db.updateMessageEmbedding(messageId, messageEmbedding);
-        console.log(`[Memory] Generated and stored embedding for message from ${username}`);
       }
       
       if (shouldRespond(ctx)) {
@@ -205,13 +216,24 @@ export const processMessage = (
         if (response) {
           // Use Telegraf's built-in reply method instead of custom sendReply
           yield* Effect.tryPromise(() => ctx.reply(response)).pipe(
-            Effect.catchAll((error) => {
-              console.error(`Failed to send reply: ${error}`);
-              return Effect.void;
-            })
+            Effect.catchAll((error) => 
+              Effect.logError("Failed to send reply").pipe(
+                Effect.annotateLogs({ 
+                  error: error instanceof Error ? error.message : String(error),
+                  username 
+                }),
+                Effect.as(Effect.void)
+              )
+            )
           );
           
-          console.log(`AI replied to ${username}${commandType ? ` (${commandType} command)` : ''}`);
+          yield* Effect.logInfo("💬 AI response sent").pipe(
+            Effect.annotateLogs({
+              to: username,
+              preview: response.slice(0, 50) + (response.length > 50 ? "..." : ""),
+              commandType: commandType || undefined
+            })
+          );
           
           yield* db.markMessageRespondedTo(messageId);
         }
@@ -220,7 +242,9 @@ export const processMessage = (
       yield* db.markMessageProcessed(messageId);
       
     } catch (error) {
-      console.error(`Error processing message: ${error}`);
+      yield* Effect.logError("Error processing message").pipe(
+        Effect.annotateLogs({ error: error instanceof Error ? error.message : String(error) })
+      );
       throw error;
     }
   });

@@ -57,15 +57,19 @@ export const NearAiServiceLive = Layer.effect(
     return {
       generateResponse: (message, context) =>
         Effect.gen(function* () {
-          console.log(`[NearAI] Generating response for ${context.authorUsername} (owner: ${context.isFromOwner})`);
+          yield* Effect.logInfo("🤖 Generating AI response").pipe(
+            Effect.annotateLogs({
+              username: context.authorUsername,
+              isOwner: context.isFromOwner,
+              chatId: context.chatId
+            })
+          );
 
           // Generate embedding for the user's message
           const queryEmbedding = yield* embeddingsService.generateEmbedding(message);
-          console.log(`[Memory] Generated embedding for query (${queryEmbedding.length} dimensions)`);
 
           // Search for semantically similar past messages using vector search
           const relevantMemories = yield* databaseService.searchMessagesByEmbedding(
-            context.chatId,
             queryEmbedding,
             5
           );
@@ -77,7 +81,14 @@ export const NearAiServiceLive = Layer.effect(
                 .join('\n')}`
             : '';
 
-          console.log(`[Memory] Found ${relevantMemories.length} relevant messages using vector search`);
+          if (relevantMemories.length > 0) {
+            yield* Effect.logDebug("Memory search completed").pipe(
+              Effect.annotateLogs({ 
+                relevantMessages: relevantMemories.length,
+                embeddingDimensions: queryEmbedding.length 
+              })
+            );
+          }
 
           // Build system prompt with memory
           const systemPrompt = STATIC_SYSTEM_PROMPT + 
@@ -109,7 +120,14 @@ export const NearAiServiceLive = Layer.effect(
             catch: (error) => new Error(`NEAR AI generation failed: ${error instanceof Error ? error.message : String(error)}`)
           });
 
-          console.log(`[NearAI] Generated response: ${response.slice(0, 100)}...`);
+          yield* Effect.logInfo("✅ AI response generated").pipe(
+            Effect.annotateLogs({
+              username: context.authorUsername,
+              model: "deepseek-v3.1",
+              responseLength: response.length,
+              preview: response.slice(0, 100) + (response.length > 100 ? "..." : "")
+            })
+          );
 
           return response;
         })

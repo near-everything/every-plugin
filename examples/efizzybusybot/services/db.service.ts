@@ -6,10 +6,22 @@ import { Context, Effect, Layer } from "effect";
 import {
   messages,
   streamState,
+  personas,
+  platformAccounts,
+  entities,
+  relationships,
   type Message,
   type NewMessage,
   type NewStreamState,
-  type StreamState
+  type StreamState,
+  type Persona,
+  type NewPersona,
+  type PlatformAccount,
+  type NewPlatformAccount,
+  type Entity,
+  type NewEntity,
+  type Relationship,
+  type NewRelationship
 } from "../schemas/database";
 
 // Simplified database service interface
@@ -28,10 +40,34 @@ export interface DatabaseService {
   saveStreamState: (state: NewStreamState) => Effect.Effect<void, Error>;
   loadStreamState: () => Effect.Effect<StreamState | null, Error>;
 
-  // Vector search operations (Turso native vector search)
-  searchMessagesByEmbedding: (chatId: string, queryEmbedding: Float32Array, limit?: number) => Effect.Effect<Message[], Error>;
+  // Vector search operations (Turso native vector search) - now global
+  searchMessagesByEmbedding: (queryEmbedding: Float32Array, limit?: number, chatId?: string) => Effect.Effect<Message[], Error>;
   updateMessageEmbedding: (id: number, embedding: Float32Array) => Effect.Effect<void, Error>;
   getMessagesWithoutEmbeddings: (limit?: number) => Effect.Effect<Message[], Error>;
+
+  // Persona operations
+  insertPersona: (persona: NewPersona) => Effect.Effect<number, Error>;
+  getPersonaById: (id: number) => Effect.Effect<Persona | null, Error>;
+  getPersonaByNearAccount: (nearAccount: string) => Effect.Effect<Persona | null, Error>;
+  updatePersonaLastActive: (id: number) => Effect.Effect<void, Error>;
+  findOrCreatePersona: (displayName: string, nearAccount?: string, personaType?: string) => Effect.Effect<number, Error>;
+
+  // Platform account operations
+  insertPlatformAccount: (account: NewPlatformAccount) => Effect.Effect<number, Error>;
+  getPlatformAccount: (pluginId: string, platformUserId: string) => Effect.Effect<PlatformAccount | null, Error>;
+  linkPlatformAccountToPersona: (accountId: number, personaId: number) => Effect.Effect<void, Error>;
+  findOrCreatePlatformAccount: (pluginId: string, platformUserId: string, platformUsername?: string, platformDisplayName?: string) => Effect.Effect<number, Error>;
+
+  // Entity operations
+  insertEntity: (entity: NewEntity) => Effect.Effect<number, Error>;
+  getEntityById: (id: number) => Effect.Effect<Entity | null, Error>;
+  getEntityByNearAccount: (nearAccount: string) => Effect.Effect<Entity | null, Error>;
+  findOrCreateEntity: (name: string, nearAccount?: string, entityType?: string) => Effect.Effect<number, Error>;
+
+  // Relationship operations
+  insertRelationship: (relationship: NewRelationship) => Effect.Effect<number, Error>;
+  getRelationshipsBySubject: (subjectType: string, subjectId: number) => Effect.Effect<Relationship[], Error>;
+  getRelationshipsByObject: (objectType: string, objectId: number) => Effect.Effect<Relationship[], Error>;
 }
 
 export const DatabaseService = Context.GenericTag<DatabaseService>("DatabaseService");
@@ -173,19 +209,17 @@ export const DatabaseServiceLive = Layer.effect(
           catch: (error) => new Error(`Failed to load stream state: ${error}`)
         }),
 
-      // Vector search operations using Turso's native vector search
-      searchMessagesByEmbedding: (chatId: string, queryEmbedding: Float32Array, limit = 10) =>
+      // Vector search operations using Turso's native vector search - now with optional chatId for global search
+      searchMessagesByEmbedding: (queryEmbedding: Float32Array, limit = 10, chatId?: string) =>
         Effect.tryPromise({
           try: async () => {
-            // Convert Float32Array to Buffer for Turso F32_BLOB
             const embeddingBuffer = Buffer.from(queryEmbedding.buffer);
 
-            // Use raw LibSQL client for vector search
-            // Note: This requires the messages_embedding_idx vector index to be created
-            const result = await client.execute({
-              sql: `
+            // Build SQL query - with or without chat filter
+            const sqlQuery = chatId 
+              ? `
                 SELECT id, external_id, content, content_type, created_at, url, 
-                       author_id, author_username, author_display_name,
+                       persona_id, platform_account_id, plugin_id, author_id, author_username, author_display_name,
                        chat_id, message_id, chat_type, is_command, is_reply, has_media,
                        ingested_at, processed, embedding, conversation_thread_id,
                        responded_to, command_type, raw_data,
@@ -194,9 +228,23 @@ export const DatabaseServiceLive = Layer.effect(
                 WHERE chat_id = ? AND embedding IS NOT NULL
                 ORDER BY distance ASC 
                 LIMIT ?
-              `,
-              args: [embeddingBuffer, chatId, limit]
-            });
+              `
+              : `
+                SELECT id, external_id, content, content_type, created_at, url, 
+                       persona_id, platform_account_id, plugin_id, author_id, author_username, author_display_name,
+                       chat_id, message_id, chat_type, is_command, is_reply, has_media,
+                       ingested_at, processed, embedding, conversation_thread_id,
+                       responded_to, command_type, raw_data,
+                       vector_distance_cos(embedding, ?) as distance
+                FROM messages 
+                WHERE embedding IS NOT NULL
+                ORDER BY distance ASC 
+                LIMIT ?
+              `;
+
+            const args = chatId ? [embeddingBuffer, chatId, limit] : [embeddingBuffer, limit];
+
+            const result = await client.execute({ sql: sqlQuery, args });
 
             return result.rows.map((row: any) => ({
               id: row.id,
@@ -205,6 +253,9 @@ export const DatabaseServiceLive = Layer.effect(
               contentType: row.content_type,
               createdAt: row.created_at,
               url: row.url,
+              personaId: row.persona_id,
+              platformAccountId: row.platform_account_id,
+              pluginId: row.plugin_id,
               authorId: row.author_id,
               authorUsername: row.author_username,
               authorDisplayName: row.author_display_name,
@@ -250,6 +301,190 @@ export const DatabaseServiceLive = Layer.effect(
               .limit(limit);
           },
           catch: (error) => new Error(`Failed to get messages without embeddings: ${error}`)
+        }),
+
+      // Persona operations
+      insertPersona: (persona: NewPersona) =>
+        Effect.tryPromise({
+          try: async () => {
+            const result = await db.insert(personas).values(persona).returning({ id: personas.id });
+            return result[0]?.id || 0;
+          },
+          catch: (error) => new Error(`Failed to insert persona: ${error}`)
+        }),
+
+      getPersonaById: (id: number) =>
+        Effect.tryPromise({
+          try: async () => {
+            const result = await db.select().from(personas).where(eq(personas.id, id)).limit(1);
+            return result[0] || null;
+          },
+          catch: (error) => new Error(`Failed to get persona: ${error}`)
+        }),
+
+      getPersonaByNearAccount: (nearAccount: string) =>
+        Effect.tryPromise({
+          try: async () => {
+            const result = await db.select().from(personas).where(eq(personas.nearAccount, nearAccount)).limit(1);
+            return result[0] || null;
+          },
+          catch: (error) => new Error(`Failed to get persona by NEAR account: ${error}`)
+        }),
+
+      updatePersonaLastActive: (id: number) =>
+        Effect.tryPromise({
+          try: async () => {
+            await db.update(personas)
+              .set({ lastActiveAt: sql`CURRENT_TIMESTAMP` })
+              .where(eq(personas.id, id));
+          },
+          catch: (error) => new Error(`Failed to update persona last active: ${error}`)
+        }),
+
+      findOrCreatePersona: (displayName: string, nearAccount?: string, personaType: string = 'human') =>
+        Effect.tryPromise({
+          try: async () => {
+            if (nearAccount) {
+              const existing = await db.select().from(personas).where(eq(personas.nearAccount, nearAccount)).limit(1);
+              if (existing[0]) return existing[0].id;
+            }
+
+            const result = await db.insert(personas).values({
+              displayName,
+              nearAccount: nearAccount || null,
+              personaType,
+            }).returning({ id: personas.id });
+            
+            return result[0]?.id || 0;
+          },
+          catch: (error) => new Error(`Failed to find or create persona: ${error}`)
+        }),
+
+      // Platform account operations
+      insertPlatformAccount: (account: NewPlatformAccount) =>
+        Effect.tryPromise({
+          try: async () => {
+            const result = await db.insert(platformAccounts).values(account).returning({ id: platformAccounts.id });
+            return result[0]?.id || 0;
+          },
+          catch: (error) => new Error(`Failed to insert platform account: ${error}`)
+        }),
+
+      getPlatformAccount: (pluginId: string, platformUserId: string) =>
+        Effect.tryPromise({
+          try: async () => {
+            const result = await db.select().from(platformAccounts)
+              .where(sql`${platformAccounts.pluginId} = ${pluginId} AND ${platformAccounts.platformUserId} = ${platformUserId}`)
+              .limit(1);
+            return result[0] || null;
+          },
+          catch: (error) => new Error(`Failed to get platform account: ${error}`)
+        }),
+
+      linkPlatformAccountToPersona: (accountId: number, personaId: number) =>
+        Effect.tryPromise({
+          try: async () => {
+            await db.update(platformAccounts)
+              .set({ personaId })
+              .where(eq(platformAccounts.id, accountId));
+          },
+          catch: (error) => new Error(`Failed to link platform account to persona: ${error}`)
+        }),
+
+      findOrCreatePlatformAccount: (pluginId: string, platformUserId: string, platformUsername?: string, platformDisplayName?: string) =>
+        Effect.tryPromise({
+          try: async () => {
+            const existing = await db.select().from(platformAccounts)
+              .where(sql`${platformAccounts.pluginId} = ${pluginId} AND ${platformAccounts.platformUserId} = ${platformUserId}`)
+              .limit(1);
+            
+            if (existing[0]) return existing[0].id;
+
+            const result = await db.insert(platformAccounts).values({
+              pluginId,
+              platformUserId,
+              platformUsername: platformUsername || null,
+              platformDisplayName: platformDisplayName || null,
+            }).returning({ id: platformAccounts.id });
+            
+            return result[0]?.id || 0;
+          },
+          catch: (error) => new Error(`Failed to find or create platform account: ${error}`)
+        }),
+
+      // Entity operations
+      insertEntity: (entity: NewEntity) =>
+        Effect.tryPromise({
+          try: async () => {
+            const result = await db.insert(entities).values(entity).returning({ id: entities.id });
+            return result[0]?.id || 0;
+          },
+          catch: (error) => new Error(`Failed to insert entity: ${error}`)
+        }),
+
+      getEntityById: (id: number) =>
+        Effect.tryPromise({
+          try: async () => {
+            const result = await db.select().from(entities).where(eq(entities.id, id)).limit(1);
+            return result[0] || null;
+          },
+          catch: (error) => new Error(`Failed to get entity: ${error}`)
+        }),
+
+      getEntityByNearAccount: (nearAccount: string) =>
+        Effect.tryPromise({
+          try: async () => {
+            const result = await db.select().from(entities).where(eq(entities.nearAccount, nearAccount)).limit(1);
+            return result[0] || null;
+          },
+          catch: (error) => new Error(`Failed to get entity by NEAR account: ${error}`)
+        }),
+
+      findOrCreateEntity: (name: string, nearAccount?: string, entityType: string = 'project') =>
+        Effect.tryPromise({
+          try: async () => {
+            if (nearAccount) {
+              const existing = await db.select().from(entities).where(eq(entities.nearAccount, nearAccount)).limit(1);
+              if (existing[0]) return existing[0].id;
+            }
+
+            const result = await db.insert(entities).values({
+              name,
+              nearAccount: nearAccount || null,
+              entityType,
+            }).returning({ id: entities.id });
+            
+            return result[0]?.id || 0;
+          },
+          catch: (error) => new Error(`Failed to find or create entity: ${error}`)
+        }),
+
+      // Relationship operations
+      insertRelationship: (relationship: NewRelationship) =>
+        Effect.tryPromise({
+          try: async () => {
+            const result = await db.insert(relationships).values(relationship).returning({ id: relationships.id });
+            return result[0]?.id || 0;
+          },
+          catch: (error) => new Error(`Failed to insert relationship: ${error}`)
+        }),
+
+      getRelationshipsBySubject: (subjectType: string, subjectId: number) =>
+        Effect.tryPromise({
+          try: async () => {
+            return await db.select().from(relationships)
+              .where(sql`${relationships.subjectType} = ${subjectType} AND ${relationships.subjectId} = ${subjectId}`);
+          },
+          catch: (error) => new Error(`Failed to get relationships by subject: ${error}`)
+        }),
+
+      getRelationshipsByObject: (objectType: string, objectId: number) =>
+        Effect.tryPromise({
+          try: async () => {
+            return await db.select().from(relationships)
+              .where(sql`${relationships.objectType} = ${objectType} AND ${relationships.objectId} = ${objectId}`);
+          },
+          catch: (error) => new Error(`Failed to get relationships by object: ${error}`)
         }),
 
     };

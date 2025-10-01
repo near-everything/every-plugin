@@ -126,7 +126,12 @@ const createHttpServer = (plugin: PluginResult<PluginOf<TelegramBindings["@curat
     fetch: app.fetch,
   });
 
-  console.log(`✅ HTTP server running on http://localhost:${HTTP_PORT} (${useWebhooks ? 'webhook' : 'polling'} mode)`);
+  yield* Effect.logInfo("✅ HTTP server running").pipe(
+    Effect.annotateLogs({ 
+      port: HTTP_PORT, 
+      mode: useWebhooks ? 'webhook' : 'polling' 
+    })
+  );
 
   return { server };
 });
@@ -157,9 +162,8 @@ const loadState = () =>
     };
   });
 
-console.log('🤖 Starting efizzybusybot...');
-
 const program = Effect.gen(function* () {
+  yield* Effect.logInfo("🤖 Starting efizzybusybot...");
   const pluginRuntime = yield* PluginRuntime;
   const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", {
     variables: {
@@ -173,7 +177,7 @@ const program = Effect.gen(function* () {
   });
 
   const shutdown = () => {
-    console.log('Shutting down...');
+    Effect.runPromise(Effect.logInfo("Shutting down..."));
     runtime.runPromise(
       Effect.andThen(PluginRuntime, (pluginRuntime) => pluginRuntime.shutdown()).pipe(
         Effect.provide(runtime)
@@ -187,7 +191,9 @@ const program = Effect.gen(function* () {
   const initialState = yield* loadState();
 
   if (initialState) {
-    console.log(`Resuming from saved state: ${initialState.totalProcessed || 0} messages processed`);
+    yield* Effect.logInfo("Resuming from saved state").pipe(
+      Effect.annotateLogs({ messagesProcessed: initialState.totalProcessed || 0 })
+    );
   }
 
   // Start HTTP server with plugin as dependency
@@ -209,10 +215,16 @@ const program = Effect.gen(function* () {
         messageCount++;
 
         yield* processMessage(ctx).pipe(
-          Effect.catchAll((error) => {
-            console.error(`Failed to process message ${ctx.message?.message_id || 'unknown'} from ${ctx.from?.username || 'unknown'}:`, error);
-            return Effect.void; // Continue stream despite error
-          })
+          Effect.catchAll((error) => 
+            Effect.logError("Failed to process message").pipe(
+              Effect.annotateLogs({
+                messageId: ctx.message?.message_id || 'unknown',
+                username: ctx.from?.username || 'unknown',
+                error: error instanceof Error ? error.message : String(error)
+              }),
+              Effect.as(Effect.void)
+            )
+          )
         );
 
         if (messageCount % 10 === 0) {
