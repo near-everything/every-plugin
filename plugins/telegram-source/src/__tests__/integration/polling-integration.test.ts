@@ -36,7 +36,7 @@ const SECRETS_CONFIG = {
 };
 
 describe.sequential("Telegram Polling Integration Tests", () => {
-  const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
+  const { runtime, PluginService } = createPluginRuntime<TelegramBindings>({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG
   });
@@ -50,8 +50,8 @@ describe.sequential("Telegram Polling Integration Tests", () => {
       console.log("🚀 Testing telegram plugin polling");
       console.log(`🔗 Chat ID: ${TEST_CHAT_ID}`);
 
-      const pluginRuntime = yield* PluginRuntime;
-      const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", POLLING_CONFIG);
+      const pluginService = yield* PluginService;
+      const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", POLLING_CONFIG);
 
       console.log("✅ Plugin initialized");
 

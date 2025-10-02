@@ -28,7 +28,7 @@ const processSourceQueryJob = (job: Job<SourceQueryJobData>) =>
 		}
 		const { lastProcessedState } = data;
 		const queueService = yield* QueueService;
-		const pluginRuntime = yield* PluginRuntime;
+		const pluginService = yield* PluginService;
 
 		yield* Effect.log(
 			`Processing source query job for workflow: ${workflowId}, run: ${workflowRunId}`,

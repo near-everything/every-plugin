@@ -43,7 +43,7 @@ const TEST_PLUGIN_MAP: TestPluginMap = {
 const TEST_CHAT_ID = "-4956736324";
 
 describe("Telegram Message Logic Tests", () => {
-  const { runtime, PluginRuntime } = createTestPluginRuntime<TelegramBindings>({
+  const { runtime, PluginService } = createTestPluginRuntime<TelegramBindings>({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG,
   }, TEST_PLUGIN_MAP);
@@ -57,8 +57,8 @@ describe("Telegram Message Logic Tests", () => {
   describe("Plugin Initialization", () => {
     it.effect("should initialize plugin successfully with polling mode", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const { initialized } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const { initialized } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
 
         expect(initialized).toBeDefined();
         expect(initialized.plugin.id).toBe("@curatedotfun/telegram-source");
@@ -70,8 +70,8 @@ describe("Telegram Message Logic Tests", () => {
   describe("Message Sending", () => {
     it.effect("should send message successfully", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
 
         const testMessage = `Unit test message - ${new Date().toISOString()}`;
 
@@ -90,8 +90,8 @@ describe("Telegram Message Logic Tests", () => {
 
     it.effect("should send message with formatting", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
 
         const result = yield* Effect.tryPromise(() =>
           client.sendMessage({
@@ -110,8 +110,8 @@ describe("Telegram Message Logic Tests", () => {
   describe("Webhook Processing Logic", () => {
     it.effect("should process webhook updates without registering webhook", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
 
         // Create test updates
         const update1 = createTextUpdate("Hello webhook!", parseInt(TEST_CHAT_ID));
@@ -128,8 +128,8 @@ describe("Telegram Message Logic Tests", () => {
 
     it.effect("should handle malformed webhook data gracefully", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
 
         // Send malformed data
         const result = yield* Effect.tryPromise(() =>
@@ -145,8 +145,8 @@ describe("Telegram Message Logic Tests", () => {
   describe("Stream Processing Logic", () => {
     it.effect("should process queued updates and stream them", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
 
         // Add updates to queue via webhook handler
         const update1 = createTextUpdate("Stream test message 1", parseInt(TEST_CHAT_ID));
@@ -228,8 +228,8 @@ describe("Telegram Message Logic Tests", () => {
 
     it.effect("should filter messages by chat ID", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
 
         // Send updates from different chats
         const targetUpdate = createTextUpdate("Target chat message", parseInt(TEST_CHAT_ID));
@@ -267,8 +267,8 @@ describe("Telegram Message Logic Tests", () => {
 
     it.effect("should filter commands using messageTypes", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
 
         // Send mixed messages
         const regularUpdate = createTextUpdate("Regular message", parseInt(TEST_CHAT_ID));
@@ -311,8 +311,8 @@ describe("Telegram Message Logic Tests", () => {
 
     it.effect("should handle stream completion properly", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
 
         // Add a single message to test stream completion
         const update = createTextUpdate("Completion test message", parseInt(TEST_CHAT_ID));

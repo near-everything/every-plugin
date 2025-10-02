@@ -1,71 +1,61 @@
-import { Effect, Layer, ManagedRuntime } from "effect";
-import { PluginRuntimeImpl, PluginRuntimeService } from "../runtime";
-// Import the mock service factory and types
-import { PluginService, SecretsService } from "../runtime/services";
+import { Layer, ManagedRuntime } from "effect";
+import { PluginRuntime } from "../runtime";
+import {
+	PluginLifecycleService,
+	PluginLoaderService,
+	PluginRegistryTag,
+	PluginService,
+	RegistryService,
+	SecretsConfigTag,
+	SecretsService
+} from "../runtime/services";
 import type { PluginRuntimeConfig, RegistryBindings } from "../types";
 import { createMockModuleFederationServiceLayer, type TestPluginMap } from "./mocks/module-federation.service";
 
-
 /**
  * Creates a test layer with mock ModuleFederationService for unit testing.
- * This mirrors PluginRuntimeService.Live but uses mock ModuleFederationService.
+ * This mirrors PluginService.Live() but uses mock ModuleFederationService.
  */
 export const createTestLayer = <R extends RegistryBindings = RegistryBindings>(
-  config: PluginRuntimeConfig<R>,
-  pluginMap: TestPluginMap
+	config: PluginRuntimeConfig<R>,
+	pluginMap: TestPluginMap
 ) => {
-  const secrets = config.secrets || {};
+	const secrets = config.secrets || {};
 
-  // Same structure as PluginRuntimeService.Live but with mock ModuleFederationService
-  return Layer.scoped(
-    PluginRuntimeService,
-    Effect.gen(function* () {
-      const pluginService = yield* PluginService;
+	const contextLayer = Layer.mergeAll(
+		Layer.succeed(PluginRegistryTag, config.registry),
+		Layer.succeed(SecretsConfigTag, secrets),
+	);
 
-      // Register cleanup finalizer for automatic resource management
-      yield* Effect.addFinalizer(() =>
-        pluginService.cleanup().pipe(
-          Effect.catchAll(() => Effect.void) // Ensure cleanup never fails
-        )
-      );
+	const mockModuleFederationLayer = createMockModuleFederationServiceLayer(pluginMap);
 
-      return pluginService;
-    }),
-  ).pipe(
-    Layer.provide(
-      PluginService.Live(config.registry, secrets).pipe(
-        Layer.provide(
-          Layer.mergeAll(
-            createMockModuleFederationServiceLayer(pluginMap), // Mock instead of real
-            SecretsService.Live(secrets),
-          ),
-        ),
-      ),
-    ),
-  );
+	const servicesLayer = Layer.mergeAll(
+		mockModuleFederationLayer,
+		SecretsService.Default,
+		RegistryService.Default,
+		PluginLifecycleService.Default,
+	).pipe(
+		Layer.provide(contextLayer)
+	);
+
+	return PluginService.Default.pipe(
+		Layer.provide(PluginLoaderService.Default),
+		Layer.provide(servicesLayer)
+	);
 };
 
 /**
  * Creates a test plugin runtime using mock services.
- * This mirrors createPluginRuntime exactly but uses test layer.
+ * This mirrors createPluginRuntime exactly but uses test layer with mocks.
  */
 export const createTestPluginRuntime = <R extends RegistryBindings = RegistryBindings>(
-  config: PluginRuntimeConfig<R>,
-  pluginMap: TestPluginMap
-) => {
-  const layer = createTestLayer<R>(config, pluginMap);
-  const runtime = ManagedRuntime.make(layer);
+	config: PluginRuntimeConfig<R>,
+	pluginMap: TestPluginMap
+): PluginRuntime<R> => {
+	const layer = createTestLayer<R>(config, pluginMap);
+	const runtime = ManagedRuntime.make(layer);
 
-  // Same exact pattern as createPluginRuntime
-  const createTypedRuntime = Effect.gen(function* () {
-    const pluginService = yield* PluginRuntimeService;
-    return new PluginRuntimeImpl<R>(pluginService, config.registry);
-  });
-
-  return {
-    runtime,
-    PluginRuntime: createTypedRuntime.pipe(Effect.provide(runtime))
-  };
+	return new PluginRuntime<R>(runtime, config.registry);
 };
 
 // Re-export useful types for tests

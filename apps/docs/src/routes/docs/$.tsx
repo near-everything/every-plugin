@@ -2,6 +2,8 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import type { PageTree } from "fumadocs-core/server";
 import { createClientLoader } from "fumadocs-mdx/runtime/vite";
+import { File, Files, Folder } from "fumadocs-ui/components/files";
+import * as TabsComponents from "fumadocs-ui/components/tabs";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import {
@@ -12,11 +14,10 @@ import {
 } from "fumadocs-ui/page";
 import { useMemo } from "react";
 import { Mermaid } from "@/components/mermaid";
+import { LLMCopyButton, ViewOptions } from "@/components/page-actions";
 import { baseOptions } from "@/lib/layout.shared";
 import { source } from "@/lib/source";
 import { docs } from "../../../source.generated";
-import { File, Folder, Files } from "fumadocs-ui/components/files";
-import { LLMCopyButton, ViewOptions } from "@/components/page-actions";
 
 export const Route = createFileRoute("/docs/$")({
   component: Page,
@@ -31,7 +32,7 @@ export const Route = createFileRoute("/docs/$")({
 const loader = createServerFn({
   method: "GET",
 })
-  .validator((slugs: string[]) => slugs)
+  .inputValidator((slugs: string[]) => slugs)
   .handler(async ({ data: slugs }) => {
     const page = source.getPage(slugs);
     if (!page) throw notFound();
@@ -69,6 +70,7 @@ const clientLoader = createClientLoader(docs.doc, {
           <MDX
             components={{
               ...defaultMdxComponents,
+              ...TabsComponents,
               Mermaid,
               File,
               Folder,

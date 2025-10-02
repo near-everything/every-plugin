@@ -62,7 +62,7 @@ const createWebhookUpdateFromSentMessage = (sentMessage: { messageId: number }, 
 });
 
 describe.sequential("Telegram Webhook Integration Tests", () => {
-  const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
+  const { runtime, PluginService } = createPluginRuntime<TelegramBindings>({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG
   });
@@ -76,8 +76,8 @@ describe.sequential("Telegram Webhook Integration Tests", () => {
 
   it.effect("should handle complete integration flow with all features", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const { client } = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", INTEGRATION_CONFIG);
+      const pluginService = yield* PluginService;
+      const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", INTEGRATION_CONFIG);
 
       console.log("🚀 Testing complete integration: API → webhook → listen → stream");
 

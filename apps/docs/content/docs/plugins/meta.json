@@ -1,9 +1,8 @@
 {
-  "title": "Plugins",
-  "description": "Building plugins",
+  "title": "Creating Plugins",
+  "description": "Build type-safe plugins with oRPC contracts",
   "pages": [
-    "plugin-structure",
-    "orpc-contracts",
-    "testing-deployment"
+    "patterns",
+    "orpc"
   ]
 }

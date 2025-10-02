@@ -1,10 +1,8 @@
 {
-  "title": "Runtime",
-  "description": "Using plugins with the runtime",
+  "title": "Using Plugins",
+  "description": "Runtime patterns and recipes for plugin usage",
   "pages": [
-    "basic-usage",
-    "streaming", 
-    "error-handling",
-    "advanced"
+    "patterns",
+    "effect"
   ]
 }

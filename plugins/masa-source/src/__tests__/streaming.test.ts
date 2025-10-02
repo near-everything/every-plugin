@@ -256,8 +256,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
   describe("Fresh Start - Normal Flow", () => {
     it.effect("should handle initial request and set correct state", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         const output = yield* pluginRuntime.executePlugin(plugin, {
           procedure: "search" as const,
@@ -289,8 +289,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
 
     it.effect("should continue backfill with correct max_id", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         // First request (initial)
         const firstOutput = yield* pluginRuntime.executePlugin(plugin, {
@@ -342,8 +342,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
 
     it.effect("should transition to live when backfill exhausted", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         // Simulate progression: initial -> backfill -> backfill exhausted -> live
         let currentState: StreamState | null = null;
@@ -403,8 +403,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
   describe("maxResults Limit Handling", () => {
     it.effect("should stop backfill when maxResults reached", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         let currentState: StreamState | null = null;
 
@@ -445,8 +445,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
 
     it.effect("should not limit live polling based on maxResults", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         // Start with a completed backfill state
         const liveState: StreamState = {
@@ -481,8 +481,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
   describe("State Persistence & Restart", () => {
     it.effect("should resume backfill from saved state", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         // Simulate resuming from a saved backfill state
         const savedState: StreamState = {
@@ -516,8 +516,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
 
     it.effect("should continue backfill when maxResults increased", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         // Simulate resuming with higher maxResults - but with hybrid strategy
         // The implementation will check for new content first (live phase)
@@ -555,8 +555,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
   describe("Live Polling Behavior", () => {
     it.effect("should update mostRecentId when new items found", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         const liveState: StreamState = {
           phase: 'live',
@@ -590,8 +590,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
 
     it.effect("should maintain state when no new items found", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         // Force mock to return no new items by using a deterministic approach
         execSpy.mockImplementationOnce((sourceType: any, searchMethod: any, query: any, maxResults: any, processFn: any) => {
@@ -634,8 +634,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
   describe("ID Boundary Edge Cases", () => {
     it.effect("should handle snowflake ID arithmetic correctly", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         const backfillState: StreamState = {
           phase: 'backfill',
@@ -670,8 +670,8 @@ describe("Masa Source Plugin Streaming State Management", () => {
 
     it.effect("should handle live polling with since_id correctly", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
-        const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+        const pluginService = yield* PluginService;
+        const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
         const liveState: StreamState = {
           phase: 'live',
@@ -708,7 +708,7 @@ describe("Masa Source Plugin Streaming State Management", () => {
   describe("Streaming Integration", () => {
     it.effect("should stream items in correct order (oldest first)", () =>
       Effect.gen(function* () {
-        const pluginRuntime = yield* PluginRuntime;
+        const pluginService = yield* PluginService;
 
         const stream = yield* pluginRuntime.streamPlugin(
           "@curatedotfun/masa-source",
@@ -753,7 +753,7 @@ describe("Masa Source Plugin Streaming State Management", () => {
     it.effect("should call onStateChange with correct state transitions", () =>
       Effect.gen(function* () {
         const stateChanges: Array<{ state: StreamState | null; itemCount: number }> = [];
-        const pluginRuntime = yield* PluginRuntime;
+        const pluginService = yield* PluginService;
 
         const stream = yield* pluginRuntime.streamPlugin(
           "@curatedotfun/masa-source",

@@ -216,8 +216,8 @@ describe("Masa Source Plugin Tests", () => {
 
   it.effect("should execute getById procedure", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+      const pluginService = yield* PluginService;
+      const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
       const output = yield* pluginRuntime.executePlugin(plugin, {
         procedure: "getById" as const,
@@ -235,8 +235,8 @@ describe("Masa Source Plugin Tests", () => {
 
   it.effect("should execute getBulk procedure", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+      const pluginService = yield* PluginService;
+      const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
       const output = yield* pluginRuntime.executePlugin(plugin, {
         procedure: "getBulk" as const,
@@ -255,8 +255,8 @@ describe("Masa Source Plugin Tests", () => {
 
   it.effect("should execute search procedure", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+      const pluginService = yield* PluginService;
+      const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
       const output = yield* pluginRuntime.executePlugin(plugin, {
         procedure: "search" as const,
@@ -280,8 +280,8 @@ describe("Masa Source Plugin Tests", () => {
 
   it.effect("should execute similaritySearch procedure", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+      const pluginService = yield* PluginService;
+      const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
       const output = yield* pluginRuntime.executePlugin(plugin, {
         procedure: "similaritySearch" as const,
@@ -304,8 +304,8 @@ describe("Masa Source Plugin Tests", () => {
 
   it.effect("should execute hybridSearch procedure", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+      const pluginService = yield* PluginService;
+      const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
       const output = yield* pluginRuntime.executePlugin(plugin, {
         procedure: "hybridSearch" as const,
@@ -329,8 +329,8 @@ describe("Masa Source Plugin Tests", () => {
 
   it.effect("should execute getProfile procedure", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+      const pluginService = yield* PluginService;
+      const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
       const output = yield* pluginRuntime.executePlugin(plugin, {
         procedure: "getProfile" as const,
@@ -348,8 +348,8 @@ describe("Masa Source Plugin Tests", () => {
 
   it.effect("should execute getTrends procedure", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
+      const pluginService = yield* PluginService;
+      const plugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG);
 
       const output = yield* pluginRuntime.executePlugin(plugin, {
         procedure: "getTrends" as const,
@@ -368,9 +368,9 @@ describe("Masa Source Plugin Tests", () => {
 
   it.effect("should handle invalid input validation", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
+      const pluginService = yield* PluginService;
 
-      return yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", TEST_CONFIG).pipe(
+      return yield* pluginService.usePlugin("@curatedotfun/masa-source", TEST_CONFIG).pipe(
         Effect.flatMap(plugin =>
           pluginRuntime.executePlugin(plugin, {
             procedure: "search" as const,

@@ -48,7 +48,7 @@ const TEST_PLUGIN_MAP: TestPluginMap = {
 };
 
 describe("Plugin Router Access Methods", () => {
-  const { runtime, PluginRuntime } = createTestPluginRuntime<TestBindings>({
+  const runtime = createTestPluginRuntime<TestBindings>({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG
   }, TEST_PLUGIN_MAP);
@@ -59,12 +59,7 @@ describe("Plugin Router Access Methods", () => {
   let baseUrl: string = "";
 
   beforeAll(async () => {
-    const pluginResult = await Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* PluginRuntime;
-        return yield* runtime.usePlugin("test-plugin", TEST_CONFIG);
-      }).pipe(Effect.provide(runtime))
-    );
+    const pluginResult = await runtime.usePlugin("test-plugin", TEST_CONFIG);
 
     plugin = pluginResult;
     const router = pluginResult.router;
@@ -118,188 +113,134 @@ describe("Plugin Router Access Methods", () => {
     }
   });
 
-  it.effect("should work via direct client calls", () =>
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+  it("should work via direct client calls", { timeout: 10000 }, async () => {
+    const result = await runtime.usePlugin("test-plugin", TEST_CONFIG);
 
-      // Use client directly from result
-      const { client } = result;
+    const { client } = result;
 
-      // Test basic procedure
-      const getByIdResult = yield* Effect.tryPromise(() =>
-        client.getById({ id: "direct-test-123" })
-      );
+    const getByIdResult = await client.getById({ id: "direct-test-123" });
 
-      expect(getByIdResult).toHaveProperty('item');
-      expect(getByIdResult.item).toHaveProperty('externalId', 'direct-test-123');
-      expect(getByIdResult.item.content).toContain('single content for direct-test-123');
+    expect(getByIdResult).toHaveProperty('item');
+    expect(getByIdResult.item).toHaveProperty('externalId', 'direct-test-123');
+    expect(getByIdResult.item.content).toContain('single content for direct-test-123');
 
-      // Test bulk operation
-      const getBulkResult = yield* Effect.tryPromise(() =>
-        client.getBulk({ ids: ["direct-bulk1", "direct-bulk2"] })
-      );
+    const getBulkResult = await client.getBulk({ ids: ["direct-bulk1", "direct-bulk2"] });
 
-      expect(getBulkResult).toHaveProperty('items');
-      expect(getBulkResult.items).toHaveLength(2);
-      expect(getBulkResult.items[0].externalId).toBe('direct-bulk1');
-      expect(getBulkResult.items[1].externalId).toBe('direct-bulk2');
+    expect(getBulkResult).toHaveProperty('items');
+    expect(getBulkResult.items).toHaveLength(2);
+    expect(getBulkResult.items[0].externalId).toBe('direct-bulk1');
+    expect(getBulkResult.items[1].externalId).toBe('direct-bulk2');
+  });
 
-    }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-  );
+  it("should work via OpenAPI HTTP", { timeout: 10000 }, async () => {
+    const getByIdResponse = await fetch(`${baseUrl}/api/getById`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: "http-test-123" })
+    });
 
-  it.effect("should work via OpenAPI HTTP", () =>
-    Effect.gen(function* () {
-      // Test basic HTTP request - getById
-      const getByIdResponse = yield* Effect.tryPromise(() =>
-        fetch(`${baseUrl}/api/getById`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: "http-test-123" })
-        })
-      );
+    const getByIdResult = await getByIdResponse.json();
 
-      const getByIdResult = yield* Effect.tryPromise(() => getByIdResponse.json());
+    expect(getByIdResult).toHaveProperty('item');
+    expect(getByIdResult.item).toHaveProperty('externalId', 'http-test-123');
+    expect(getByIdResult.item.content).toContain('single content for http-test-123');
 
-      expect(getByIdResult).toHaveProperty('item');
-      expect(getByIdResult.item).toHaveProperty('externalId', 'http-test-123');
-      expect(getByIdResult.item.content).toContain('single content for http-test-123');
+    const getBulkResponse = await fetch(`${baseUrl}/api/getBulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ["http-bulk1", "http-bulk2"] })
+    });
 
-      // Test bulk operation via HTTP
-      const getBulkResponse = yield* Effect.tryPromise(() =>
-        fetch(`${baseUrl}/api/getBulk`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: ["http-bulk1", "http-bulk2"] })
-        })
-      );
+    const getBulkResult = await getBulkResponse.json();
 
-      const getBulkResult = yield* Effect.tryPromise(() => getBulkResponse.json());
+    expect(getBulkResult).toHaveProperty('items');
+    expect(getBulkResult.items).toHaveLength(2);
+    expect(getBulkResult.items[0].externalId).toBe('http-bulk1');
+    expect(getBulkResult.items[1].externalId).toBe('http-bulk2');
+  });
 
-      expect(getBulkResult).toHaveProperty('items');
-      expect(getBulkResult.items).toHaveLength(2);
-      expect(getBulkResult.items[0].externalId).toBe('http-bulk1');
-      expect(getBulkResult.items[1].externalId).toBe('http-bulk2');
+  it("should work via oRPC client", { timeout: 10000 }, async () => {
+    const link = new RPCLink({
+      url: `${baseUrl}/rpc`,
+      fetch: globalThis.fetch,
+    });
 
-    }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-  );
+    const client: TestPluginClient = createORPCClient(link);
 
-  it.effect("should work via oRPC client", () =>
-    Effect.gen(function* () {
-      // Create oRPC client using shared server
-      const link = new RPCLink({
-        url: `${baseUrl}/rpc`,
-        fetch: globalThis.fetch,
-      });
+    const getByIdResult = await client.getById({ id: "orpc-test-123" });
 
-      const client: TestPluginClient = createORPCClient(link);
+    expect(getByIdResult).toHaveProperty('item');
+    expect(getByIdResult.item).toHaveProperty('externalId', 'orpc-test-123');
+    expect(getByIdResult.item.content).toContain('single content for orpc-test-123');
 
-      // Test basic oRPC call - getById
-      const getByIdResult = yield* Effect.tryPromise(() =>
-        client.getById({ id: "orpc-test-123" })
-      );
+    const getBulkResult = await client.getBulk({ ids: ["orpc-bulk1", "orpc-bulk2"] });
 
-      expect(getByIdResult).toHaveProperty('item');
-      expect(getByIdResult.item).toHaveProperty('externalId', 'orpc-test-123');
-      expect(getByIdResult.item.content).toContain('single content for orpc-test-123');
+    expect(getBulkResult).toHaveProperty('items');
+    expect(getBulkResult.items).toHaveLength(2);
+    expect(getBulkResult.items[0].externalId).toBe('orpc-bulk1');
+    expect(getBulkResult.items[1].externalId).toBe('orpc-bulk2');
+  });
 
-      // Test bulk operation via oRPC
-      const getBulkResult = yield* Effect.tryPromise(() =>
-        client.getBulk({ ids: ["orpc-bulk1", "orpc-bulk2"] })
-      );
+  it("should handle streaming via oRPC", { timeout: 10000 }, async () => {
+    const link = new RPCLink({
+      url: `${baseUrl}/rpc`,
+      fetch: globalThis.fetch,
+    });
 
-      expect(getBulkResult).toHaveProperty('items');
-      expect(getBulkResult.items).toHaveLength(2);
-      expect(getBulkResult.items[0].externalId).toBe('orpc-bulk1');
-      expect(getBulkResult.items[1].externalId).toBe('orpc-bulk2');
+    const client: TestPluginClient = createORPCClient(link);
 
-    }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-  );
+    const streamResult = await client.simpleStream({ count: 3, prefix: "orpc-stream" });
 
-  it.effect("should handle streaming via oRPC", () =>
-    Effect.gen(function* () {
-      // Create oRPC client using shared server
-      const link = new RPCLink({
-        url: `${baseUrl}/rpc`,
-        fetch: globalThis.fetch,
-      });
+    const resultArray = [];
+    for await (const item of streamResult) {
+      resultArray.push(item);
+    }
 
-      const client: TestPluginClient = createORPCClient(link);
+    expect(resultArray.length).toBe(3);
+    expect(resultArray[0]).toHaveProperty('item');
+    expect(resultArray[0].item.externalId).toBe('orpc-stream_0');
+    expect(resultArray[1].item.externalId).toBe('orpc-stream_1');
+    expect(resultArray[2].item.externalId).toBe('orpc-stream_2');
 
-      // Test streaming via oRPC client - this is the key feature we want to verify
-      const streamResult = yield* Effect.tryPromise(() =>
-        client.simpleStream({ count: 3, prefix: "orpc-stream" })
-      );
+    const emptyStreamResult = await client.emptyStream({ reason: "testing empty stream via oRPC" });
 
-      // Convert to Effect stream and collect
-      const stream = Stream.fromAsyncIterable(streamResult, (error) => error);
-      const items = yield* stream.pipe(
-        Stream.runCollect
-      );
+    const emptyArray = [];
+    for await (const item of emptyStreamResult) {
+      emptyArray.push(item);
+    }
 
-      const resultArray = Array.from(items);
-      expect(resultArray.length).toBe(3);
-      expect(resultArray[0]).toHaveProperty('item');
-      expect(resultArray[0].item.externalId).toBe('orpc-stream_0');
-      expect(resultArray[1].item.externalId).toBe('orpc-stream_1');
-      expect(resultArray[2].item.externalId).toBe('orpc-stream_2');
+    expect(emptyArray.length).toBe(0);
+  });
 
-      // Test empty stream
-      const emptyStreamResult = yield* Effect.tryPromise(() =>
-        client.emptyStream({ reason: "testing empty stream via oRPC" })
-      );
+  it("should generate OpenAPI specification from plugin router", { timeout: 5000 }, async () => {
+    const result = await runtime.usePlugin("test-plugin", TEST_CONFIG);
 
-      const emptyStream = Stream.fromAsyncIterable(emptyStreamResult, (error) => error);
-      const emptyItems = yield* emptyStream.pipe(
-        Stream.runCollect
-      );
+    const { router } = result;
 
-      const emptyArray = Array.from(emptyItems);
-      expect(emptyArray.length).toBe(0);
+    const generator = new OpenAPIGenerator({
+      schemaConverters: [
+        new ZodToJsonSchemaConverter()
+      ]
+    });
 
-    }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-  );
-
-  it.effect("should generate OpenAPI specification from plugin router", () =>
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
-
-      // Use router directly from result
-      const { router } = result;
-
-      // Create OpenAPI generator
-      const generator = new OpenAPIGenerator({
-        schemaConverters: [
-          new ZodToJsonSchemaConverter()
-        ]
-      });
-
-      // Generate OpenAPI spec - verify the router is compatible
-      const spec = yield* Effect.tryPromise(() =>
-        generator.generate(router, {
-          info: {
-            title: 'Test Plugin API',
-            version: '1.0.0',
-            description: 'Generated OpenAPI spec for test plugin'
-          }
-        })
-      );
-
-      // Verify spec structure
-      expect(spec).toHaveProperty('openapi');
-      expect(spec).toHaveProperty('info');
-      expect(spec).toHaveProperty('paths');
-
-      expect(spec.info.title).toBe('Test Plugin API');
-      expect(spec.info.version).toBe('1.0.0');
-
-      // Verify paths exist for our procedures
-      expect(spec.paths).toBeDefined();
-      if (spec.paths) {
-        expect(Object.keys(spec.paths).length).toBeGreaterThan(0);
+    const spec = await generator.generate(router, {
+      info: {
+        title: 'Test Plugin API',
+        version: '1.0.0',
+        description: 'Generated OpenAPI spec for test plugin'
       }
+    });
 
-    }).pipe(Effect.provide(runtime), Effect.timeout("5 seconds"))
-  );
+    expect(spec).toHaveProperty('openapi');
+    expect(spec).toHaveProperty('info');
+    expect(spec).toHaveProperty('paths');
+
+    expect(spec.info.title).toBe('Test Plugin API');
+    expect(spec.info.version).toBe('1.0.0');
+
+    expect(spec.paths).toBeDefined();
+    if (spec.paths) {
+      expect(Object.keys(spec.paths).length).toBeGreaterThan(0);
+    }
+  });
 });

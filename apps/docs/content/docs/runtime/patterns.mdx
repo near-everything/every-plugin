@@ -1,0 +1,414 @@
+---
+title: Runtime Patterns
+description: Common patterns for using plugins in your application
+---
+
+This guide provides complete, runnable patterns for using plugins in various scenarios.
+
+## Direct Client Calls
+
+Call plugin procedures directly using the typed client:
+
+```typescript
+import type { PluginBinding } from "every-plugin";
+import type SocialApi from "@my-org/social-api-plugin";
+import { createPluginRuntime } from "every-plugin/runtime";
+
+// Optional: Type bindings for autocomplete
+type AppBindings = {
+  "social-api": PluginBinding<typeof SocialApi>;
+};
+
+const runtime = createPluginRuntime<AppBindings>({
+  registry: {
+    "social-api": {
+      remoteUrl: "https://cdn.example.com/plugins/social/remoteEntry.js",
+      type: "source",
+      version: "1.0.0"
+    }
+  },
+  secrets: { API_KEY: process.env.SOCIAL_API_KEY! }
+});
+
+// Get the client
+const { client } = await runtime.usePlugin("social-api", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
+
+// Call procedures
+const post = await client.getById({ id: "post-123" });
+const bulkPosts = await client.getBulk({ ids: ["post-1", "post-2", "post-3"] });
+const searchResults = await client.search({ query: "typescript", limit: 20 });
+
+await runtime.shutdown();
+```
+
+## HTTP Mounting
+
+Mount plugin routers in HTTP frameworks using OpenAPI or RPC handlers:
+
+### OpenAPI Handler
+
+```typescript
+import { createPluginRuntime } from "every-plugin/runtime";
+import { OpenAPIHandler } from "@orpc/openapi/node";
+import { createServer } from "node:http";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "data-api": {
+      remoteUrl: "https://cdn.example.com/plugins/data/remoteEntry.js",
+      type: "source",
+      version: "1.0.0"
+    }
+  },
+  secrets: { API_KEY: process.env.API_KEY! }
+});
+
+// Initialize plugin
+const pluginResult = await runtime.usePlugin("data-api", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
+
+// Create OpenAPI handler
+const handler = new OpenAPIHandler(pluginResult.router);
+
+// Mount in HTTP server
+const server = createServer(async (req, res) => {
+  const result = await handler.handle(req, res, {
+    prefix: '/api',
+    context: pluginResult.initialized.context
+  });
+  
+  if (!result.matched) {
+    res.statusCode = 404;
+    res.end('Not Found');
+  }
+});
+
+server.listen(3000, () => {
+  console.log('Plugin API available at http://localhost:3000/api');
+});
+
+// Cleanup on shutdown
+process.on('SIGTERM', async () => {
+  server.close();
+  await runtime.shutdown();
+  process.exit(0);
+});
+```
+
+### RPC Handler
+
+```typescript
+import { RPCHandler } from "@orpc/server/node";
+
+const handler = new RPCHandler(pluginResult.router);
+
+const server = createServer(async (req, res) => {
+  const result = await handler.handle(req, res, {
+    prefix: '/rpc',
+    context: pluginResult.initialized.context
+  });
+  
+  if (!result.matched) {
+    res.statusCode = 404;
+    res.end('Not Found');
+  }
+});
+
+server.listen(3000);
+```
+
+## Streaming
+
+Streaming procedures return async iterables. You can use them directly or convert to Effect.Stream:
+
+<Tabs items={['Streaming', 'with Effect']}>
+  <Tab value="Streaming">
+  ```typescript
+  // Get the client
+  const { client } = await runtime.usePlugin("social-feed", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { timeout: 30000 }
+  });
+  
+  // Streaming procedures return async iterables
+  const stream = await client.streamPosts({ query: "typescript" });
+  
+  // Use with for-await
+  let count = 0;
+  for await (const post of stream) {
+    console.log(`Processing: ${post.item.externalId}`);
+    count++;
+    if (count >= 50) break;
+  }
+  
+  console.log(`Processed ${count} posts`);
+  ```
+  </Tab>
+  <Tab value="with Effect">
+  ```typescript
+  import { Stream } from "every-plugin/effect";
+  
+  const result = await runtime.runPromise(
+    Effect.gen(function* () {
+      const pluginService = yield* PluginService;
+      
+      const { client } = yield* pluginService.usePlugin("social-feed", {
+        secrets: { apiKey: "{{API_KEY}}" },
+        variables: { timeout: 30000 }
+      });
+      
+      // Get async iterable
+      const streamResult = await client.streamPosts({ query: "typescript" });
+      
+      // Convert to Effect Stream for Effect-based processing
+      const stream = Stream.fromAsyncIterable(streamResult, error => error);
+      
+      // Process with Effect operators
+      const items = yield* stream.pipe(
+        Stream.tap((post) =>
+          Effect.sync(() => {
+            console.log(`Processing: ${post.item.externalId}`);
+          })
+        ),
+        Stream.take(50),
+        Stream.runCollect
+      );
+      
+      return Array.from(items);
+    })
+  );
+  
+  console.log(`Processed ${result.length} posts`);
+  ```
+  </Tab>
+</Tabs>
+
+### Stream Processing Pipeline
+
+<Tabs items={['Streaming', 'with Effect']}>
+  <Tab value="Streaming">
+  ```typescript
+  // Get both clients
+  const { client: source } = await runtime.usePlugin("source", sourceConfig);
+  const { client: processor } = await runtime.usePlugin("processor", processorConfig);
+  
+  // Stream from source
+  const stream = await source.streamData({ query: "typescript" });
+  
+  // Process each item
+  const processed = [];
+  for await (const item of stream) {
+    try {
+      const result = await processor.transform({ data: item });
+      processed.push(result);
+      if (processed.length >= 100) break;
+    } catch (error) {
+      console.error("Processing failed:", error);
+    }
+  }
+  ```
+  </Tab>
+  <Tab value="with Effect">
+  ```typescript
+  import { Stream } from "every-plugin/effect";
+  
+  const processed = await runtime.runPromise(
+    Effect.gen(function* () {
+      const pluginService = yield* PluginService;
+      
+      // Get source and processor plugins
+      const { client: source } = yield* pluginService.usePlugin("source", sourceConfig);
+      const { client: processor } = yield* pluginService.usePlugin("processor", processorConfig);
+      
+      // Get async iterable
+      const streamResult = await source.streamData({ query: "typescript" });
+      const stream = Stream.fromAsyncIterable(streamResult, e => e);
+      
+      // Process each item through processor
+      const processedStream = stream.pipe(
+        Stream.mapEffect((item) =>
+          Effect.tryPromise(() =>
+            processor.transform({ data: item })
+          ).pipe(
+            Effect.catchAll((error) => {
+              console.error("Processing failed:", error);
+              return Effect.succeed(null);
+            })
+          )
+        ),
+        Stream.filter((result) => result !== null)
+      );
+      
+      return yield* processedStream.pipe(
+        Stream.take(100),
+        Stream.runCollect
+      );
+    })
+  );
+  ```
+  </Tab>
+</Tabs>
+
+### Batch Processing
+
+<Tabs items={['Streaming', 'with Effect']}>
+  <Tab value="Streaming">
+  ```typescript
+  // Get the client
+  const { client } = await runtime.usePlugin("source", config);
+  
+  const stream = await client.streamData({ query: "typescript" });
+  
+  // Process in batches
+  let batch = [];
+  const results = [];
+  
+  for await (const item of stream) {
+    batch.push(item);
+    
+    if (batch.length >= 10) {
+      console.log(`Processing batch of ${batch.length} items`);
+      const processed = await processBatch(batch);
+      results.push(...processed);
+      batch = [];
+    }
+  }
+  
+  // Process remaining items
+  if (batch.length > 0) {
+    const processed = await processBatch(batch);
+    results.push(...processed);
+  }
+  ```
+  </Tab>
+  <Tab value="with Effect">
+  ```typescript
+  import { Stream } from "every-plugin/effect";
+  
+  const batched = await runtime.runPromise(
+    Effect.gen(function* () {
+      const pluginService = yield* PluginService;
+      const { client } = yield* pluginService.usePlugin("source", config);
+      
+      const streamResult = await client.streamData({ query: "typescript" });
+      const stream = Stream.fromAsyncIterable(streamResult, e => e);
+      
+      // Process in batches of 10
+      const results = yield* stream.pipe(
+        Stream.grouped(10),
+        Stream.mapEffect((batch) =>
+          Effect.gen(function* () {
+            const items = Array.from(batch);
+            console.log(`Processing batch of ${items.length} items`);
+            
+            return yield* Effect.tryPromise(() => processBatch(items));
+          })
+        ),
+        Stream.runCollect
+      );
+      
+      return Array.from(results).flat();
+    })
+  );
+  ```
+  </Tab>
+</Tabs>
+
+## Multiple Plugins
+
+Compose multiple plugins in workflows:
+
+```typescript
+// Load multiple plugins
+const { client: source } = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{SOURCE_API_KEY}}" }
+});
+
+const { client: transformer } = await runtime.usePlugin("transformer", {
+  variables: { format: "json" }
+});
+
+const { client: distributor } = await runtime.usePlugin("distributor", {
+  secrets: { webhook: "{{WEBHOOK_URL}}" }
+});
+
+// Execute pipeline
+const rawData = await source.fetch({ query: "typescript" });
+const transformed = await transformer.transform({ items: rawData.items });
+const result = await distributor.send({ items: transformed.items });
+```
+
+### Parallel Plugin Execution
+
+```typescript
+// Load plugins in parallel
+const [plugin1, plugin2, plugin3] = await Promise.all([
+  runtime.usePlugin("source-1", config1),
+  runtime.usePlugin("source-2", config2),
+  runtime.usePlugin("source-3", config3)
+]);
+
+// Execute in parallel
+const results = await Promise.all([
+  plugin1.client.getData(),
+  plugin2.client.getData(),
+  plugin3.client.getData()
+]);
+```
+
+## Worker Integration
+
+Integrate with job processing systems like BullMQ:
+
+```typescript
+import { Worker, Job } from "bullmq";
+import { createPluginRuntime } from "every-plugin/runtime";
+
+// Initialize runtime once
+const runtime = createPluginRuntime({
+  registry: await loadRegistry(),
+  secrets: await loadSecrets()
+});
+
+// Job processor
+const worker = new Worker(
+  'plugin-jobs',
+  async (job: Job) => {
+    const { pluginId, config, input } = job.data;
+    
+    try {
+      const { client } = await runtime.usePlugin(pluginId, config);
+      return await client.process(input);
+    } catch (error) {
+      console.error(`Job ${job.id} failed:`, error);
+      throw error;
+    }
+  },
+  { connection: redisConnection }
+);
+
+// Cleanup on shutdown
+process.on('SIGTERM', async () => {
+  await worker.close();
+  await runtime.shutdown();
+  process.exit(0);
+});
+```
+
+## Error Handling
+
+Handle plugin errors with try/catch:
+
+```typescript
+try {
+  const { client } = await runtime.usePlugin("data-source", config);
+  const result = await client.getData({ id: "123" });
+} catch (error) {
+  console.error("Plugin failed:", error);
+}
+```

@@ -18,7 +18,7 @@ type IRegistry = {
   "@curatedotfun/masa-source": MasaBinding
 };
 
-export const { runtime, PluginRuntime } = createPluginRuntime<IRegistry>({
+export const { runtime, PluginService } = createPluginRuntime<IRegistry>({
   registry: {
     "@curatedotfun/masa-source": {
       remoteUrl: "https://elliot-braem-11--curatedotfun-masa-source-every-p-70dcb0f28-ze.zephyrcloud.app/remoteEntry.js",
@@ -40,10 +40,10 @@ export class MasaPlugin extends Context.Tag("MasaPlugin")<
 export const MasaPluginLive = Layer.effect(
   MasaPlugin,
   Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
+    const pluginService = yield* PluginService;
 
     // Initialize the plugin once with the configuration
-    const initializedPlugin = yield* pluginRuntime.usePlugin("@curatedotfun/masa-source", {
+    const initializedPlugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", {
       variables: { baseUrl: "https://data.gopher-ai.com/api/v1" },
       secrets: { apiKey: "{{MASA_API_KEY}}" }
     });
@@ -195,7 +195,7 @@ const program = Effect.gen(function* () {
   const shutdown = () => {
     console.log('\n🛑 Shutting down gracefully...');
     runtime.runPromise(Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
+      const pluginService = yield* PluginService;
       yield* pluginRuntime.shutdown();
     }).pipe(Effect.provide(runtime))).finally(() => process.exit(0));
   };
@@ -215,7 +215,7 @@ const program = Effect.gen(function* () {
   }
 
   // Create streaming pipeline that handles both historical and live phases
-  const pluginRuntime = yield* PluginRuntime;
+  const pluginService = yield* PluginService;
   const masaPlugin = yield* MasaPlugin;
 
   const stream = yield* pluginRuntime.streamPlugin(

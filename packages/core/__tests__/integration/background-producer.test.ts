@@ -1,8 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
 import { describe } from "vitest";
-import { createPluginRuntime } from "../../src/runtime";
 import type { PluginBinding } from "../../src/plugin";
+import { createPluginRuntime } from "../../src/runtime";
 import type TestPlugin from "../test-plugin/src/index";
 import { TEST_REMOTE_ENTRY_URL } from "./global-setup";
 
@@ -37,18 +37,18 @@ const SECRETS_CONFIG = {
 };
 
 describe.sequential("Background Producer Integration Tests", () => {
-  const { runtime, PluginRuntime } = createPluginRuntime<TestBindings>({
+  const runtime = createPluginRuntime<TestBindings>({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG
   });
 
   it.effect("should test background producer and consumer pattern", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-
       console.log("🚀 Testing background producer/consumer with real Module Federation");
 
-      const { client } = yield* pluginRuntime.usePlugin("test-plugin", BACKGROUND_CONFIG);
+      const { client } = yield* Effect.promise(() => 
+        runtime.usePlugin("test-plugin", BACKGROUND_CONFIG)
+      );
 
       console.log("✅ Plugin initialized with background producer enabled");
 
@@ -62,7 +62,7 @@ describe.sequential("Background Producer Integration Tests", () => {
 
       // Start consuming events immediately while producer is running
       console.log("🔄 Starting event consumption");
-      
+
       const streamResult = yield* Effect.tryPromise(() =>
         client.listenBackground({ maxResults: 3 })
       );
@@ -90,7 +90,7 @@ describe.sequential("Background Producer Integration Tests", () => {
       const eventArray = Array.from(events);
       console.log(`✅ Collected ${eventArray.length} background events in real-time`);
       expect(eventArray.length).toBe(3);
-      
+
       // Verify sequential event IDs
       for (let i = 0; i < eventArray.length; i++) {
         const event = eventArray[i];
@@ -101,11 +101,11 @@ describe.sequential("Background Producer Integration Tests", () => {
 
       // Test manual enqueue and consumption
       console.log("🎯 Testing manual event enqueue and consumption");
-      
+
       const enqueuePromise = Effect.tryPromise(() =>
         client.enqueueBackground({ id: "manual-test" })
       );
-      
+
       const manualStreamPromise = Effect.tryPromise(() =>
         client.listenBackground({ maxResults: 1 })
       ).pipe(
@@ -134,6 +134,6 @@ describe.sequential("Background Producer Integration Tests", () => {
       console.log("✅ Manual event consumed in real-time");
 
       console.log("🎉 background producer/consumer test completed successfully!");
-    }).pipe(Effect.provide(runtime), Effect.timeout("15 seconds"))
-  , { timeout: 20000 });
+    }).pipe(Effect.timeout("15 seconds"))
+    , { timeout: 20000 });
 });

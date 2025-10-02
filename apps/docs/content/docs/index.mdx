@@ -7,36 +7,64 @@ title: Introduction
 ## Quick Example
 
 ```typescript
-import { Effect } from "effect";
-import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+import { createPluginRuntime } from "every-plugin/runtime";
 
 const runtime = createPluginRuntime({
   registry: {
-    "data-processor": {
-      remoteUrl: "https://cdn.example.com/plugins/processor/remoteEntry.js",
-      type: "transformer",
+    "data-source": {
+      remoteUrl: "https://cdn.example.com/plugins/source/remoteEntry.js",
+      type: "source",
       version: "1.0.0"
     }
   },
   secrets: { API_KEY: "secret-value" }
 });
 
-const result = await runtime.runPromise(
-  Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
+// Get the client
+const { client } = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
 
-    const plugin = yield* pluginRuntime.usePlugin("data-processor", {
-      secrets: { apiKey: "{{API_KEY}}" },
-      variables: { batchSize: 100 }
-    });
+const result = await client.search({ query: "typescript", limit: 20 });
+console.log(`Found ${result.items.length} items`);
 
-    return yield* pluginRuntime.executePlugin(plugin, {
-      items: ["data1", "data2", "data3"]
-    });
-  })
-);
+await runtime.shutdown();
 ```
 
+## Core Concepts
+
+### usePlugin Returns Everything
+
+`usePlugin()` returns an `EveryPlugin` object with multiple access patterns:
+
+```typescript
+const { client, router, metadata, initialized } = yield* pluginService.usePlugin(...);
+
+// 1. Direct client calls (typed procedures)
+const result = await client.getById({ id: "123" });
+const posts = await client.search({ query: "typescript" });
+
+// 2. Router for HTTP mounting
+const openApiHandler = new OpenAPIHandler(router);
+const rpcHandler = new RPCHandler(router);
+
+// 3. Streaming via async iteration
+const stream = await client.streamPosts({ query: "typescript" });
+for await (const post of stream) {
+  console.log(post);
+}
+```
+
+### Import Through every-plugin
+
+Always import Effect, oRPC, and Zod through every-plugin for version consistency:
+
+```typescript
+import { Effect, Stream, Queue } from "every-plugin/effect";
+import { oc, implement, eventIterator } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+```
 
 ## Architecture
 
@@ -52,33 +80,37 @@ graph TD
   E --> G[Plugin Instance]
 
   G --> H[Initialize]
-  H --> I[Execute]
-  I --> J[Stream Results]
+  H --> I[Create Router]
+  I --> J[EveryPlugin]
+
+  J --> K[Client Calls]
+  J --> L[HTTP Mounting]
+  J --> M[Streaming]
 
   classDef runtime fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff
   classDef system fill:#7c3aed,stroke:#6d28d9,stroke-width:2px,color:#fff
   classDef plugin fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
-  classDef process fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+  classDef access fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
 
   class A runtime
   class B,C,D system
-  class E,F,G plugin
-  class H,I,J process"
+  class E,F,G,H,I plugin
+  class J,K,L,M access"
 />
 
 ## Getting Started
 
 <Cards>
-  <Card title="Quick Start" href="/docs/quick-start/usage">
-    Get up and running in minutes
-  </Card>
-  <Card title="Runtime Usage" href="/docs/runtime">
-    Use plugins in your application
+  <Card title="Quick Start" href="/docs/quick-start">
+    Get running in 5 minutes
   </Card>
   <Card title="Creating Plugins" href="/docs/plugins">
-    Build and deploy your own plugins
+    Build plugins with oRPC contracts
   </Card>
-  <Card title="Examples" href="/docs/examples">
-    Real-world implementation patterns
+  <Card title="Using Plugins" href="/docs/runtime">
+    Runtime patterns and recipes
+  </Card>
+  <Card title="Testing" href="/docs/testing">
+    Test plugins with mock services
   </Card>
 </Cards>

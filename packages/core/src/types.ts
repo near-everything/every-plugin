@@ -1,6 +1,6 @@
 import type { AnyContractRouter } from "@orpc/contract";
 import type { Context, Router } from "@orpc/server";
-import { Scope } from "effect";
+import type { Scope } from "effect";
 import type { z } from "zod";
 import type { Plugin, PluginConfigFor, PluginConstructorWithBinding } from "./plugin";
 
@@ -179,7 +179,7 @@ export interface RuntimeOptions {
 /**
  * Enhanced plugin result containing client, router, and metadata.
  */
-export interface PluginResult<T extends AnyPlugin = AnyPlugin> {
+export interface EveryPlugin<T extends AnyPlugin = AnyPlugin> {
   readonly client: import("@orpc/server").RouterClient<RouterOf<T>, Record<never, never>>;
   readonly router: RouterOf<T>;
   readonly metadata: {

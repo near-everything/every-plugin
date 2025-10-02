@@ -44,9 +44,9 @@ const runtime = createPluginRuntime({
 
 const result = await runtime.runPromise(
   Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
+    const pluginService = yield* PluginService;
     
-    const plugin = yield* pluginRuntime.usePlugin("data-processor", {
+    const plugin = yield* pluginService.usePlugin("data-processor", {
       secrets: { apiKey: "{{API_KEY}}" },
       variables: { timeout: 30000 }
     });
@@ -137,9 +137,9 @@ const runtime = createPluginRuntime({
 
 const posts = await runtime.runPromise(
   Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
+    const pluginService = yield* PluginService;
     
-    const plugin = yield* pluginRuntime.usePlugin("social-feed", {
+    const plugin = yield* pluginService.usePlugin("social-feed", {
       secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
       variables: { timeout: 30000 }
     });
@@ -165,7 +165,7 @@ import { Stream } from "effect";
 
 const stream = await runtime.runPromise(
   Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
+    const pluginService = yield* PluginService;
     
     return yield* pluginRuntime.streamPlugin(
       "social-feed",
@@ -198,9 +198,9 @@ All operations return Effect types with composable error handling:
 ```typescript
 const safeResult = await runtime.runPromise(
   Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
+    const pluginService = yield* PluginService;
     
-    return yield* pluginRuntime.usePlugin("social-feed", config);
+    return yield* pluginService.usePlugin("social-feed", config);
   }).pipe(
     Effect.catchAll((error) => {
       console.error("Plugin failed:", error);
@@ -231,10 +231,10 @@ const runtime = createPluginRuntime({
 const processJob = (job: Job) => 
   runtime.runPromise(
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
+      const pluginService = yield* PluginService;
       const { pluginId, config, input } = job.data;
       
-      const plugin = yield* pluginRuntime.usePlugin(pluginId, config);
+      const plugin = yield* pluginService.usePlugin(pluginId, config);
       return yield* pluginRuntime.executePlugin(plugin, input);
     })
   );
@@ -255,7 +255,7 @@ For step-by-step plugin lifecycle management:
 
 ```typescript
 const processWithGranularControl = Effect.gen(function* () {
-  const pluginRuntime = yield* PluginRuntime;
+  const pluginService = yield* PluginService;
   
   // Step-by-step plugin lifecycle
   const constructor = yield* pluginRuntime.loadPlugin("@my-org/data-processor");

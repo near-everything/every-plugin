@@ -1,84 +1,172 @@
 ---
-title: Runtime Overview
-description: Plugin runtime installation and core concepts
+title: Using Plugins
+description: Runtime patterns and recipes for plugin usage
 ---
 
-The **every-plugin** runtime loads and executes plugins using Effect composition and Module Federation.
+The runtime loads and executes plugins using [Effect](https://effect.website/) composition and [Module Federation](https://module-federation.io/). This guide provides patterns for common usage scenarios.
 
-## Installation
+## Type Safety (Optional)
 
-```bash
-bun add every-plugin
-```
-
-## Basic Setup
-
-Create a runtime with your plugin registry and secrets:
+For IDE autocomplete and type inference, install plugins as dev dependencies and define type bindings:
 
 ```typescript
-import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+// Install plugin as dev dependency
+// bun add -D @my-org/data-source-plugin
 
-const runtime = createPluginRuntime({
+import type { PluginBinding } from "every-plugin";
+import type DataSource from "@my-org/data-source-plugin";
+import { createPluginRuntime } from "every-plugin/runtime";
+
+// Define type bindings for all your plugins
+type AppBindings = {
+  "data-source": PluginBinding<typeof DataSource>;
+};
+
+const { runtime, PluginService } = createPluginRuntime<AppBindings>({
   registry: {
-    "data-processor": {
-      remoteUrl: "https://cdn.example.com/plugins/processor/remoteEntry.js",
-      type: "transformer",
+    "data-source": {
+      remoteUrl: "https://cdn.example.com/plugins/source/remoteEntry.js",
+      type: "source",
       version: "1.0.0"
     }
-  },
-  secrets: {
-    API_KEY: "your-secret-key"
   }
 });
 ```
 
-## Effect Composition
+**Benefits:**
+- Plugin ID autocomplete in `usePlugin()`
+- Config type inference (variables/secrets)
+- Fully typed client procedure calls
 
-Use `Effect.gen()` with `yield*` to compose plugin operations:
+Type bindings are completely optional - they just enhance your development experience.
+
+## Basic Usage
+
+Create a runtime and use plugins:
 
 ```typescript
-const result = await runtime.runPromise(
+import { createPluginRuntime } from "every-plugin/runtime";
+import { Effect } from "every-plugin/effect";
+
+const { runtime, PluginService } = createPluginRuntime({
+  registry: {
+    "data-source": {
+      remoteUrl: "https://cdn.example.com/plugins/source/remoteEntry.js",
+      type: "source",
+      version: "1.0.0"
+    }
+  },
+  secrets: { API_KEY: "secret-value" }
+});
+
+// Get the client
+const { client } = await runtime.runPromise(
   Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
+    const pluginService = yield* PluginService;
     
-    const plugin = yield* pluginRuntime.usePlugin("data-processor", {
+    return yield* pluginService.usePlugin("data-source", {
       secrets: { apiKey: "{{API_KEY}}" },
-      variables: { batchSize: 100 }
+      variables: { timeout: 30000 }
     });
-    
-    return yield* pluginRuntime.executePlugin(plugin, {
-      items: ["data1", "data2", "data3"]
-    });
+  })
+);
+
+// Call procedures with plain promises
+const result = await client.getData({ id: "123" });
+
+await runtime.disposeRuntime();
+```
+
+## usePlugin Returns EveryPlugin
+
+`usePlugin()` returns an `EveryPlugin` object with multiple access patterns:
+
+```typescript
+const { client, router, metadata, initialized } = yield* pluginService.usePlugin(...);
+
+// client - Call procedures as methods
+const result = await client.getById({ id: "123" });
+const posts = await client.search({ query: "typescript" });
+
+// router - For HTTP mounting
+import { OpenAPIHandler, RPCHandler } from "every-plugin/orpc";
+const openApiHandler = new OpenAPIHandler(router);
+const rpcHandler = new RPCHandler(router);
+
+// metadata - Plugin information
+console.log(metadata.pluginId, metadata.version, metadata.type);
+
+// initialized - Full plugin state (advanced)
+```
+
+## Access Pattern Recipes
+
+<Cards>
+  <Card title="Direct Client Calls" href="/docs/runtime/patterns#client-calls">
+    Call plugin procedures as methods
+  </Card>
+  <Card title="HTTP Mounting" href="/docs/runtime/patterns#http-mounting">
+    Expose plugins via OpenAPI or RPC
+  </Card>
+  <Card title="Streaming" href="/docs/runtime/patterns#streaming">
+    Process continuous data streams
+  </Card>
+  <Card title="Multiple Plugins" href="/docs/runtime/patterns#multiple-plugins">
+    Compose plugin pipelines
+  </Card>
+</Cards>
+
+## Key Concepts
+
+### Runtime and PluginService
+
+The `createPluginRuntime()` function returns two items:
+
+- **`runtime`** - Effect's ManagedRuntime that executes Effects and manages resources
+- **`PluginService`** - The plugin service (an Effect) that loads and manages plugins
+
+```typescript
+const { runtime, PluginService } = createPluginRuntime({...});
+
+// runtime executes Effects
+await runtime.runPromise(
+  Effect.gen(function* () {
+    // PluginService is the service you yield to access plugin operations
+    const pluginService = yield* PluginService;
+    return yield* pluginService.usePlugin(...);
   })
 );
 ```
 
-## Plugin Lifecycle
+This is Effect's standard service pattern - `runtime` runs Effects, `PluginService` is the service being accessed.
 
-The runtime handles four stages automatically with `usePlugin()`:
+### Import Through every-plugin
 
-1. **Load**: Download plugin from Module Federation URL
-2. **Instantiate**: Create plugin instance
-3. **Initialize**: Configure with secrets and variables
-4. **Execute**: Run with validated input
+Always import Effect, oRPC, and Zod through `every-plugin`:
 
-## Secret Hydration
+```typescript
+import { Effect, Stream, Queue } from "every-plugin/effect";
+import { oc, implement, eventIterator } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+```
 
-Secrets use template syntax and are replaced at initialization:
+### Secret Hydration
+
+Secrets use template syntax and are replaced at runtime:
 
 ```typescript
 const config = {
   secrets: {
-    apiKey: "{{API_KEY}}", // Replaced with actual secret
+    apiKey: "{{API_KEY}}",      // Replaced with actual value
     dbUrl: "{{DATABASE_URL}}"
   },
   variables: {
-    timeout: 30000 // Regular values pass through
+    timeout: 30000              // Regular values pass through
   }
 };
 ```
 
-## Resource Cleanup
+### Resource Cleanup
 
 Always dispose the runtime when shutting down:
 
@@ -89,19 +177,3 @@ process.on("SIGTERM", async () => {
 });
 ```
 
-## Next Steps
-
-<Cards>
-  <Card title="Getting Started" href="/docs/runtime/getting-started">
-    Your first plugin execution
-  </Card>
-  <Card title="Basic Usage" href="/docs/runtime/basic-usage">
-    Effect patterns and composition
-  </Card>
-  <Card title="Streaming" href="/docs/runtime/streaming">
-    Continuous data processing
-  </Card>
-  <Card title="API Reference" href="/docs/runtime/api-reference">
-    Complete runtime methods
-  </Card>
-</Cards>

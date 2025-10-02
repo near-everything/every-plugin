@@ -1,7 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
-import { describe } from "vitest";
-import { createPluginClient } from "../../src/client/index";
+import { beforeAll, describe } from "vitest";
 import type { PluginBinding } from "../../src/plugin";
 import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
 import type { PluginRegistry } from "../../src/types";
@@ -41,18 +40,20 @@ const TEST_PLUGIN_MAP: TestPluginMap = {
 };
 
 describe("Plugin Client Unit Tests", () => {
-  const { runtime, PluginRuntime } = createTestPluginRuntime<TestBindings>({
+  const runtime = createTestPluginRuntime<TestBindings>({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG,
   }, TEST_PLUGIN_MAP);
 
+  let plugin: Awaited<ReturnType<typeof runtime.usePlugin>>;
+
+  beforeAll(async () => {
+    plugin = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+  });
+
   it.effect("should create plugin client and access procedures", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
-
-      // Use client directly from result
-      const { client } = result;
+      const { client } = plugin;
 
       // Verify procedures exist
       expect(typeof client.getById).toBe('function');
@@ -67,15 +68,12 @@ describe("Plugin Client Unit Tests", () => {
       expect(procedureResult).toHaveProperty('item');
       expect(procedureResult.item).toHaveProperty('externalId', 'test-123');
       expect(procedureResult.item.content).toContain('single content for test-123');
-    }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))
+    }).pipe(Effect.timeout("4 seconds"))
   );
 
   it.effect("should handle bulk operations", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
-
-      const { client } = result;
+      const { client } = plugin;
 
       // Test bulk fetch
       const bulkResult = yield* Effect.tryPromise(() =>
@@ -88,15 +86,12 @@ describe("Plugin Client Unit Tests", () => {
       expect(bulkResult.items[0].content).toContain('bulk content for bulk1');
       expect(bulkResult.items[1].externalId).toBe('bulk2');
       expect(bulkResult.items[2].externalId).toBe('bulk3');
-    }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))
+    }).pipe(Effect.timeout("4 seconds"))
   );
 
   it.effect("should stream using plugin client directly", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
-
-      const { client } = result;
+      const { client } = plugin;
 
       // Test streaming procedure directly
       const streamResult = yield* Effect.tryPromise(() =>
@@ -123,15 +118,12 @@ describe("Plugin Client Unit Tests", () => {
       expect(resultArray[0]).toHaveProperty('metadata');
       expect(resultArray[1].item.externalId).toBe('stream_1');
       expect(resultArray[2].item.externalId).toBe('stream_2');
-    }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))
+    }).pipe(Effect.timeout("4 seconds"))
   );
 
   it.effect("should handle empty streams", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
-
-      const { client } = result;
+      const { client } = plugin;
 
       // Test empty stream
       const emptyResult = yield* Effect.tryPromise(() =>
@@ -146,15 +138,12 @@ describe("Plugin Client Unit Tests", () => {
 
       const resultArray = Array.from(items);
       expect(resultArray.length).toBe(0); // Should be empty
-    }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))
+    }).pipe(Effect.timeout("4 seconds"))
   );
 
   it.effect("should handle Effect Stream.fromAsyncIterable with custom processing", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
-
-      const { client } = result;
+      const { client } = plugin;
 
       // Get the AsyncIterable from client
       const asyncIterable = yield* Effect.tryPromise(() =>
@@ -183,18 +172,15 @@ describe("Plugin Client Unit Tests", () => {
       expect(processedResult[0]).toHaveProperty('item');
       expect(processedResult[0].item).toHaveProperty('externalId', 'effect_0');
       expect(processedResult[1].item.externalId).toBe('effect_1');
-    }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))
+    }).pipe(Effect.timeout("4 seconds"))
   );
 
   it.effect("should propagate oRPC errors correctly", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
-
-      const { client } = result;
+      const { client } = plugin;
 
       // Test error propagation - expect the call to throw
-      const errorResult = yield* Effect.tryPromise(() => 
+      const errorResult = yield* Effect.tryPromise(() =>
         client.throwError({ errorType: 'UNAUTHORIZED' })
       ).pipe(
         Effect.catchAll((error) => {
@@ -207,15 +193,12 @@ describe("Plugin Client Unit Tests", () => {
       );
 
       expect(errorResult).toBe("error-caught");
-    }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))
+    }).pipe(Effect.timeout("4 seconds"))
   );
 
   it.effect("should handle config-dependent procedures", () =>
     Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const result = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
-
-      const { client } = result;
+      const { client } = plugin;
 
       // Test procedure that uses config values
       const configResult = yield* Effect.tryPromise(() =>
@@ -224,6 +207,6 @@ describe("Plugin Client Unit Tests", () => {
 
       expect(configResult).toHaveProperty('configValue', 'http://localhost:1337');
       expect(configResult).toHaveProperty('inputValue', 'test-input');
-    }).pipe(Effect.provide(runtime), Effect.timeout("4 seconds"))
+    }).pipe(Effect.timeout("4 seconds"))
   );
 });
