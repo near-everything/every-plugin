@@ -1,5 +1,5 @@
 import { createPlugin } from "every-plugin";
-import { Effect, Queue, Stream, Ref } from "every-plugin/effect";
+import { Effect, Queue, Ref, Stream } from "every-plugin/effect";
 import { implement } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 import type { Context } from "telegraf";
@@ -144,16 +144,16 @@ export default createPlugin({
 
         // Create manual polling loop to avoid cross-realm AbortSignal issues with Module Federation
         const offset = yield* Ref.make(0);
-        
+
         yield* Effect.forkScoped(
           Effect.gen(function* () {
             console.log("[Telegram] Starting manual polling loop");
-            
+
             while (true) {
               try {
                 const currentOffset = yield* Ref.get(offset);
-                
-                const updates = yield* Effect.tryPromise(() => 
+
+                const updates = yield* Effect.tryPromise(() =>
                   bot.telegram.getUpdates(
                     30, // timeout
                     100, // limit
@@ -175,7 +175,7 @@ export default createPlugin({
                       return Effect.void;
                     })
                   );
-                  
+
                   // Update offset to next update
                   yield* Ref.set(offset, update.update_id + 1);
                 }
@@ -191,7 +191,7 @@ export default createPlugin({
             }
           })
         );
-        
+
         yield* Effect.sync(() => console.log("[Telegram] Manual polling started"));
 
         return {
@@ -234,7 +234,7 @@ export default createPlugin({
             },
             catch: (error) => new Error(`Webhook processing failed: ${error instanceof Error ? error.message : String(error)}`)
           }).pipe(
-            Effect.catchAll((error) => 
+            Effect.catchAll((error) =>
               Effect.sync(() => {
                 // Log the error but don't fail - malformed data should be handled gracefully
                 console.error(`[Telegram] Webhook processing error: ${error.message}`);

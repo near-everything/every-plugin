@@ -1,15 +1,13 @@
-import { expect, it } from "@effect/vitest";
-import { Effect, Stream } from "effect";
-import { describe } from "vitest";
-import { createPluginRuntime } from "every-plugin/runtime";
 import type { PluginBinding } from "every-plugin";
+import { createPluginRuntime } from "every-plugin/runtime";
+import type { Context } from "telegraf";
+import { describe, expect, it } from "vitest";
 import type TelegramSourcePlugin from "../../index";
 import { TELEGRAM_REMOTE_ENTRY_URL } from "./global-setup";
 
 type TelegramBindings = {
   "@curatedotfun/telegram-source": PluginBinding<typeof TelegramSourcePlugin>;
 };
-
 const TEST_REGISTRY = {
   "@curatedotfun/telegram-source": {
     remoteUrl: TELEGRAM_REMOTE_ENTRY_URL,
@@ -36,80 +34,74 @@ const SECRETS_CONFIG = {
 };
 
 describe.sequential("Telegram Polling Integration Tests", () => {
-  const { runtime, PluginService } = createPluginRuntime<TelegramBindings>({
+  const runtime = createPluginRuntime<TelegramBindings>({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG
   });
 
-  it.effect("should test telegram plugin polling", () =>
-    Effect.gen(function* () {
-      if (!TEST_BOT_TOKEN) {
-        throw new Error("TELEGRAM_BOT_TOKEN is required in .env.test file");
-      }
+  it("should test telegram plugin polling", async () => {
+    if (!TEST_BOT_TOKEN) {
+      throw new Error("TELEGRAM_BOT_TOKEN is required in .env.test file");
+    }
 
-      console.log("🚀 Testing telegram plugin polling");
-      console.log(`🔗 Chat ID: ${TEST_CHAT_ID}`);
+    console.log("🚀 Testing telegram plugin polling");
+    console.log(`🔗 Chat ID: ${TEST_CHAT_ID}`);
 
-      const pluginService = yield* PluginService;
-      const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", POLLING_CONFIG);
+    const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", POLLING_CONFIG);
 
-      console.log("✅ Plugin initialized");
+    console.log("✅ Plugin initialized");
 
-      // Send test prompt message
-      const timestamp = Date.now();
-      const promptMessage = `🤖 Integration Test - ${timestamp}
+    // Send test prompt message
+    const timestamp = Date.now();
+    const promptMessage = `🤖 Integration Test - ${timestamp}
       
 Please reply to complete the test.`;
 
-      console.log("📤 Sending prompt message...");
-      const sendResult = yield* Effect.tryPromise(() =>
-        client.sendMessage({
-          chatId: TEST_CHAT_ID,
-          text: promptMessage,
-        })
-      ).pipe(Effect.timeout("6 seconds"));
+    console.log("📤 Sending prompt message...");
+    const sendResult = await Promise.race([
+      client.sendMessage({
+        chatId: TEST_CHAT_ID,
+        text: promptMessage,
+      }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Send timeout")), 6000))
+    ]);
 
-      console.log(`✅ Prompt sent successfully`);
-      expect(sendResult.success).toBe(true);
+    console.log(`✅ Prompt sent successfully`);
+    expect(sendResult.success).toBe(true);
 
-      // Start listening for messages
-      console.log("🎧 Starting message stream...");
-      const streamResult = yield* Effect.tryPromise(() =>
-        client.listen({ maxResults: 1 })
-      );
+    // Start listening for messages
+    console.log("🎧 Starting message stream...");
+    const streamResult = await client.listen({ maxResults: 1 });
 
-      const stream = Stream.fromAsyncIterable(streamResult, (error) => {
-        console.error("❌ Stream error:", error);
-        return error;
-      });
+    // Collect messages with timeout
+    console.log("🔄 Processing stream...");
+    const eventArray: Context[] = [];
 
-      // Collect messages with timeout
-      console.log("🔄 Processing stream...");
-      const events = yield* stream.pipe(
-        Stream.tap((ctx) =>
-          Effect.sync(() => {
+    try {
+      await Promise.race([
+        (async () => {
+          for await (const ctx of streamResult) {
             console.log(`🔍 Received message`);
             if (ctx.message && 'text' in ctx.message && ctx.message.text) {
               console.log(`📝 Message: "${ctx.message.text}"`);
             }
-          })
-        ),
-        Stream.take(1),
-        Stream.runCollect,
-        Effect.timeout("30 seconds")
-      ).pipe(
-        Effect.catchAll(() => Effect.succeed([]))
-      );
+            eventArray.push(ctx);
+            break; // Take only 1
+          }
+        })(),
+        new Promise((resolve) => setTimeout(resolve, 30000))
+      ]);
+    } catch (error) {
+      console.log("Stream processing completed or timed out");
+    }
 
-      const eventArray = Array.from(events);
-      
-      if (eventArray.length === 0) {
-        console.log("⏰ No user response - sending timeout message");
-        
-        const timeoutResult = yield* Effect.tryPromise(() =>
-          client.sendMessage({
-            chatId: TEST_CHAT_ID,
-            text: `⏰ Integration Test Completed (Timeout)
+    if (eventArray.length === 0) {
+      console.log("⏰ No user response - sending timeout message");
+
+      const timeoutResult = await Promise.race([
+        client.sendMessage({
+          chatId: TEST_CHAT_ID,
+          text: `⏰ Integration Test Completed (Timeout)
 
 ✅ Plugin loading: Working
 ✅ Message sending: Working
@@ -117,28 +109,29 @@ Please reply to complete the test.`;
 ✅ Timeout handling: Working
 
 Test ID: ${timestamp}`,
-          })
-        ).pipe(Effect.timeout("6 seconds"));
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Send timeout")), 6000))
+      ]);
 
-        expect(timeoutResult.success).toBe(true);
-        console.log("✅ Timeout completion message sent");
-        return;
-      }
+      expect(timeoutResult.success).toBe(true);
+      console.log("✅ Timeout completion message sent");
+      return;
+    }
 
-      // Process received message
-      expect(eventArray.length).toBe(1);
-      const ctx = eventArray[0];
-      expect(ctx).toBeDefined();
+    // Process received message
+    expect(eventArray.length).toBe(1);
+    const ctx = eventArray[0];
+    expect(ctx).toBeDefined();
 
-      if (ctx.message && 'text' in ctx.message && ctx.message.text) {
-        const userReply = ctx.message.text;
-        console.log(`📨 User replied: "${userReply}"`);
+    if (ctx.message && 'text' in ctx.message && ctx.message.text) {
+      const userReply = ctx.message.text;
+      console.log(`📨 User replied: "${userReply}"`);
 
-        // Send success confirmation
-        const confirmResult = yield* Effect.tryPromise(() =>
-          client.sendMessage({
-            chatId: TEST_CHAT_ID,
-            text: `✅ Integration Test Completed!
+      // Send success confirmation
+      const confirmResult = await Promise.race([
+        client.sendMessage({
+          chatId: TEST_CHAT_ID,
+          text: `✅ Integration Test Completed!
 
 Your reply: "${userReply}"
 ✅ Plugin loading: Working
@@ -148,30 +141,30 @@ Your reply: "${userReply}"
 
 🎉 All systems operational!
 Test ID: ${timestamp}`,
-            replyToMessageId: ctx.message?.message_id,
-          })
-        ).pipe(Effect.timeout("6 seconds"));
+          replyToMessageId: ctx.message?.message_id,
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Send timeout")), 6000))
+      ]);
 
-        expect(confirmResult.success).toBe(true);
-        console.log("🎉 Integration test completed successfully!");
-      } else {
-        console.log("ℹ️ Received non-text message");
-        
-        const ackResult = yield* Effect.tryPromise(() =>
-          client.sendMessage({
-            chatId: TEST_CHAT_ID,
-            text: `✅ Integration Test Completed!
+      expect(confirmResult.success).toBe(true);
+      console.log("🎉 Integration test completed successfully!");
+    } else {
+      console.log("ℹ️ Received non-text message");
+
+      const ackResult = await Promise.race([
+        client.sendMessage({
+          chatId: TEST_CHAT_ID,
+          text: `✅ Integration Test Completed!
 
 Received non-text message
 Test ID: ${timestamp}
 🎉 Polling integration working!`,
-          })
-        ).pipe(Effect.timeout("6 seconds"));
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Send timeout")), 6000))
+      ]);
 
-        expect(ackResult.success).toBe(true);
-        console.log("✅ Non-text acknowledgment sent");
-      }
-
-    }).pipe(Effect.provide(runtime), Effect.timeout("45 seconds"))
-  , { timeout: 50000 });
+      expect(ackResult.success).toBe(true);
+      console.log("✅ Non-text acknowledgment sent");
+    }
+  }, { timeout: 50000 });
 });

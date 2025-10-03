@@ -1,9 +1,9 @@
-import { expect, it } from "@effect/vitest";
-import { Effect, Stream } from "effect";
+import { expect, it } from "vitest";
 import type { PluginBinding } from "every-plugin";
 import { createPluginRuntime } from "every-plugin/runtime";
 import { beforeAll, describe } from "vitest";
 import type TelegramSourcePlugin from "../../index";
+import type { Context } from "telegraf";
 import { TELEGRAM_REMOTE_ENTRY_URL } from "./global-setup";
 
 // Define typed registry bindings for the telegram plugin
@@ -62,7 +62,7 @@ const createWebhookUpdateFromSentMessage = (sentMessage: { messageId: number }, 
 });
 
 describe.sequential("Telegram Webhook Integration Tests", () => {
-  const { runtime, PluginService } = createPluginRuntime<TelegramBindings>({
+  const runtime = createPluginRuntime<TelegramBindings>({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG
   });
@@ -74,183 +74,158 @@ describe.sequential("Telegram Webhook Integration Tests", () => {
     console.log(`🔗 Webhook integration test using chat ID: ${TEST_CHAT_ID}`);
   });
 
-  it.effect("should handle complete integration flow with all features", () =>
-    Effect.gen(function* () {
-      const pluginService = yield* PluginService;
-      const { client } = yield* pluginService.usePlugin("@curatedotfun/telegram-source", INTEGRATION_CONFIG);
+  it("should handle complete integration flow with all features", async () => {
+    const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", INTEGRATION_CONFIG);
 
-      console.log("🚀 Testing complete integration: API → webhook → listen → stream");
+    console.log("🚀 Testing complete integration: API → webhook → listen → stream");
 
-      // Test 1: Basic message flow
-      const timestamp = Date.now();
-      const testMessage = `Integration test message - ${timestamp}`;
-      
-      const sentMessage = yield* Effect.tryPromise(() =>
-        client.sendMessage({
-          chatId: TEST_CHAT_ID,
-          text: testMessage,
-        })
-      );
+    // Test 1: Basic message flow
+    const timestamp = Date.now();
+    const testMessage = `Integration test message - ${timestamp}`;
+    
+    const sentMessage = await client.sendMessage({
+      chatId: TEST_CHAT_ID,
+      text: testMessage,
+    });
 
-      expect(sentMessage.success).toBe(true);
-      expect(sentMessage.messageId).toBeGreaterThan(0);
-      expect(sentMessage.chatId).toBe(TEST_CHAT_ID);
-      
-      console.log(`✅ Test 1: Sent real message ${sentMessage.messageId} via Telegram API`);
+    expect(sentMessage.success).toBe(true);
+    expect(sentMessage.messageId).toBeGreaterThan(0);
+    expect(sentMessage.chatId).toBe(TEST_CHAT_ID);
+    
+    console.log(`✅ Test 1: Sent real message ${sentMessage.messageId} via Telegram API`);
 
-      // Simulate webhook for the message
-      const webhookUpdate = createWebhookUpdateFromSentMessage(sentMessage, testMessage);
-      const webhookResult = yield* Effect.tryPromise(() =>
-        client.webhook(webhookUpdate)
-      );
-      
-      expect(webhookResult.processed).toBe(true);
-      console.log(`✅ Test 1: Processed webhook update for message ${sentMessage.messageId}`);
+    // Simulate webhook for the message
+    const webhookUpdate = createWebhookUpdateFromSentMessage(sentMessage, testMessage);
+    const webhookResult = await client.webhook(webhookUpdate);
+    
+    expect(webhookResult.processed).toBe(true);
+    console.log(`✅ Test 1: Processed webhook update for message ${sentMessage.messageId}`);
 
-      // Test 2: Multiple messages with filtering
-      console.log("🔍 Test 2: Testing message filtering");
-      
-      const filterMessages = [
-        `Filter test message 1 - ${timestamp}`,
-        `/command_test_${timestamp}`,
-        `Filter test message 2 - ${timestamp}`,
-      ];
+    // Test 2: Multiple messages with filtering
+    console.log("🔍 Test 2: Testing message filtering");
+    
+    const filterMessages = [
+      `Filter test message 1 - ${timestamp}`,
+      `/command_test_${timestamp}`,
+      `Filter test message 2 - ${timestamp}`,
+    ];
 
-      const sentFilterMessages = [];
-      for (const message of filterMessages) {
-        const result = yield* Effect.tryPromise(() =>
-          client.sendMessage({
-            chatId: TEST_CHAT_ID,
-            text: message,
-          })
-        );
-        sentFilterMessages.push(result);
-        
-        // Add to webhook queue
-        const filterWebhookUpdate = createWebhookUpdateFromSentMessage(result, message);
-        yield* Effect.tryPromise(() => client.webhook(filterWebhookUpdate));
-      }
-
-      console.log(`✅ Test 2: Sent and processed ${filterMessages.length} messages via webhook`);
-
-      // Test 3: Different message formats
-      console.log("📝 Test 3: Testing formatted messages");
-      
-      const formats = [
-        { text: "*Bold integration test*", parseMode: "Markdown" as const },
-        { text: "_Italic integration test_", parseMode: "Markdown" as const },
-        { text: "<b>HTML Bold integration test</b>", parseMode: "HTML" as const },
-      ];
-
-      for (const format of formats) {
-        const result = yield* Effect.tryPromise(() =>
-          client.sendMessage({
-            chatId: TEST_CHAT_ID,
-            text: format.text,
-            parseMode: format.parseMode,
-          })
-        );
-
-        expect(result.success).toBe(true);
-        expect(result.messageId).toBeGreaterThan(0);
-      }
-
-      console.log(`✅ Test 3: Successfully sent ${formats.length} formatted messages`);
-
-      // Test 4: Reply messages
-      console.log("💬 Test 4: Testing reply functionality");
-      
-      const originalResult = yield* Effect.tryPromise(() =>
-        client.sendMessage({
-          chatId: TEST_CHAT_ID,
-          text: "Original message for integration reply test",
-        })
-      );
-
-      const replyResult = yield* Effect.tryPromise(() =>
-        client.sendMessage({
-          chatId: TEST_CHAT_ID,
-          text: "Integration test reply message",
-          replyToMessageId: originalResult.messageId,
-        })
-      );
-
-      expect(replyResult.success).toBe(true);
-      expect(replyResult.messageId).toBeGreaterThan(0);
-      expect(replyResult.chatId).toBe(TEST_CHAT_ID);
-
-      console.log(`✅ Test 4: Reply functionality verified: reply ${replyResult.messageId} to message ${originalResult.messageId}`);
-
-      // Test 5: Listen and stream functionality - consume existing queue items
-      console.log("🎧 Test 5: Testing listen and stream functionality");
-      
-      const streamResult = yield* Effect.tryPromise(() =>
-        client.listen({
-          chatId: TEST_CHAT_ID,
-          maxResults: 3,
-        })
-      );
-
-      console.log("🔄 Got stream result, creating Effect stream...");
-      
-      const stream = Stream.fromAsyncIterable(streamResult, (error) => {
-        console.error("❌ Stream error:", error);
-        return error;
+    const sentFilterMessages = [];
+    for (const message of filterMessages) {
+      const result = await client.sendMessage({
+        chatId: TEST_CHAT_ID,
+        text: message,
       });
+      sentFilterMessages.push(result);
       
-      console.log("🔄 Processing stream for incoming messages...");
+      // Add to webhook queue
+      const filterWebhookUpdate = createWebhookUpdateFromSentMessage(result, message);
+      await client.webhook(filterWebhookUpdate);
+    }
+
+    console.log(`✅ Test 2: Sent and processed ${filterMessages.length} messages via webhook`);
+
+    // Test 3: Different message formats
+    console.log("📝 Test 3: Testing formatted messages");
+    
+    const formats = [
+      { text: "*Bold integration test*", parseMode: "Markdown" as const },
+      { text: "_Italic integration test_", parseMode: "Markdown" as const },
+      { text: "<b>HTML Bold integration test</b>", parseMode: "HTML" as const },
+    ];
+
+    for (const format of formats) {
+      const result = await client.sendMessage({
+        chatId: TEST_CHAT_ID,
+        text: format.text,
+        parseMode: format.parseMode,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.messageId).toBeGreaterThan(0);
+    }
+
+    console.log(`✅ Test 3: Successfully sent ${formats.length} formatted messages`);
+
+    // Test 4: Reply messages
+    console.log("💬 Test 4: Testing reply functionality");
+    
+    const originalResult = await client.sendMessage({
+      chatId: TEST_CHAT_ID,
+      text: "Original message for integration reply test",
+    });
+
+    const replyResult = await client.sendMessage({
+      chatId: TEST_CHAT_ID,
+      text: "Integration test reply message",
+      replyToMessageId: originalResult.messageId,
+    });
+
+    expect(replyResult.success).toBe(true);
+    expect(replyResult.messageId).toBeGreaterThan(0);
+    expect(replyResult.chatId).toBe(TEST_CHAT_ID);
+
+    console.log(`✅ Test 4: Reply functionality verified: reply ${replyResult.messageId} to message ${originalResult.messageId}`);
+
+    // Test 5: Listen and stream functionality - consume existing queue items
+    console.log("🎧 Test 5: Testing listen and stream functionality");
+    
+    const streamResult = await client.listen({
+      chatId: TEST_CHAT_ID,
+      maxResults: 3,
+    });
+
+    console.log("🔄 Got stream result, processing messages...");
+    
+    const events: Context[] = [];
+    let count = 0;
+    
+    await Promise.race([
+      (async () => {
+        for await (const ctx of streamResult) {
+          console.log(`🔍 Received message via stream: Update ${ctx.update?.update_id}`);
+          if (ctx.message && 'text' in ctx.message && ctx.message.text) {
+            console.log(`📝 Message text: "${ctx.message.text}"`);
+          }
+          events.push(ctx);
+          if (++count >= 3) break;
+        }
+      })(),
+      new Promise((resolve) => {
+        setTimeout(() => {
+          console.log("⏰ Stream test timed out");
+          resolve(undefined);
+        }, 5000);
+      })
+    ]);
+
+    console.log(`✅ Test 5: Listen streamed ${events.length} events`);
+
+    if (events.length > 0) {
+      // Verify Context structure - now we get Telegraf Context objects
+      const firstContext = events[0];
+      expect(firstContext).toHaveProperty('update');
+      expect(firstContext).toHaveProperty('telegram');
+      expect(firstContext).toHaveProperty('chat');
+      expect(firstContext).toHaveProperty('message');
       
-      const messages = yield* Effect.race(
-        stream.pipe(
-          Stream.tap((ctx) => {
-            console.log(`🔍 Received message via stream: Update ${ctx.update?.update_id}`);
-            return Effect.sync(() => {
-              if (ctx.message && 'text' in ctx.message && ctx.message.text) {
-                console.log(`📝 Message text: "${ctx.message.text}"`);
-              }
-            });
-          }),
-          Stream.take(3),
-          Stream.runCollect
-        ),
-        Effect.sleep("5 seconds").pipe(
-          Effect.tap(() => Effect.sync(() => console.log("⏰ Stream test timed out"))),
-          Effect.as([])
-        )
-      );
+      expect(firstContext.chat?.id.toString()).toBe(TEST_CHAT_ID);
+      expect(firstContext.message).toBeDefined();
+      expect(firstContext.update.update_id).toBeGreaterThan(0);
+      
+      console.log(`✅ Test 5: Verified Context structure and content`);
+    } else {
+      console.log("ℹ️ No events received - this may be expected if queue was already consumed");
+    }
 
-      const events = Array.from(messages);
-      console.log(`✅ Test 5: Listen streamed ${events.length} events`);
+    // Final confirmation message
+    const confirmationResult = await client.sendMessage({
+      chatId: TEST_CHAT_ID,
+      text: `🎉 ALL INTEGRATION TESTS PASSED! Completed comprehensive testing at ${new Date().toISOString()}`,
+      parseMode: "Markdown",
+    });
 
-      if (events.length > 0) {
-        // Verify Context structure - now we get Telegraf Context objects
-        const firstContext = events[0];
-        expect(firstContext).toHaveProperty('update');
-        expect(firstContext).toHaveProperty('telegram');
-        expect(firstContext).toHaveProperty('chat');
-        expect(firstContext).toHaveProperty('message');
-        
-        expect(firstContext.chat?.id.toString()).toBe(TEST_CHAT_ID);
-        expect(firstContext.message).toBeDefined();
-        expect(firstContext.update.update_id).toBeGreaterThan(0);
-        
-        console.log(`✅ Test 5: Verified Context structure and content`);
-      } else {
-        console.log("ℹ️ No events received - this may be expected if queue was already consumed");
-      }
-
-      // Final confirmation message
-      const confirmationResult = yield* Effect.tryPromise(() =>
-        client.sendMessage({
-          chatId: TEST_CHAT_ID,
-          text: `🎉 ALL INTEGRATION TESTS PASSED! Completed comprehensive testing at ${new Date().toISOString()}`,
-          parseMode: "Markdown",
-        })
-      );
-
-      expect(confirmationResult.success).toBe(true);
-      console.log(`🎉 Integration test suite complete! Confirmation message ${confirmationResult.messageId} sent`);
-
-    }).pipe(Effect.provide(runtime), Effect.timeout("30 seconds"))
-  );
+    expect(confirmationResult.success).toBe(true);
+    console.log(`🎉 Integration test suite complete! Confirmation message ${confirmationResult.messageId} sent`);
+  }, { timeout: 30000 });
 });
