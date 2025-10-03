@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
 import type { PluginRegistry } from "every-plugin";
 import { PluginRuntime } from "every-plugin";
-import { createTestLayer, type TestPluginMap } from "every-plugin/testing";
+import { createTestLayer, type PluginMap } from "every-plugin/testing";
 import { beforeEach, describe, vi } from "vitest";
 import { MasaClient } from "../client";
 import { JobManager } from "../job-manager";
@@ -40,7 +40,7 @@ const SECRETS_CONFIG = {
 };
 
 // Plugin map for tests
-const TEST_PLUGIN_MAP: TestPluginMap = {
+const TEST_PLUGIN_MAP: PluginMap = {
   "@curatedotfun/masa-source": MasaSourcePlugin,
 };
 

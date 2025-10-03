@@ -1,26 +1,21 @@
-import { expect, it } from "@effect/vitest";
+import { createServer } from "node:http";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import { OpenAPIGenerator } from "@orpc/openapi";
 import { OpenAPIHandler } from "@orpc/openapi/node";
 import { RPCHandler } from "@orpc/server/node";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { Effect, Stream } from "effect";
-import { createServer } from "node:http";
-import { afterAll, beforeAll, describe } from "vitest";
-import type { PluginBinding } from "../../src/plugin";
-import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
-import type { PluginRegistry } from "../../src/types";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createLocalPluginRuntime } from "../../src/testing";
+import type { EveryPlugin, PluginRegistry } from "../../src/types";
 import { PORT_POOL } from "../integration/global-setup";
 import type { TestPluginClient } from "../test-plugin/src/index";
-import TestPlugin from "../test-plugin/src/index";
+import { TestPlugin } from "../test-plugin/src/index";
 
-// Define typed registry bindings for the test plugin
-type TestBindings = {
-  "test-plugin": PluginBinding<typeof TestPlugin>;
-};
+const TEST_PLUGIN_MAP = {
+  "test-plugin": TestPlugin,
+} as const;
 
-// Test registry
 const TEST_REGISTRY: PluginRegistry = {
   "test-plugin": {
     remoteUrl: "http://localhost:3999/remoteEntry.js",
@@ -43,19 +38,15 @@ const SECRETS_CONFIG = {
   API_KEY: "test-api-key-value",
 };
 
-const TEST_PLUGIN_MAP: TestPluginMap = {
-  "test-plugin": TestPlugin,
-};
-
 describe("Plugin Router Access Methods", () => {
-  const runtime = createTestPluginRuntime<TestBindings>({
+  const runtime = createLocalPluginRuntime({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG
   }, TEST_PLUGIN_MAP);
 
   // Shared server setup for all tests
   let server: ReturnType<typeof createServer> | null = null;
-  let plugin: any = null;
+  let plugin: EveryPlugin.Infer<typeof runtime, "test-plugin"> | null = null;
   let baseUrl: string = "";
 
   beforeAll(async () => {
@@ -79,7 +70,7 @@ describe("Plugin Router Access Methods", () => {
       if (url.pathname.startsWith('/rpc')) {
         const result = await rpcHandler.handle(req, res, {
           prefix: '/rpc',
-          context: plugin.initialized.context
+          context: plugin?.initialized.context
         });
         if (result.matched) return;
       }
@@ -88,7 +79,7 @@ describe("Plugin Router Access Methods", () => {
       if (url.pathname.startsWith('/api')) {
         const result = await openApiHandler.handle(req, res, {
           prefix: '/api',
-          context: plugin.initialized.context
+          context: plugin?.initialized.context
         });
         if (result.matched) return;
       }

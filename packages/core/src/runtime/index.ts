@@ -109,8 +109,10 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 				// Load → Instantiate → Initialize
 				const ctor = yield* pluginService.loadPlugin(validatedId);
 				const instance = yield* pluginService.instantiatePlugin(ctor);
-				const initialized = yield* pluginService.initializePlugin(instance, config);
+				const _initialized = yield* pluginService.initializePlugin(instance, config);
 
+				type PluginType = PluginOf<R[K]>;
+				const initialized = _initialized as InitializedPlugin<PluginType>;
 				const client = createPluginClient(initialized);
 				const router = getPluginRouter(initialized);
 
@@ -119,7 +121,7 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 					router,
 					metadata: initialized.metadata,
 					initialized
-				};
+				} as EveryPlugin<PluginType>;
 			}).pipe(
 				Effect.provide(this.runtime)
 			);

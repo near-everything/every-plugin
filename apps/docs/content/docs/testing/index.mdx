@@ -3,22 +3,27 @@ title: Testing Plugins
 description: Unit and integration testing for plugins
 ---
 
-The every-plugin framework provides testing utilities to test plugins without Module Federation overhead.
+Test plugins using `createLocalPluginRuntime`, which loads plugins directly without Module Federation overhead. This is the same tool used for local plugin development.
 
-## Testing Utilities
+## Testing with Local Plugins
 
-Import the testing helpers from `every-plugin/testing`:
+Import the local plugin runtime from `every-plugin/testing`:
 
 ```typescript
-import { createTestPluginRuntime } from "every-plugin/testing";
-import type { TestPluginMap } from "every-plugin/testing";
+import { createLocalPluginRuntime } from "every-plugin/testing";
 import { Effect } from "every-plugin/effect";
 import { expect, it } from "@effect/vitest";
 ```
 
-## Type Bindings for Testing
+The `createLocalPluginRuntime` function is designed for two scenarios:
+- **Testing** - Test plugins in isolation with mock services
+- **Local Development** - Work with plugins from source in monorepos
 
-Type bindings are **optional** but provide significant benefits for testing:
+Both use cases share the same API, making it easy to test locally and deploy remotely.
+
+## Automatic Type Inference
+
+When you define your plugin map with `as const`, type bindings are automatically inferred:
 
 **Benefits:**
 - IDE autocomplete for plugin IDs and procedure names
@@ -26,43 +31,38 @@ Type bindings are **optional** but provide significant benefits for testing:
 - Compile-time validation of test inputs/outputs
 - Better refactoring support
 
-To use type bindings in tests, import the plugin type-only:
-
 ```typescript
-// Install plugin as dev dependency (or workspace dependency)
-// bun add -D @my-org/my-plugin
-
-import type { PluginBinding } from "every-plugin";
-import type TestPlugin from "./my-plugin"; // Type-only import
-
-type TestBindings = {
-  "my-plugin": PluginBinding<typeof TestPlugin>;
-};
-```
-
-Type bindings are completely optional - your tests work without them, but they enhance your development experience.
-
-## Unit Testing
-
-Test plugins in isolation using `createTestPluginRuntime`:
-
-```typescript
-import { createTestPluginRuntime } from "every-plugin/testing";
-import type { TestPluginMap, PluginBinding } from "every-plugin";
 import TestPlugin from "./my-plugin";
 
-// Optional: Define type bindings for autocomplete
-type TestBindings = {
-  "my-plugin": PluginBinding<typeof TestPlugin>;
-};
-
-// Create plugin map (actual implementation)
-const pluginMap: TestPluginMap = {
+// Use 'as const' for automatic type inference
+const pluginMap = {
   "my-plugin": TestPlugin
-};
+} as const;
 
-// Create test runtime
-const { runtime, PluginService } = createTestPluginRuntime<TestBindings>(
+// Runtime automatically infers bindings from the map
+const { runtime, PluginService } = createLocalPluginRuntime(
+  { registry: {...}, secrets: {...} },
+  pluginMap
+);
+```
+
+No manual type definitions needed - the plugin map provides full type safety automatically.
+
+## Unit Testing Plugins
+
+Test plugins in isolation using `createLocalPluginRuntime`:
+
+```typescript
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import TestPlugin from "./my-plugin";
+
+// Create plugin map with 'as const' for type inference
+const pluginMap = {
+  "my-plugin": TestPlugin
+} as const;
+
+// Create local runtime - bindings automatically inferred
+const { runtime, PluginService } = createLocalPluginRuntime(
   {
     registry: {
       "my-plugin": {
@@ -103,7 +103,7 @@ Full test suite for a plugin:
 import { expect, it } from "@effect/vitest";
 import { Effect, Stream } from "every-plugin/effect";
 import { describe } from "vitest";
-import { createTestPluginRuntime } from "every-plugin/testing";
+import { createLocalPluginRuntime } from "every-plugin/testing";
 import type { PluginBinding } from "every-plugin";
 import TestPlugin from "../src/index";
 
@@ -136,10 +136,10 @@ const SECRETS_CONFIG = {
 
 const PLUGIN_MAP = {
   "test-plugin": TestPlugin
-};
+} as const;
 
 describe("Test Plugin", () => {
-  const { runtime, PluginService } = createTestPluginRuntime<TestBindings>(
+  const { runtime, PluginService } = createLocalPluginRuntime(
     {
       registry: TEST_REGISTRY,
       secrets: SECRETS_CONFIG

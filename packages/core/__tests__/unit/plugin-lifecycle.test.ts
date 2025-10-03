@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { PluginBinding } from "../../src/plugin";
-import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
+import { createLocalPluginRuntime } from "../../src/testing";
 import TestPlugin from "../test-plugin/src/index";
 
-type TestBindings = {
-  "test-plugin": PluginBinding<typeof TestPlugin>;
-};
+const TEST_PLUGIN_MAP = {
+  "test-plugin": TestPlugin,
+} as const;
 
 const TEST_CONFIG = {
   variables: {
@@ -17,12 +16,8 @@ const TEST_CONFIG = {
   },
 };
 
-const TEST_PLUGIN_MAP: TestPluginMap = {
-  "test-plugin": TestPlugin,
-};
-
 describe("Plugin Lifecycle Unit Tests", () => {
-  const runtime = createTestPluginRuntime<TestBindings>({
+  const runtime = createLocalPluginRuntime({
     registry: {
       "test-plugin": {
         remoteUrl: "http://localhost:3999/remoteEntry.js",

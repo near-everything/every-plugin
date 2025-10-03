@@ -3,11 +3,11 @@ import { ModuleFederationError } from "../../runtime/errors";
 import { ModuleFederationService } from "../../runtime/services/module-federation.service";
 import type { AnyPlugin } from "../../types";
 
-export interface TestPluginMap {
+export interface PluginMap {
   [pluginId: string]: new () => AnyPlugin;
 }
 
-export const createMockModuleFederationServiceLayer = (pluginMap: TestPluginMap) =>
+export const createMockModuleFederationServiceLayer = (pluginMap: PluginMap) =>
   Layer.succeed(
     ModuleFederationService,
     {

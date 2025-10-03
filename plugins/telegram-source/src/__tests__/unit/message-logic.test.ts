@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
 import type { PluginBinding, PluginRegistry } from "every-plugin";
-import { createTestPluginRuntime, type TestPluginMap } from "every-plugin/testing";
+import { createLocalPluginRuntime, type PluginMap } from "every-plugin/testing";
 import { beforeAll, describe } from "vitest";
 import TelegramSourcePlugin from "../../index";
 import { createCommandUpdate, createTextUpdate } from "../fixtures/telegram-updates";
@@ -36,14 +36,14 @@ const SECRETS_CONFIG = {
 };
 
 // Plugin map for tests
-const TEST_PLUGIN_MAP: TestPluginMap = {
+const TEST_PLUGIN_MAP: PluginMap = {
   "@curatedotfun/telegram-source": TelegramSourcePlugin,
 };
 
 const TEST_CHAT_ID = "-4956736324";
 
 describe("Telegram Message Logic Tests", () => {
-  const { runtime, PluginService } = createTestPluginRuntime<TelegramBindings>({
+  const { runtime, PluginService } = createLocalPluginRuntime<TelegramBindings>({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG,
   }, TEST_PLUGIN_MAP);

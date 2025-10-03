@@ -10,7 +10,7 @@ This guide provides complete, runnable patterns for using plugins in various sce
 Call plugin procedures directly using the typed client:
 
 ```typescript
-import type { PluginBinding } from "every-plugin";
+import type { PluginBinding, EveryPlugin } from "every-plugin";
 import type SocialApi from "@my-org/social-api-plugin";
 import { createPluginRuntime } from "every-plugin/runtime";
 
@@ -42,6 +42,44 @@ const bulkPosts = await client.getBulk({ ids: ["post-1", "post-2", "post-3"] });
 const searchResults = await client.search({ query: "typescript", limit: 20 });
 
 await runtime.shutdown();
+```
+
+### Type-Safe Middleware with EveryPlugin.Infer
+
+Extract plugin types for middleware and utilities:
+
+```typescript
+import type { EveryPlugin } from "every-plugin";
+
+// Extract plugin type from runtime
+type SocialApiPlugin = EveryPlugin.Infer<typeof runtime, "social-api">;
+
+// Type-safe logging middleware
+function logPluginUsage(plugin: SocialApiPlugin) {
+  console.log(`[${plugin.metadata.pluginId}] v${plugin.metadata.version}`);
+  console.log(`Type: ${plugin.metadata.type}`);
+}
+
+// Type-safe error handling wrapper
+async function withErrorHandling<T>(
+  plugin: SocialApiPlugin,
+  operation: () => Promise<T>
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    console.error(`Plugin ${plugin.metadata.pluginId} failed:`, error);
+    throw error;
+  }
+}
+
+// Use in application code
+const result = await runtime.usePlugin("social-api", config);
+logPluginUsage(result);
+
+const post = await withErrorHandling(result, () =>
+  result.client.getById({ id: "post-123" })
+);
 ```
 
 ## HTTP Mounting

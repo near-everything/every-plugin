@@ -1,17 +1,12 @@
-import { expect, it } from "@effect/vitest";
-import { Effect, Stream } from "effect";
-import { beforeAll, describe } from "vitest";
-import type { PluginBinding } from "../../src/plugin";
-import { createTestPluginRuntime, type TestPluginMap } from "../../src/testing";
-import type { PluginRegistry } from "../../src/types";
+import { beforeAll, describe, expect, it } from "vitest";
+import { createLocalPluginRuntime } from "../../src/testing";
+import type { EveryPlugin, PluginRegistry } from "../../src/types";
 import TestPlugin from "../test-plugin/src/index";
 
-// Define typed registry bindings for the test plugin
-type TestBindings = {
-  "test-plugin": PluginBinding<typeof TestPlugin>;
-};
+const TEST_PLUGIN_MAP = {
+  "test-plugin": TestPlugin,
+} as const;
 
-// Test registry for client unit tests
 const TEST_REGISTRY: PluginRegistry = {
   "test-plugin": {
     remoteUrl: "http://localhost:3999/remoteEntry.js",
@@ -34,179 +29,118 @@ const SECRETS_CONFIG = {
   API_KEY: "test-api-key-value",
 };
 
-// Plugin map for tests
-const TEST_PLUGIN_MAP: TestPluginMap = {
-  "test-plugin": TestPlugin,
-};
-
 describe("Plugin Client Unit Tests", () => {
-  const runtime = createTestPluginRuntime<TestBindings>({
+  const runtime = createLocalPluginRuntime({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG,
   }, TEST_PLUGIN_MAP);
 
-  let plugin: Awaited<ReturnType<typeof runtime.usePlugin>>;
+  let plugin: EveryPlugin.Infer<typeof runtime, "test-plugin">;
 
   beforeAll(async () => {
     plugin = await runtime.usePlugin("test-plugin", TEST_CONFIG);
   });
 
-  it.effect("should create plugin client and access procedures", () =>
-    Effect.gen(function* () {
-      const { client } = plugin;
+  it("should create plugin client and access procedures", async () => {
+    const { client } = plugin;
 
-      // Verify procedures exist
-      expect(typeof client.getById).toBe('function');
-      expect(typeof client.getBulk).toBe('function');
-      expect(typeof client.simpleStream).toBe('function');
-      expect(typeof client.emptyStream).toBe('function');
-      expect(typeof client.throwError).toBe('function');
-      expect(typeof client.requiresSpecialConfig).toBe('function');
+    expect(typeof client.getById).toBe('function');
+    expect(typeof client.getBulk).toBe('function');
+    expect(typeof client.simpleStream).toBe('function');
+    expect(typeof client.emptyStream).toBe('function');
+    expect(typeof client.throwError).toBe('function');
+    expect(typeof client.requiresSpecialConfig).toBe('function');
 
-      // Test non-streaming procedure
-      const procedureResult = yield* Effect.tryPromise(() => client.getById({ id: "test-123" }));
-      expect(procedureResult).toHaveProperty('item');
-      expect(procedureResult.item).toHaveProperty('externalId', 'test-123');
-      expect(procedureResult.item.content).toContain('single content for test-123');
-    }).pipe(Effect.timeout("4 seconds"))
-  );
+    const procedureResult = await client.getById({ id: "test-123" });
+    expect(procedureResult).toHaveProperty('item');
+    expect(procedureResult.item).toHaveProperty('externalId', 'test-123');
+    expect(procedureResult.item.content).toContain('single content for test-123');
+  });
 
-  it.effect("should handle bulk operations", () =>
-    Effect.gen(function* () {
-      const { client } = plugin;
+  it("should handle bulk operations", async () => {
+    const { client } = plugin;
 
-      // Test bulk fetch
-      const bulkResult = yield* Effect.tryPromise(() =>
-        client.getBulk({ ids: ["bulk1", "bulk2", "bulk3"] })
-      );
+    const bulkResult = await client.getBulk({ ids: ["bulk1", "bulk2", "bulk3"] });
 
-      expect(bulkResult).toHaveProperty('items');
-      expect(bulkResult.items).toHaveLength(3);
-      expect(bulkResult.items[0].externalId).toBe('bulk1');
-      expect(bulkResult.items[0].content).toContain('bulk content for bulk1');
-      expect(bulkResult.items[1].externalId).toBe('bulk2');
-      expect(bulkResult.items[2].externalId).toBe('bulk3');
-    }).pipe(Effect.timeout("4 seconds"))
-  );
+    expect(bulkResult).toHaveProperty('items');
+    expect(bulkResult.items).toHaveLength(3);
+    expect(bulkResult.items[0].externalId).toBe('bulk1');
+    expect(bulkResult.items[0].content).toContain('bulk content for bulk1');
+    expect(bulkResult.items[1].externalId).toBe('bulk2');
+    expect(bulkResult.items[2].externalId).toBe('bulk3');
+  });
 
-  it.effect("should stream using plugin client directly", () =>
-    Effect.gen(function* () {
-      const { client } = plugin;
+  it("should stream using plugin client directly", async () => {
+    const { client } = plugin;
 
-      // Test streaming procedure directly
-      const streamResult = yield* Effect.tryPromise(() =>
-        client.simpleStream({ count: 3, prefix: "stream" })
-      );
+    const streamResult = await client.simpleStream({ count: 3, prefix: "stream" });
 
-      // Should be an AsyncIterable
-      expect(streamResult).not.toBeNull();
-      expect(typeof streamResult).toBe('object');
-      expect(Symbol.asyncIterator in streamResult).toBe(true);
+    expect(streamResult).not.toBeNull();
+    expect(typeof streamResult).toBe('object');
+    expect(Symbol.asyncIterator in streamResult).toBe(true);
 
-      // Convert to Effect stream and collect
-      const stream = Stream.fromAsyncIterable(streamResult, (error) => error);
-      const items = yield* stream.pipe(
-        Stream.take(5), // Take more than expected to ensure it terminates
-        Stream.runCollect
-      );
+    const resultArray: any[] = [];
+    for await (const item of streamResult) {
+      resultArray.push(item);
+    }
 
-      const resultArray = Array.from(items);
-      expect(resultArray.length).toBe(3); // Should match count parameter
-      expect(resultArray[0]).toHaveProperty('item');
-      expect(resultArray[0].item).toHaveProperty('externalId', 'stream_0');
-      expect(resultArray[0]).toHaveProperty('state');
-      expect(resultArray[0]).toHaveProperty('metadata');
-      expect(resultArray[1].item.externalId).toBe('stream_1');
-      expect(resultArray[2].item.externalId).toBe('stream_2');
-    }).pipe(Effect.timeout("4 seconds"))
-  );
+    expect(resultArray.length).toBe(3);
+    expect(resultArray[0]).toHaveProperty('item');
+    expect(resultArray[0].item).toHaveProperty('externalId', 'stream_0');
+    expect(resultArray[0]).toHaveProperty('state');
+    expect(resultArray[0]).toHaveProperty('metadata');
+    expect(resultArray[1].item.externalId).toBe('stream_1');
+    expect(resultArray[2].item.externalId).toBe('stream_2');
+  });
 
-  it.effect("should handle empty streams", () =>
-    Effect.gen(function* () {
-      const { client } = plugin;
+  it("should handle empty streams", async () => {
+    const { client } = plugin;
 
-      // Test empty stream
-      const emptyResult = yield* Effect.tryPromise(() =>
-        client.emptyStream({ reason: "testing empty stream" })
-      );
+    const emptyResult = await client.emptyStream({ reason: "testing empty stream" });
 
-      // Convert to Effect stream and collect
-      const stream = Stream.fromAsyncIterable(emptyResult, (error) => error);
-      const items = yield* stream.pipe(
-        Stream.runCollect
-      );
+    const resultArray: any[] = [];
+    for await (const item of emptyResult) {
+      resultArray.push(item);
+    }
 
-      const resultArray = Array.from(items);
-      expect(resultArray.length).toBe(0); // Should be empty
-    }).pipe(Effect.timeout("4 seconds"))
-  );
+    expect(resultArray.length).toBe(0);
+  });
 
-  it.effect("should handle Effect Stream.fromAsyncIterable with custom processing", () =>
-    Effect.gen(function* () {
-      const { client } = plugin;
+  it("should handle async iteration with custom processing", async () => {
+    const { client } = plugin;
 
-      // Get the AsyncIterable from client
-      const asyncIterable = yield* Effect.tryPromise(() =>
-        client.simpleStream({ count: 2, prefix: "effect" })
-      );
+    const asyncIterable = await client.simpleStream({ count: 2, prefix: "effect" });
 
-      // Convert to Effect stream with custom processing
-      const stream = Stream.fromAsyncIterable(asyncIterable, (error) => {
-        console.error("Stream error:", error);
-        return error;
+    const processedResult: any[] = [];
+    for await (const item of asyncIterable) {
+      processedResult.push({
+        ...item,
+        processed: true,
+        timestamp: Date.now(),
       });
+    }
 
-      // Apply Effect stream operations
-      const processedItems = yield* stream.pipe(
-        Stream.map((item: any) => ({
-          ...item,
-          processed: true,
-          timestamp: Date.now(),
-        })),
-        Stream.runCollect
-      );
+    expect(processedResult.length).toBe(2);
+    expect(processedResult[0]).toHaveProperty('processed', true);
+    expect(processedResult[0]).toHaveProperty('item');
+    expect(processedResult[0].item).toHaveProperty('externalId', 'effect_0');
+    expect(processedResult[1].item.externalId).toBe('effect_1');
+  });
 
-      const processedResult = Array.from(processedItems);
-      expect(processedResult.length).toBe(2);
-      expect(processedResult[0]).toHaveProperty('processed', true);
-      expect(processedResult[0]).toHaveProperty('item');
-      expect(processedResult[0].item).toHaveProperty('externalId', 'effect_0');
-      expect(processedResult[1].item.externalId).toBe('effect_1');
-    }).pipe(Effect.timeout("4 seconds"))
-  );
+  it("should propagate oRPC errors correctly", async () => {
+    const { client } = plugin;
 
-  it.effect("should propagate oRPC errors correctly", () =>
-    Effect.gen(function* () {
-      const { client } = plugin;
+    await expect(
+      client.throwError({ errorType: 'UNAUTHORIZED' })
+    ).rejects.toThrow();
+  });
 
-      // Test error propagation - expect the call to throw
-      const errorResult = yield* Effect.tryPromise(() =>
-        client.throwError({ errorType: 'UNAUTHORIZED' })
-      ).pipe(
-        Effect.catchAll((error) => {
-          expect(error).toBeDefined();
-          // The error might be wrapped, so check if it contains the expected message
-          const errorMessage = error.message || error.toString();
-          expect(errorMessage).toBeDefined();
-          return Effect.succeed("error-caught");
-        })
-      );
+  it("should handle config-dependent procedures", async () => {
+    const { client } = plugin;
 
-      expect(errorResult).toBe("error-caught");
-    }).pipe(Effect.timeout("4 seconds"))
-  );
+    const configResult = await client.requiresSpecialConfig({ checkValue: "test-input" });
 
-  it.effect("should handle config-dependent procedures", () =>
-    Effect.gen(function* () {
-      const { client } = plugin;
-
-      // Test procedure that uses config values
-      const configResult = yield* Effect.tryPromise(() =>
-        client.requiresSpecialConfig({ checkValue: "test-input" })
-      );
-
-      expect(configResult).toHaveProperty('configValue', 'http://localhost:1337');
-      expect(configResult).toHaveProperty('inputValue', 'test-input');
-    }).pipe(Effect.timeout("4 seconds"))
-  );
+    expect(configResult).toHaveProperty('configValue', 'http://localhost:1337');
+    expect(configResult).toHaveProperty('inputValue', 'test-input');
+  });
 });
