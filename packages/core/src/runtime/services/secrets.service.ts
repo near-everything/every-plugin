@@ -1,37 +1,30 @@
-import { Effect, Layer } from "effect";
+import { Context, Effect } from "effect";
 import { z } from "zod";
 import type { SecretsConfig } from "../../types";
 import { PluginRuntimeError } from "../errors";
-
-export interface ISecretsService {
-	readonly hydrateSecrets: <T>(
-		config: T,
-		secretsConfig: SecretsConfig,
-	) => Effect.Effect<T, PluginRuntimeError>;
-}
 
 const configSchema = z.object({
 	secrets: z.record(z.string(), z.unknown())
 }).loose();
 
-export class SecretsService extends Effect.Tag("SecretsService")<
-	SecretsService,
-	ISecretsService
->() {
-	static Live = (secrets: SecretsConfig) =>
-		Layer.succeed(SecretsService, {
-			hydrateSecrets: <T>(config: T, secretsConfig: SecretsConfig) =>
+export class SecretsConfigTag extends Context.Tag("SecretsConfig")<
+	SecretsConfigTag,
+	SecretsConfig
+>() { }
+
+export class SecretsService extends Effect.Service<SecretsService>()("SecretsService", {
+	effect: Effect.gen(function* () {
+		const secrets = yield* SecretsConfigTag;
+
+		return {
+			hydrateSecrets: <T>(config: T) =>
 				Effect.gen(function* () {
 					const parseResult = configSchema.parse(config);
 					try {
 						const configString = JSON.stringify(parseResult);
 						let hydratedString = configString;
 
-						// Use provided secrets or fallback to secretsConfig
-						const effectiveSecrets = { ...secretsConfig, ...secrets };
-
-						// Simple template replacement for {{SECRET_NAME}} patterns
-						for (const [key, value] of Object.entries(effectiveSecrets)) {
+						for (const [key, value] of Object.entries(secrets)) {
 							const pattern = new RegExp(`{{${key}}}`, "g");
 							hydratedString = hydratedString.replace(pattern, String(value));
 						}
@@ -48,8 +41,6 @@ export class SecretsService extends Effect.Tag("SecretsService")<
 						);
 					}
 				}),
-		});
-}
-
-export const SecretsServiceTag = SecretsService;
-export const SecretsServiceLive = SecretsService.Live;
+		};
+	}),
+}) { }

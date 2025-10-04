@@ -1,9 +1,17 @@
-const path = require("path");
+const path = require("node:path");
 const { rspack } = require("@rspack/core");
 
 const pkg = require("./package.json");
 
-const { getNormalizedRemoteName } = require("every-plugin/normalize");
+// const {
+//   getNormalizedRemoteName,
+// } = require("../../dist/runtime/services/normalize.js");
+
+// const everyPluginPkg = require("../../package.json");
+
+const {
+  getNormalizedRemoteName,
+} = require("every-plugin/normalize");
 
 const everyPluginPkg = require("every-plugin/package.json");
 
@@ -50,6 +58,16 @@ module.exports = {
   },
   resolve: {
     extensions: [".tsx", ".ts", ".js"],
+    // alias: {
+    //   "every-plugin/normalize": path.resolve(
+    //     __dirname,
+    //     "../../dist/runtime/services/normalize.js"
+    //   ),
+    //   "every-plugin/effect": path.resolve(__dirname, "../../dist/effect.js"),
+    //   "every-plugin/orpc": path.resolve(__dirname, "../../dist/orpc.js"),
+    //   "every-plugin/zod": path.resolve(__dirname, "../../dist/zod.js"),
+    //   "every-plugin": path.resolve(__dirname, "../../dist/index.js"),
+    // },
   },
   plugins: [
     new rspack.container.ModuleFederationPlugin({
@@ -70,14 +88,14 @@ module.exports = {
           strictVersion: false,
           eager: false,
         },
-        "effect": {
+        effect: {
           version: everyPluginPkg.dependencies.effect,
           singleton: true,
           requiredVersion: everyPluginPkg.dependencies.effect,
           strictVersion: false,
           eager: false,
         },
-        "zod": {
+        zod: {
           version: everyPluginPkg.dependencies.zod,
           singleton: true,
           requiredVersion: everyPluginPkg.dependencies.zod,

@@ -10,7 +10,7 @@ export const Route = createFileRoute("/ai")({
 });
 
 type PluginPhase = "idle" | "historical" | "processing" | "realtime" | "error";
-type PluginResult = {
+type EveryPlugin = {
 	id: string;
 	content: string;
 	contentType: string;
@@ -23,7 +23,7 @@ type PluginResult = {
 function PluginRunner() {
 	const [query, setQuery] = useState("");
 	const [phase, setPhase] = useState<PluginPhase>("idle");
-	const [results, setResults] = useState<PluginResult[]>([]);
+	const [results, setResults] = useState<EveryPlugin[]>([]);
 	const [isRunning, setIsRunning] = useState(false);
 
 	// Mock plugin execution simulation
@@ -39,7 +39,7 @@ function PluginRunner() {
 		setPhase("processing");
 		
 		// Add historical results
-		const historicalResults: PluginResult[] = Array.from({ length: 3 }, (_, i) => ({
+		const historicalResults: EveryPlugin[] = Array.from({ length: 3 }, (_, i) => ({
 			id: `hist_${i}`,
 			content: `Historical ${query} result ${i + 1}`,
 			contentType: "post",
@@ -59,7 +59,7 @@ function PluginRunner() {
 		let realtimeCount = 0;
 		const realtimeInterval = setInterval(() => {
 			if (realtimeCount < 5) {
-				const newResult: PluginResult = {
+				const newResult: EveryPlugin = {
 					id: `rt_${Date.now()}_${realtimeCount}`,
 					content: `Real-time ${query} update ${realtimeCount + 1}`,
 					contentType: "post",

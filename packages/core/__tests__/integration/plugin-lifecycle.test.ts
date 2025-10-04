@@ -1,5 +1,4 @@
 import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
 import { describe } from "vitest";
 import { createPluginClient } from "../../src/client/index";
 import type { PluginBinding } from "../../src/plugin";
@@ -37,109 +36,78 @@ const SECRETS_CONFIG = {
 };
 
 describe("Plugin Lifecycle Integration Tests", () => {
-  const { runtime, PluginRuntime } = createPluginRuntime<TestBindings>({
+  const pluginRuntime = createPluginRuntime<TestBindings>({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG
   });
 
-  it.effect("should complete full plugin lifecycle with real MF", () =>
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
+  it("should complete full plugin lifecycle with real MF", async () => {
+    const pluginConstructor = await pluginRuntime.loadPlugin("test-plugin");
+    expect(pluginConstructor).toBeDefined();
 
-      // Test complete lifecycle: load → instantiate → initialize → execute
-      const pluginConstructor = yield* pluginRuntime.loadPlugin("test-plugin");
-      expect(pluginConstructor).toBeDefined();
+    const pluginInstance = await pluginRuntime.instantiatePlugin(pluginConstructor);
+    expect(pluginInstance).toBeDefined();
+    expect(pluginInstance.plugin).toBeDefined();
 
-      const pluginInstance = yield* pluginRuntime.instantiatePlugin(pluginConstructor);
-      expect(pluginInstance).toBeDefined();
-      expect(pluginInstance.plugin).toBeDefined();
+    const initializedPlugin = await pluginRuntime.initializePlugin(
+      pluginInstance,
+      TEST_CONFIG,
+    );
+    expect(initializedPlugin).toBeDefined();
+    expect(initializedPlugin.config).toBeDefined();
 
-      const initializedPlugin = yield* pluginRuntime.initializePlugin(
-        pluginInstance,
-        TEST_CONFIG,
-      );
-      expect(initializedPlugin).toBeDefined();
-      expect(initializedPlugin.config).toBeDefined();
+    const client = createPluginClient(initializedPlugin);
+    const output = await client.getById({ id: "integration-test" });
+    expect(output).toBeDefined();
+  }, 15000);
 
-      const client = createPluginClient(initializedPlugin);
-      const output = yield* Effect.tryPromise(() =>
-        client.getById({ id: "integration-test" })
-      );
-      expect(output).toBeDefined();
-    }).pipe(Effect.provide(runtime), Effect.timeout("15 seconds"))
-  );
+  it("should execute getById with real plugin", async () => {
+    const { client } = await pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
-  it.effect("should execute getById with real plugin", () =>
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const { client } = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+    const result = await client.getById({ id: "integration-test-id" });
 
-      const result = yield* Effect.tryPromise(() =>
-        client.getById({ id: "integration-test-id" })
-      );
+    expect(result).toBeDefined();
+    expect(result.item).toBeDefined();
+    expect(result.item.externalId).toBe("integration-test-id");
+    expect(result.item.content).toContain("integration-test-id");
+  }, 10000);
 
-      expect(result).toBeDefined();
-      expect(result.item).toBeDefined();
-      expect(result.item.externalId).toBe("integration-test-id");
-      expect(result.item.content).toContain("integration-test-id");
-    }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-  );
+  it("should execute getBulk with real plugin", async () => {
+    const { client } = await pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
-  it.effect("should execute getBulk with real plugin", () =>
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const { client } = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+    const result = await client.getBulk({ ids: ["bulk1", "bulk2", "bulk3"] });
 
-      const result = yield* Effect.tryPromise(() =>
-        client.getBulk({ ids: ["bulk1", "bulk2", "bulk3"] })
-      );
+    expect(result).toBeDefined();
+    expect(result.items).toBeDefined();
+    expect(Array.isArray(result.items)).toBe(true);
+    expect(result.items.length).toBe(3);
+    expect(result.items[0].externalId).toBe("bulk1");
+    expect(result.items[1].externalId).toBe("bulk2");
+    expect(result.items[2].externalId).toBe("bulk3");
+  }, 10000);
 
-      expect(result).toBeDefined();
-      expect(result.items).toBeDefined();
-      expect(Array.isArray(result.items)).toBe(true);
-      expect(result.items.length).toBe(3);
-      expect(result.items[0].externalId).toBe("bulk1");
-      expect(result.items[1].externalId).toBe("bulk2");
-      expect(result.items[2].externalId).toBe("bulk3");
-    }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-  );
+  it("should handle streaming with real plugin", async () => {
+    const { client } = await pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
 
-  it.effect("should handle streaming with real plugin", () =>
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const { client } = yield* pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+    const result = await client.simpleStream({ count: 3, prefix: "integration" });
 
-      const result = yield* Effect.tryPromise(() =>
-        client.simpleStream({ count: 3, prefix: "integration" })
-      );
+    expect(result).not.toBeNull();
+    expect(typeof result).toBe('object');
+    expect(Symbol.asyncIterator in result).toBe(true);
+  }, 15000);
 
-      // Should be an AsyncIterable
-      expect(result).not.toBeNull();
-      expect(typeof result).toBe('object');
-      expect(Symbol.asyncIterator in result).toBe(true);
-    }).pipe(Effect.provide(runtime), Effect.timeout("15 seconds"))
-  );
-
-  it.effect("should handle validation errors with real plugin", () =>
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-
-      const result = yield* pluginRuntime
-        .usePlugin("test-plugin", {
-          variables: { baseUrl: "http://localhost:1337" },
-          // @ts-expect-error - means the types are really good!
-          secrets: {}, // Missing required apiKey
-        })
-        .pipe(
-          Effect.catchTag("PluginRuntimeError", (error) => {
-            expect(error.operation).toBe("validate-config");
-            expect(error.retryable).toBe(false);
-            expect(error.pluginId).toBe("test-plugin");
-            return Effect.succeed("validation-error-handled");
-          }),
-        );
-
-      expect(result).toBe("validation-error-handled");
-    }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-  );
+  it("should handle validation errors with real plugin", async () => {
+    try {
+      await pluginRuntime.usePlugin("test-plugin", {
+        variables: { baseUrl: "http://localhost:1337" },
+        // @ts-expect-error - means the types are really good!
+        secrets: {}, // Missing required apiKey
+      });
+      expect.fail("Should have thrown PluginRuntimeError");
+    } catch (error: any) {
+      expect(error.operation).toBe("validate-config");
+      expect(error.retryable).toBe(false);
+      expect(error.pluginId).toBe("test-plugin");
+    }
+  }, 10000);
 });

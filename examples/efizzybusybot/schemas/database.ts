@@ -39,7 +39,7 @@ export const personas = sqliteTable("personas", {
 export const platformAccounts = sqliteTable("platform_accounts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   personaId: integer("persona_id").references(() => personas.id),
-  pluginId: text("plugin_id").notNull(), // e.g., "@curatedotfun/telegram-source"
+  pluginId: text("plugin_id").notNull(), // e.g., "@curatedotfun/telegram"
   platformUserId: text("platform_user_id").notNull(), // e.g., telegram user_id
   platformUsername: text("platform_username"), // e.g., telegram username
   platformDisplayName: text("platform_display_name"), // e.g., telegram display name

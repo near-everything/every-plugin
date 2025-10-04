@@ -93,7 +93,7 @@ DROP INDEX IF EXISTS "relationships_predicate_idx";--> statement-breakpoint
 DROP INDEX IF EXISTS "relationships_source_message_idx";--> statement-breakpoint
 ALTER TABLE `messages` ADD `persona_id` integer REFERENCES personas(id);--> statement-breakpoint
 ALTER TABLE `messages` ADD `platform_account_id` integer REFERENCES platform_accounts(id);--> statement-breakpoint
-ALTER TABLE `messages` ADD `plugin_id` text NOT NULL DEFAULT '@curatedotfun/telegram-source';--> statement-breakpoint
+ALTER TABLE `messages` ADD `plugin_id` text NOT NULL DEFAULT '@curatedotfun/telegram';--> statement-breakpoint
 ALTER TABLE `stream_state` ADD `plugin_id` text;--> statement-breakpoint
 ALTER TABLE `messages` ALTER COLUMN "embedding" TO "embedding" F32_BLOB(384);--> statement-breakpoint
 CREATE UNIQUE INDEX `messages_external_id_unique` ON `messages` (`external_id`);--> statement-breakpoint

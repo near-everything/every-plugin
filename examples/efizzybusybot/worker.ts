@@ -98,7 +98,7 @@ const convertToDbMessage = (ctx: Context<Update>): NewMessage => {
     createdAt: new Date(ctx.message?.date ? ctx.message.date * 1000 : Date.now()).toISOString(),
     url,
 
-    pluginId: "@curatedotfun/telegram-source",
+    pluginId: "@curatedotfun/telegram",
 
     authorId: ctx.from?.id?.toString(),
     authorUsername: ctx.from?.username,

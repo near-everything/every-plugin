@@ -16,7 +16,7 @@ const processPipelineJob = (job: Job<ExecutePipelineJobData>) =>
 
 		const { sourceItemId, input, startAtStepId } = data;
 		const workflowService = yield* WorkflowService;
-		const pluginRuntime = yield* PluginRuntime;
+		const pluginService = yield* PluginService;
 
 		yield* workflowService.getWorkflowRunById(workflowRunId);
 		const workflow = yield* workflowService.getWorkflowById(workflowId);

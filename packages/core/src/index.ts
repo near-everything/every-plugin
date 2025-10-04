@@ -9,6 +9,7 @@ export type {
 	AnyPlugin,
 	ConfigOf,
 	InitializedPlugin,
+	EveryPlugin,
 	PluginConstructor,
 	PluginInstance,
 	PluginOf,

@@ -4,7 +4,7 @@
 //     "pluginId": "@curatedotfun/masa-source",
 //     "config": {
 //       "secrets": {
-//         "apiKey": "{{MASA_API_KEY}}"
+//         "apiKey": "{{GOPHERAI_API_KEY}}"
 //       }
 //     },
 //     "search": {
@@ -49,7 +49,7 @@
 //     ],
 //     "env": {
 //       "secrets": [
-//         "MASA_API_KEY"
+//         "GOPHERAI_API_KEY"
 //       ]
 //     }
 //   }

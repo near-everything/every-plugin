@@ -1,9 +1,0 @@
-{
-  "title": "Examples",
-  "description": "Real-world plugin examples and patterns",
-  "pages": [
-    "simple-pipeline",
-    "real-time-processing",
-    "multi-plugin-flows"
-  ]
-}

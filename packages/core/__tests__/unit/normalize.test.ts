@@ -25,7 +25,7 @@ describe("getNormalizedRemoteName", () => {
     // These test cases ensure parity with the rspack config usage
     const testCases = [
       "@scope/masa-source",
-      "@scope/telegram-source", 
+      "@scope/telegram", 
       "@everything/test-plugin",
       "simple-plugin",
       "@SCOPE/Foo/Bar"

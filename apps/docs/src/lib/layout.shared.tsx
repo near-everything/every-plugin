@@ -16,32 +16,20 @@ export function baseOptions(): BaseLayoutProps {
       ),
       transparentMode: "always",
     },
-    links: [
-      {
-        text: "Documentation",
-        url: "/docs",
-        icon: <BookIcon className="w-4 h-4" />,
-        active: "nested-url",
-      },
-      {
-        text: "Runtime",
-        url: "/docs/runtime",
-        icon: <RocketIcon className="w-4 h-4" />,
-        active: "nested-url",
-      },
-      {
-        text: "Examples",
-        url: "/docs/examples",
-        icon: <CodeIcon className="w-4 h-4" />,
-        active: "nested-url",
-      },
-      {
-        text: "Reference",
-        url: "/docs/reference/api-reference",
-        icon: <FileTextIcon className="w-4 h-4" />,
-        active: "nested-url",
-      },
-    ],
+    // links: [
+    //   {
+    //     text: "Documentation",
+    //     url: "/docs",
+    //     icon: <BookIcon className="w-4 h-4" />,
+    //     active: "nested-url",
+    //   },
+    //   {
+    //     text: "Runtime",
+    //     url: "/docs/runtime",
+    //     icon: <RocketIcon className="w-4 h-4" />,
+    //     active: "nested-url",
+    //   },
+    // ],
     githubUrl: "https://github.com/near-everything/run",
   };
 }

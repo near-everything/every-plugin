@@ -1,6 +1,6 @@
 {
   "name": "every-plugin",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -59,6 +59,9 @@
   "devDependencies": {
     "@effect/language-service": "^0.38.1",
     "@effect/vitest": "^0.25.1",
+    "@orpc/client": "^1.9.2",
+    "@orpc/openapi": "^1.9.2",
+    "@orpc/zod": "^1.9.2",
     "@rspack/cli": "^1.5.2",
     "@rspack/core": "^1.5.2",
     "@types/bun": "^1.2.21",
