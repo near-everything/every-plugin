@@ -1,11 +1,8 @@
 #!/usr/bin/env bun
 
-import { Duration, Effect, Logger, LogLevel } from "effect";
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
-import type { ContractRouterClient } from "@orpc/contract";
-import type { masaContract } from "../../../plugins/masa-source/src/schemas";
-import { DatabaseService, DatabaseServiceLive } from "../services/db.service";
+import { Duration, Effect, Logger, LogLevel } from "every-plugin/effect";
+import { runtime } from "../main";
+import { DatabaseService } from "../services/db.service";
 
 // Worker ID for tracking which worker is processing tasks
 const WORKER_ID = `worker-${process.pid}-${Date.now()}`;
@@ -97,15 +94,19 @@ const analyzeContent = (content: CuratedContent) => {
   };
 };
 
-// Create typed oRPC client for Masa plugin
-const BASE_URL = Bun.env.CURATE_API_URL || "http://localhost:4001";
-const link = new RPCLink({ url: `${BASE_URL}/masa` });
-const masaClient: ContractRouterClient<typeof masaContract> = createORPCClient(link);
 
 // Process a single submission task
 const processSubmissionTask = (task: any) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
+
+    // Get the client directly from runtime
+    const { client } = yield* Effect.tryPromise(() =>
+      runtime.usePlugin("@curatedotfun/masa-source", {
+        secrets: { apiKey: "{{MASA_API_KEY}}" },
+        variables: { baseUrl: "https://data.gopher-ai.com/api/v1", timeout: 30000 }
+      })
+    );
 
     console.log(`🔄 Processing submission task ${task.id} for item ${task.itemId}`);
 
@@ -140,13 +141,13 @@ const processSubmissionTask = (task: any) =>
 
       // First, get the original post being curated
       const originalPostResult = yield* Effect.tryPromise({
-        try: () => masaClient.getById({
-          id: item.conversationId,
+        try: () => client.getById({
+          id: item.conversationId!,
           sourceType: 'twitter' as const
         }),
         catch: (error) => error as Error
       }).pipe(
-        Effect.catchAll((error) => {
+        Effect.catchAll((error: unknown) => {
           console.error(`Failed to fetch original post: ${error}`);
           return Effect.succeed({ item: null });
         })
@@ -167,14 +168,14 @@ const processSubmissionTask = (task: any) =>
         console.log(`🔍 Fetching replies for conversation ID: ${item.conversationId}`);
 
         const repliesResult = yield* Effect.tryPromise({
-          try: () => masaClient.getReplies({
-            conversationId: item.conversationId,
+          try: () => client.getReplies({
+            conversationId: item.conversationId!,
             sourceType: 'twitter' as const,
             maxResults: 50
           }),
           catch: (error) => error as Error
         }).pipe(
-          Effect.catchAll((error) => {
+          Effect.catchAll((error: unknown) => {
             console.error(`Failed to fetch replies: ${error}`);
             return Effect.succeed({ replies: [] });
           })
@@ -247,10 +248,10 @@ const workerLoop = Effect.gen(function* () {
 
       // Process the task with error handling
       yield* processSubmissionTask(task).pipe(
-        Effect.catchAll((error) =>
+        Effect.catchAll((error: unknown) =>
           Effect.gen(function* () {
             console.error(`❌ Failed to process task ${task.id}:`, error);
-            yield* db.markTaskFailed(task.id, error.message);
+            yield* db.markTaskFailed(task.id, error instanceof Error ? error.message : String(error));
           })
         )
       );
@@ -275,10 +276,8 @@ const program = Effect.gen(function* () {
   yield* workerLoop;
 }).pipe(
   Effect.provide(Logger.minimumLogLevel(LogLevel.Info)),
-  Effect.provide(MasaPluginLive),
-  Effect.provide(DatabaseServiceLive),
-  Effect.provide(runtime)
+  Effect.provide(DatabaseService.Default)
 );
 
 // Run the worker
-await runtime.runPromise(program);
+await Effect.runPromise(program);

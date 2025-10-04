@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { createConfigSchema, CommonPluginErrors } from "every-plugin";
+import { CommonPluginErrors } from "every-plugin";
+import { eventIterator } from "every-plugin/orpc";
 import { z } from "zod";
 
 // Source item schema that plugins return
@@ -15,7 +16,7 @@ const sourceItemSchema = z.object({
     displayName: z.string().optional(),
     url: z.string().optional(),
   })).optional(),
-  raw: z.unknown(), // Original Masa API response
+  raw: z.unknown(),
 });
 
 // Masa-specific enums and types
@@ -37,16 +38,6 @@ const MasaSearchMethodSchema = z.enum([
   'getfollowers',
   'getspace'
 ]);
-
-// State schema for streaming operations - clean three-phase design
-export const stateSchema = z.object({
-  phase: z.enum(['initial', 'backfill', 'live']),
-  mostRecentId: z.string().optional(), // newest processed id (for live since_id)
-  oldestSeenId: z.string().optional(), // oldest processed id (for backfill max_id)
-  backfillDone: z.boolean().default(false),
-  totalProcessed: z.number().default(0),
-  nextPollMs: z.number().nullable().optional(), // For streaming: null = terminate, number = delay
-});
 
 // Contract definition for the Masa source plugin
 export const masaContract = {
@@ -188,22 +179,64 @@ export const masaContract = {
     }))
     .errors(CommonPluginErrors),
 
+  // Unified search stream (backfill → gap detection → live)
   search: oc
+    .route({ method: 'POST', path: '/search' })
     .input(z.object({
       query: z.string(),
-      maxResults: z.number().min(1).optional(),
-      budgetMs: z.number().min(5000).max(300000).optional().default(60000),
       sourceType: MasaSourceTypeSchema.optional().default('twitter'),
       searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
-      livePollMs: z.number().min(1000).max(3600000).optional().default(60000), // 1 second, 1 minute default
-      backfillPageSize: z.number().min(1).max(500).optional().default(100),
-      livePageSize: z.number().min(1).max(100).optional().default(50),
+      
+      // Resumption cursors (state - changes on resume)
+      sinceId: z.string().optional(),
+      maxId: z.string().optional(),
+      
+      // Backfill limits (config - constant on resume)
+      maxBackfillResults: z.number().optional(),
+      oldestAllowedId: z.string().optional(),
+      maxBackfillAgeMs: z.number().optional(),
+      
+      // Live mode control
+      enableLive: z.boolean().default(true),
+      livePollMs: z.number().min(1000).max(3600000).optional().default(60000),
+      
+      // Hard limits
+      maxTotalResults: z.number().optional(),
+      
+      // Page sizes
+      backfillPageSize: z.number().min(1).max(100).optional().default(100),
+      livePageSize: z.number().min(1).max(100).optional().default(20),
     }))
-    .output(z.object({
-      items: z.array(sourceItemSchema),
-      nextState: stateSchema
+    .output(eventIterator(sourceItemSchema))
+    .errors(CommonPluginErrors),
+  
+  // Backfill only stream (finite)
+  backfill: oc
+    .route({ method: 'POST', path: '/backfill' })
+    .input(z.object({
+      query: z.string(),
+      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
+      searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
+      maxId: z.string().optional(),
+      maxResults: z.number().min(1).optional(),
+      pageSize: z.number().min(1).max(100).optional().default(100),
     }))
-    .errors(CommonPluginErrors).meta({ "streamable": "true" }) 
+    .output(eventIterator(sourceItemSchema))
+    .errors(CommonPluginErrors),
+  
+  // Live polling only stream (infinite)
+  live: oc
+    .route({ method: 'POST', path: '/live' })
+    .input(z.object({
+      query: z.string(),
+      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
+      searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
+      sinceId: z.string().optional(),
+      pollMs: z.number().min(1000).max(3600000).optional().default(60000),
+      pageSize: z.number().min(1).max(100).optional().default(20),
+    }))
+    .output(eventIterator(sourceItemSchema))
+    .errors(CommonPluginErrors),
 };
 
 // Export types for use in implementation
@@ -211,21 +244,3 @@ export type MasaContract = typeof masaContract;
 export type SourceItem = z.infer<typeof sourceItemSchema>;
 export type MasaSourceType = z.infer<typeof MasaSourceTypeSchema>;
 export type MasaSearchMethod = z.infer<typeof MasaSearchMethodSchema>;
-export type StreamState = z.infer<typeof stateSchema>;
-
-// Config schema with variables and secrets
-export const MasaSourceConfigSchema = createConfigSchema(
-  // Variables (non-sensitive config)
-  z.object({
-    baseUrl: z.url().optional().default("https://data.gopher-ai.com/api/v1"),
-    timeout: z.number().optional().default(30000),
-    defaultMaxResults: z.number().min(1).max(500).optional().default(10),
-  }),
-  // Secrets (sensitive config, hydrated at runtime)
-  z.object({
-    apiKey: z.string().min(1, "Masa API key is required"),
-  }),
-);
-
-// Derived types
-export type MasaSourceConfig = z.infer<typeof MasaSourceConfigSchema>;

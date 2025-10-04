@@ -1,223 +1,77 @@
 import { implement } from "@orpc/server";
 import { createPlugin, PluginConfigurationError } from "every-plugin";
-import { MasaApiError, MasaClient, type MasaSearchResult } from "./client";
+import { Effect } from "every-plugin/effect";
+import { z } from "every-plugin/zod";
+import { MasaApiError, MasaClient } from "./client";
 import { JobManager } from "./job-manager";
 import {
-  type MasaSourceConfig,
-  MasaSourceConfigSchema,
   masaContract,
   type SourceItem,
+  type MasaSourceType,
+  type MasaSearchMethod,
 } from "./schemas";
+import {
+  handleMasaError,
+  convertMasaResultToSourceItem,
+  buildBackfillQuery,
+  buildLiveQuery
+} from "./utils";
+import {
+  fetchAndConvert,
+  backfillStream,
+  liveStream,
+  gapDetectionAndLiveStream,
+} from "./streaming";
 
+export default createPlugin({
+  id: "@curatedotfun/masa-source",
+  type: "source",
+  
+  variables: z.object({
+    baseUrl: z.string().url().optional().default("https://data.gopher-ai.com/api/v1"),
+    timeout: z.number().optional().default(30000),
+  }),
+  
+  secrets: z.object({
+    apiKey: z.string().min(1, "Masa API key is required"),
+  }),
+  
+  contract: masaContract,
 
-// Constants
-const BACKFILL_PAGE_SIZE = 100;
-const LIVE_PAGE_SIZE = 20;
+  initialize: (config) => Effect.gen(function* () {
+    const baseUrl = config.variables?.baseUrl || "https://data.gopher-ai.com/api/v1";
+    const client = new MasaClient(
+      baseUrl,
+      config.secrets.apiKey,
+      config.variables?.timeout
+    );
 
-// Simplified state transitions
-const StateTransitions = {
-  fromInitial: (items: SourceItem[]): 'backfill' | 'live' =>
-    items.length > 0 ? 'backfill' : 'live',
+    const jobManager = new JobManager(client);
 
-  fromBackfill: (items: SourceItem[], hasReachedLimit: boolean): 'backfill' | 'live' =>
-    items.length < BACKFILL_PAGE_SIZE || hasReachedLimit ? 'live' : 'backfill',
-
-  fromLive: (): 'live' => 'live'
-};
-
-// Resume strategy detection
-const ResumeStrategy = {
-  shouldCheckForNewContent: (state: StreamState): boolean =>
-    state.phase === 'live' && state.mostRecentId !== undefined,
-
-  shouldContinueBackfill: (state: StreamState, input: any): boolean =>
-    state.oldestSeenId !== undefined &&
-    (!input.maxResults || (state.totalProcessed || 0) < input.maxResults),
-
-  getResumePhase: (state: StreamState, input: any): 'live' | 'backfill' | 'hybrid' => {
-    const hasNewContent = ResumeStrategy.shouldCheckForNewContent(state);
-    const canBackfill = ResumeStrategy.shouldContinueBackfill(state, input);
-
-    if (hasNewContent && canBackfill) return 'hybrid';
-    if (hasNewContent) return 'live';
-    if (canBackfill) return 'backfill';
-    return 'live';
-  }
-};
-
-// Query builders for different scenarios
-const buildQuery = (baseQuery: string, state: StreamState | null, searchPhase?: 'live' | 'backfill'): string => {
-  let query = baseQuery;
-
-  if (searchPhase === 'live' && state?.mostRecentId) {
-    query += ` since_id:${state.mostRecentId}`;
-  } else if (searchPhase === 'backfill' && state?.oldestSeenId) {
-    const maxId = decrementSnowflakeId(state.oldestSeenId);
-    query += ` max_id:${maxId}`;
-  } else if (!searchPhase) {
-    // Legacy behavior for backward compatibility
-    if (state?.phase === 'backfill' && state.oldestSeenId) {
-      const maxId = decrementSnowflakeId(state.oldestSeenId);
-      query += ` max_id:${maxId}`;
-    } else if (state?.phase === 'live' && state.mostRecentId) {
-      query += ` since_id:${state.mostRecentId}`;
-    }
-  }
-
-  return query;
-};
-
-// Simple helper functions
-const decrementSnowflakeId = (id: string): string => {
-  try {
-    const snowflake = BigInt(id);
-    return snowflake <= 0n ? id : (snowflake - 1n).toString();
-  } catch {
-    return id;
-  }
-};
-
-const getIdBounds = (items: SourceItem[]): { minId: string; maxId: string } => {
-  const ids = items.map(item => BigInt(item.externalId)).sort((a, b) => a < b ? -1 : 1);
-  return { minId: ids[0].toString(), maxId: ids[ids.length - 1].toString() };
-};
-
-// Simple helper to convert MasaApiError to oRPC errors using the errors helper
-const handleMasaError = (error: unknown, errors: any): never => {
-  if (error instanceof MasaApiError) {
-    switch (error.status) {
-      case 401:
-        throw errors.UNAUTHORIZED({
-          message: 'Invalid API key',
-          data: { provider: 'masa', apiKeyProvided: true }
-        });
-      case 403:
-        throw errors.FORBIDDEN({
-          message: 'Access forbidden',
-          data: { provider: 'masa' }
-        });
-      case 400:
-        throw errors.BAD_REQUEST({
-          message: 'Invalid request parameters',
-          data: { provider: 'masa' }
-        });
-      case 404:
-        throw errors.NOT_FOUND({
-          message: 'Resource not found',
-          data: { provider: 'masa' }
-        });
-      default: // 503 and others
-        throw errors.SERVICE_UNAVAILABLE({
-          message: 'Service temporarily unavailable',
-          data: { provider: 'masa' }
-        });
-    }
-  }
-
-  // For non-MasaApiError, default to service unavailable
-  throw errors.SERVICE_UNAVAILABLE({
-    message: error instanceof Error ? error.message : 'Unknown error occurred',
-    data: { provider: 'masa' }
-  });
-};
-
-// Helper function to convert Masa API results to plugin format
-function convertMasaResultToSourceItem(masaResult: MasaSearchResult): SourceItem {
-  // Helper to convert snowflake ID to timestamp for fallback
-  const snowflakeToTimestamp = (id: string): string => {
-    const TWITTER_EPOCH = 1288834974657n;
-    const snowflake = BigInt(id);
-    const timestamp = Number((snowflake >> 22n) + TWITTER_EPOCH);
-    return new Date(timestamp).toISOString();
-  };
-
-  // Helper to validate timestamp - reject sentinel values and invalid dates
-  const isValidTimestamp = (timestamp: string | undefined): boolean => {
-    if (!timestamp) return false;
-    if (timestamp === "0001-01-01T00:00:00Z") return false; // Masa sentinel value
-
-    const date = new Date(timestamp);
-    if (isNaN(date.getTime())) return false;
-
-    // Reject dates before Twitter's epoch (2010-11-04)
-    const twitterEpochDate = new Date("2010-11-04T00:00:00Z");
-    return date >= twitterEpochDate;
-  };
-
-  // Use provided createdAt if valid, otherwise derive from snowflake ID
-  const createdAt = isValidTimestamp(masaResult.metadata?.created_at)
-    ? masaResult.metadata!.created_at
-    : snowflakeToTimestamp(masaResult.id);
-
-  return {
-    externalId: masaResult.id,
-    content: masaResult.content,
-    contentType: "post",
-    createdAt,
-    url: masaResult.metadata?.tweet_id ? `https://twitter.com/i/status/${masaResult.metadata.tweet_id}` : undefined,
-    authors: masaResult.metadata?.username ? [{
-      id: masaResult.metadata?.user_id,
-      username: masaResult.metadata?.username,
-      displayName: masaResult.metadata?.author || masaResult.metadata?.username,
-    }] : undefined,
-    raw: masaResult,
-  };
-}
-
-export class MasaSourcePlugin extends SimplePlugin<
-  typeof masaContract,
-  typeof MasaSourceConfigSchema,
-  typeof stateSchema
-> {
-  readonly id = "@curatedotfun/masa-source" as const;
-  readonly type = "source" as const;
-  readonly contract = masaContract;
-  readonly configSchema = MasaSourceConfigSchema;
-  readonly stateSchema = stateSchema;
-
-  static readonly contract = masaContract;
-
-  private client: MasaClient | null = null;
-  private jobManager: JobManager | null = null;
-
-  initialize(config: MasaSourceConfig) {
-    const self = this;
-    return Effect.gen(function* () {
-      const logger = yield* PluginLoggerTag;
-
-      const baseUrl = config.variables?.baseUrl as string || "https://data.gopher-ai.com/api/v1";
-      self.client = new MasaClient(
-        baseUrl,
-        config.secrets.apiKey,
-        config.variables?.timeout
-      );
-
-      self.jobManager = new JobManager(self.client);
-
-      yield* Effect.tryPromise({
-        try: () => self.client!.healthCheck(),
-        catch: (error) => new PluginConfigurationError({
-          message: `Health check failed: ${error instanceof Error ? error.message : String(error)}`,
-          retryable: false,
-          cause: error instanceof Error ? error : new Error(String(error))
-        })
-      });
-
-      yield* logger.logDebug("Masa source plugin initialized successfully", {
-        pluginId: self.id,
-        baseUrl
-      });
+    yield* Effect.tryPromise({
+      try: () => client.healthCheck(),
+      catch: (error) => new PluginConfigurationError({
+        message: `Health check failed: ${error instanceof Error ? error.message : String(error)}`,
+        retryable: false,
+        cause: error instanceof Error ? error : new Error(String(error))
+      })
     });
-  }
 
-  createRouter() {
-    const os = implement(masaContract).$context<{ state: StreamState | null }>();
+    console.log("Masa source plugin initialized successfully", {
+      pluginId: "@curatedotfun/masa-source",
+      baseUrl
+    });
 
+    return { client, jobManager };
+  }),
+
+  createRouter: (context) => {
+    const os = implement(masaContract);
+
+    // Core job operations
     const submitSearchJob = os.submitSearchJob.handler(async ({ input, errors }) => {
-      if (!this.client) throw new Error("Plugin not initialized");
-
       try {
-        const jobId = await this.client.submitSearchJob(
+        const jobId = await context.client.submitSearchJob(
           input.sourceType,
           input.searchMethod,
           input.query,
@@ -231,10 +85,8 @@ export class MasaSourcePlugin extends SimplePlugin<
     });
 
     const checkJobStatus = os.checkJobStatus.handler(async ({ input, errors }) => {
-      if (!this.client) throw new Error("Plugin not initialized");
-
       try {
-        const status = await this.client.checkJobStatus(input.jobId);
+        const status = await context.client.checkJobStatus(input.jobId);
         return { status: status as 'submitted' | 'in progress' | 'done' | 'error' };
       } catch (error) {
         return handleMasaError(error, errors);
@@ -242,10 +94,8 @@ export class MasaSourcePlugin extends SimplePlugin<
     });
 
     const getJobResults = os.getJobResults.handler(async ({ input, errors }) => {
-      if (!this.client) throw new Error("Plugin not initialized");
-
       try {
-        const masaResults = await this.client.getJobResults(input.jobId);
+        const masaResults = await context.client.getJobResults(input.jobId);
         const items = masaResults.map(convertMasaResultToSourceItem);
         return { items };
       } catch (error) {
@@ -254,10 +104,8 @@ export class MasaSourcePlugin extends SimplePlugin<
     });
 
     const getById = os.getById.handler(async ({ input, errors }) => {
-      if (!this.jobManager) throw new Error("Plugin not initialized");
-
       try {
-        const masaResult = await this.jobManager.getById(input.sourceType, input.id);
+        const masaResult = await context.jobManager.getById(input.sourceType, input.id);
         const item = convertMasaResultToSourceItem(masaResult);
         return { item };
       } catch (error) {
@@ -266,10 +114,8 @@ export class MasaSourcePlugin extends SimplePlugin<
     });
 
     const getBulk = os.getBulk.handler(async ({ input, errors }) => {
-      if (!this.jobManager) throw new Error("Plugin not initialized");
-
       try {
-        const masaResults = await this.jobManager.getBulk(input.sourceType, input.ids);
+        const masaResults = await context.jobManager.getBulk(input.sourceType, input.ids);
         const items = masaResults.map(convertMasaResultToSourceItem);
         return { items };
       } catch (error) {
@@ -278,15 +124,15 @@ export class MasaSourcePlugin extends SimplePlugin<
     });
 
     const getReplies = os.getReplies.handler(async ({ input, errors }) => {
-      if (!this.jobManager) throw new Error("Plugin not initialized");
-
       try {
-        const masaResults = await this.jobManager.executeJobWorkflow(
-          input.sourceType,
-          'getreplies',
-          input.conversationId,
-          input.maxResults || 20,
-          (results) => results
+        const masaResults = await Effect.runPromise(
+          context.jobManager.executeJobWorkflow(
+            input.sourceType,
+            'getreplies',
+            input.conversationId,
+            input.maxResults || 20,
+            (results) => results
+          )
         );
         const replies = masaResults.map(convertMasaResultToSourceItem);
         return { replies };
@@ -296,10 +142,8 @@ export class MasaSourcePlugin extends SimplePlugin<
     });
 
     const similaritySearch = os.similaritySearch.handler(async ({ input, errors }) => {
-      if (!this.client) throw new Error("Plugin not initialized");
-
       try {
-        const masaResults = await this.client.similaritySearch({
+        const masaResults = await context.client.similaritySearch({
           query: input.query,
           sources: input.sources,
           keywords: input.keywords,
@@ -315,10 +159,8 @@ export class MasaSourcePlugin extends SimplePlugin<
     });
 
     const hybridSearch = os.hybridSearch.handler(async ({ input, errors }) => {
-      if (!this.client) throw new Error("Plugin not initialized");
-
       try {
-        const masaResults = await this.client.hybridSearch({
+        const masaResults = await context.client.hybridSearch({
           similarity_query: {
             query: input.similarityQuery.query,
             weight: input.similarityQuery.weight,
@@ -341,20 +183,20 @@ export class MasaSourcePlugin extends SimplePlugin<
     });
 
     const getProfile = os.getProfile.handler(async ({ input, errors }) => {
-      if (!this.jobManager) throw new Error("Plugin not initialized");
-
       try {
-        const profileData = await this.jobManager.executeJobWorkflow(
-          input.sourceType,
-          'searchbyprofile',
-          input.username,
-          1,
-          (results) => {
-            if (results.length === 0) {
-              throw new MasaApiError(`Profile not found for ${input.username}`, 404, `Get profile ${input.username}`);
+        const profileData = await Effect.runPromise(
+          context.jobManager.executeJobWorkflow(
+            input.sourceType,
+            'searchbyprofile',
+            input.username,
+            1,
+            (results) => {
+              if (results.length === 0) {
+                throw new MasaApiError(`Profile not found for ${input.username}`, 404, `Get profile ${input.username}`);
+              }
+              return results[0];
             }
-            return results[0];
-          }
+          )
         );
 
         return {
@@ -377,18 +219,18 @@ export class MasaSourcePlugin extends SimplePlugin<
     });
 
     const getTrends = os.getTrends.handler(async ({ input, errors }) => {
-      if (!this.jobManager) throw new Error("Plugin not initialized");
-
       try {
-        const results = await this.jobManager.executeJobWorkflow(
-          input.sourceType,
-          'gettrends',
-          '',
-          50,
-          (results) => results
+        const results = await Effect.runPromise(
+          context.jobManager.executeJobWorkflow(
+            input.sourceType,
+            'gettrends',
+            '',
+            50,
+            (results) => results
+          )
         );
 
-        const trends = results.map(result => ({
+        const trends = results.map((result: any) => ({
           name: result.content,
           query: result.metadata?.username,
           tweetVolume: result.metadata?.likes,
@@ -401,154 +243,89 @@ export class MasaSourcePlugin extends SimplePlugin<
       }
     });
 
-    // Main search handler
-    const search = os.search.handler(async ({ input, context, errors }) => {
-      if (!this.jobManager) throw new Error("Plugin not initialized");
-      const self = this;
-
+    // Unified search stream (backfill → gap detection → live)
+    const search = os.search.handler(async function* ({ input, errors }) {
       try {
-        // Determine if we're resuming or starting fresh
-        const existingState = context?.state;
-        const isResume = existingState && existingState.phase !== 'initial';
+        let mostRecentId: string | undefined = input.sinceId;
 
-        let currentState: StreamState;
-        let searchPhase: 'live' | 'backfill';
-        let pageSize: number;
+        // Phase 1: Backfill (skip if sinceId provided - means resuming after a gap was detected)
+        if (!input.sinceId) {
+          for await (const item of backfillStream(
+            context.jobManager,
+            input.query,
+            input.sourceType,
+            input.searchMethod,
+            input.maxId,
+            input.maxBackfillResults,
+            input.oldestAllowedId,
+            input.maxBackfillAgeMs,
+            input.backfillPageSize
+          )) {
+            yield item;
 
-        if (isResume) {
-          // Resume from existing state
-          currentState = { ...existingState };
-          const resumePhase = ResumeStrategy.getResumePhase(currentState, input);
-
-          // For hybrid resume, prioritize checking for new content first
-          searchPhase = resumePhase === 'hybrid' ? 'live' : resumePhase;
-          pageSize = searchPhase === 'live' ? LIVE_PAGE_SIZE : BACKFILL_PAGE_SIZE;
-
-          console.log(`[Search] Resuming from phase: ${currentState.phase}, strategy: ${resumePhase}, searching: ${searchPhase}`);
-        } else {
-          // Fresh search
-          currentState = {
-            phase: 'initial',
-            backfillDone: false,
-            totalProcessed: 0,
-          };
-          searchPhase = 'backfill'; // Start with backfill for fresh searches
-          pageSize = BACKFILL_PAGE_SIZE;
-          console.log(`[Search] Starting fresh search, maxResults: ${input.maxResults}`);
+            const itemId = BigInt(item.externalId);
+            if (!mostRecentId || itemId > BigInt(mostRecentId)) {
+              mostRecentId = item.externalId;
+            }
+          }
         }
 
-        // Build query based on phase
-        const query = buildQuery(input.query, currentState, searchPhase);
-        console.log(`[Search] Query: "${query}", Phase: ${searchPhase}, PageSize: ${pageSize}`);
+        // Phase 2: Gap detection and live streaming
+        if (!input.enableLive) return; // Can finish after backfill
 
-        // Execute search with Effect.TS timeout
-        const searchEffect = Effect.gen(function* () {
-          const results = yield* Effect.tryPromise({
-            try: () => self.jobManager!.executeJobWorkflow(
-              input.sourceType,
-              input.searchMethod,
-              query,
-              pageSize,
-              (results) => results
-            ),
-            catch: (error) => error instanceof Error ? error : new Error(String(error))
-          });
-
-          return results;
-        });
-
-        const results = await Effect.runPromise(
-          searchEffect.pipe(
-            Effect.timeout(Duration.millis(input.budgetMs)),
-            Effect.catchTag("TimeoutException", () =>
-              Effect.fail(new Error('Search budget exceeded - increase budgetMs parameter'))
-            )
-          )
+        yield* gapDetectionAndLiveStream(
+          context.jobManager,
+          input.query,
+          input.sourceType,
+          input.searchMethod,
+          mostRecentId,
+          input.livePageSize,
+          input.livePollMs
         );
 
-        // Convert and sort results (oldest first)
-        const items = results
-          .map(convertMasaResultToSourceItem)
-          .sort((a, b) => new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime());
-
-        console.log(`[Search] Retrieved ${items.length} items`);
-
-        // Check if we've hit the maxResults limit (only applies to backfill, not live polling)
-        const hasReachedLimit = searchPhase === 'backfill' &&
-          input.maxResults !== undefined &&
-          (currentState.totalProcessed + items.length) >= input.maxResults;
-
-        // Truncate items if we exceed maxResults during backfill
-        const finalItems = hasReachedLimit && input.maxResults !== undefined
-          ? items.slice(0, input.maxResults - currentState.totalProcessed)
-          : items;
-
-        // Update state based on current context
-        const nextState: StreamState = {
-          totalProcessed: currentState.totalProcessed + finalItems.length,
-          backfillDone: currentState.backfillDone || false,
-          phase: currentState.phase,
-          nextPollMs: 0,
-          mostRecentId: currentState.mostRecentId,
-          oldestSeenId: currentState.oldestSeenId,
-        };
-
-        if (finalItems.length > 0) {
-          const { minId, maxId } = getIdBounds(finalItems);
-
-          if (searchPhase === 'live') {
-            // Update mostRecentId for live search
-            nextState.mostRecentId = maxId;
-            nextState.phase = 'live';
-            nextState.nextPollMs = input.livePollMs;
-          } else {
-            // Update oldestSeenId for backfill search
-            nextState.oldestSeenId = minId;
-
-            if (!nextState.mostRecentId) {
-              // First time seeing content, set mostRecentId
-              nextState.mostRecentId = maxId;
-            }
-
-            // Determine next phase
-            if (currentState.phase === 'initial') {
-              nextState.phase = StateTransitions.fromInitial(finalItems);
-            } else {
-              nextState.phase = StateTransitions.fromBackfill(finalItems, hasReachedLimit);
-            }
-
-            nextState.nextPollMs = nextState.phase === 'live' ? input.livePollMs : 0;
-            nextState.backfillDone = nextState.phase === 'live';
-          }
-        } else {
-          // No items returned
-          if (searchPhase === 'live') {
-            const canBackfill = ResumeStrategy.shouldContinueBackfill(currentState, input);
-            if (canBackfill && !currentState.backfillDone) {
-              nextState.phase = 'backfill';
-              nextState.nextPollMs = 0;
-            } else {
-              nextState.phase = 'live';
-              nextState.nextPollMs = input.livePollMs;
-              nextState.backfillDone = true;
-            }
-          } else {
-            // Backfill exhausted, switch to live
-            nextState.phase = 'live';
-            nextState.backfillDone = true;
-            nextState.nextPollMs = input.livePollMs;
-          }
-        }
-
-        console.log(`[Search] Next phase: ${nextState.phase}, nextPollMs: ${nextState.nextPollMs}`);
-
-        return {
-          items: finalItems,
-          nextState
-        };
-
       } catch (error) {
-        return handleMasaError(error, errors);
+        handleMasaError(error, errors);
+      }
+    });
+
+    // Backfill only stream
+    const backfill = os.backfill.handler(async function* ({ input, errors }) {
+      try {
+        for await (const item of backfillStream(
+          context.jobManager,
+          input.query,
+          input.sourceType,
+          input.searchMethod,
+          input.maxId,
+          input.maxResults,
+          undefined, // no oldestAllowedId
+          undefined, // no age limit
+          input.pageSize
+        )) {
+          yield item;
+        }
+      } catch (error) {
+        handleMasaError(error, errors);
+      }
+    });
+
+    // Live polling only stream
+    const live = os.live.handler(async function* ({ input, errors }) {
+      try {
+        for await (const item of liveStream(
+          context.jobManager,
+          input.query,
+          input.sourceType,
+          input.searchMethod,
+          input.sinceId,
+          undefined,
+          input.pageSize,
+          input.pollMs
+        )) {
+          yield item;
+        }
+      } catch (error) {
+        handleMasaError(error, errors);
       }
     });
 
@@ -564,13 +341,8 @@ export class MasaSourcePlugin extends SimplePlugin<
       getProfile,
       getTrends,
       search,
+      backfill,
+      live,
     });
-  }
-
-  shutdown() {
-    this.client = null;
-    return Effect.void;
-  }
-}
-
-export default MasaSourcePlugin;
+  },
+});

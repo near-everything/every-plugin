@@ -1,4 +1,4 @@
-import { BetterFetchOption, createFetch } from '@better-fetch/fetch';
+import { type BetterFetchOption, createFetch } from '@better-fetch/fetch';
 import { z } from 'zod';
 import type { MasaSearchMethod, MasaSourceType } from './schemas';
 
@@ -185,6 +185,9 @@ export class MasaClient {
       context: `Check job status for ${jobId}`
     });
 
+    // Log raw response before any processing
+    console.log(`[MASA] ${jobId} - Raw API response:`, JSON.stringify(data, null, 2));
+
     if (data.error) {
       throw new MasaApiError(`API error: ${data.error}`, 503, `Check job status for ${jobId}`);
     }
@@ -193,11 +196,13 @@ export class MasaClient {
       throw new MasaApiError('API did not return job status', 503, `Check job status for ${jobId}`);
     }
 
-    // Normalize API status values to contract-expected values
+    // Normalize API status values
     let normalizedStatus = data.status;
     if (data.status === 'done(saved)') {
       normalizedStatus = 'done';
     }
+
+    console.log(`[MASA] ${jobId} - Normalized status: ${normalizedStatus} (original: ${data.status})`);
 
     return normalizedStatus;
   }

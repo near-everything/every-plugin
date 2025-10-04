@@ -1,27 +1,35 @@
 #!/usr/bin/env bun
 
-import { Context, Effect, Layer, Logger, LogLevel, Stream } from "effect";
-import { createPluginRuntime, type PluginOf, type InitializedPlugin } from "every-plugin/runtime";
-import { Hono } from "hono";
-import { RPCHandler } from "@orpc/server/fetch";
-import type { AnyRouter } from "@orpc/server";
-import type { MasaBinding } from '../../plugins/masa-source/src/types';
+import type { PluginBinding } from "every-plugin";
+import { Effect, Stream } from "every-plugin/effect";
+import { createPluginRuntime } from "every-plugin/runtime";
+import type MasaSourcePlugin from '../../plugins/masa-source/src';
+import type { SourceItem } from '../../plugins/masa-source/src/schemas';
 import type { NewItem } from "./schemas/database";
-import { DatabaseService, DatabaseServiceLive } from "./services/db.service";
+import { DatabaseService } from "./services/db.service";
+
+// State type for stream persistence
+type StreamState = {
+  phase: "initial" | "backfill" | "live";
+  mostRecentId?: string;
+  oldestSeenId?: string;
+  backfillDone?: boolean;
+  totalProcessed?: number;
+  nextPollMs?: number;
+};
 
 // Configuration constants
 const BASE_QUERY = "@curatedotfun";
-const HTTP_PORT = parseInt(Bun.env.HTTP_PORT || "4001", 10);
 
 // Typed registry bindings using generated types
 type IRegistry = {
-  "@curatedotfun/masa-source": MasaBinding
+  "@curatedotfun/masa-source": PluginBinding<typeof MasaSourcePlugin>
 };
 
-export const { runtime, PluginService } = createPluginRuntime<IRegistry>({
+export const runtime = createPluginRuntime<IRegistry>({
   registry: {
     "@curatedotfun/masa-source": {
-      remoteUrl: "https://elliot-braem-11--curatedotfun-masa-source-every-p-70dcb0f28-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "http://localhost:3013/remoteEntry.js",
       type: "source"
     }
   },
@@ -30,70 +38,9 @@ export const { runtime, PluginService } = createPluginRuntime<IRegistry>({
   }
 });
 
-// MasaPlugin service tag with precise typing
-export class MasaPlugin extends Context.Tag("MasaPlugin")<
-  MasaPlugin,
-  InitializedPlugin<PluginOf<IRegistry["@curatedotfun/masa-source"]>>
->() {}
-
-// Layer that provides the initialized Masa plugin
-export const MasaPluginLive = Layer.effect(
-  MasaPlugin,
-  Effect.gen(function* () {
-    const pluginService = yield* PluginService;
-
-    // Initialize the plugin once with the configuration
-    const initializedPlugin = yield* pluginService.usePlugin("@curatedotfun/masa-source", {
-      variables: { baseUrl: "https://data.gopher-ai.com/api/v1" },
-      secrets: { apiKey: "{{MASA_API_KEY}}" }
-    });
-
-    return initializedPlugin;
-  })
-);
-
-// HTTP server exposing plugin routers
-const createHttpServer = Effect.gen(function* () {
-  const masa = yield* MasaPlugin;
-  const app = new Hono();
-
-  // Expose Masa plugin router
-  const masaRouter = masa.plugin.createRouter();
-  const masaHandler = new RPCHandler(masaRouter as AnyRouter);
-
-  app.use("/masa/*", async (c, next) => {
-    const { matched, response } = await masaHandler.handle(c.req.raw, {
-      prefix: "/masa",
-      context: { state: null }
-    });
-
-    if (matched) {
-      return c.newResponse(response.body, response);
-    }
-    await next();
-  });
-
-  // Health check
-  app.get("/", (c) => c.json({
-    status: "ok",
-    service: "curatedotfun",
-    timestamp: new Date().toISOString()
-  }));
-
-  // Start HTTP server
-  const server = Bun.serve({
-    port: HTTP_PORT,
-    fetch: app.fetch,
-  });
-
-  console.log(`🌐 HTTP API server running on http://localhost:${HTTP_PORT}`);
-  console.log(`📡 Masa router available at: http://localhost:${HTTP_PORT}/masa/*`);
-
-  return server;
-});
 
 // Helper to extract curator username from content mentioning @curatedotfun
-const extractCuratorUsername = (item: any): string | undefined => {
+const extractCuratorUsername = (item: SourceItem): string | undefined => {
   // For items mentioning @curatedotfun, the curator is typically the author
   if (item.content?.includes("@curatedotfun")) {
     return item.authors?.[0]?.username;
@@ -107,17 +54,18 @@ const detectSubmissionCommands = (content: string): boolean => {
 };
 
 // Convert Masa plugin item to database item
-const convertToDbItem = (item: any): NewItem => {
-  const platform = item.raw?.source === "twitter" ? "twitter" :
-    item.raw?.source === "tiktok" ? "tiktok" :
-      item.raw?.source === "reddit" ? "reddit" : "twitter"; // default
+const convertToDbItem = (item: SourceItem): NewItem => {
+  const raw = item.raw as any;
+  const platform = raw?.source === "twitter" ? "twitter" :
+    raw?.source === "tiktok" ? "tiktok" :
+      raw?.source === "reddit" ? "reddit" : "twitter"; // default
 
   return {
     externalId: item.externalId,
     platform,
     content: item.content,
     contentType: item.contentType,
-    conversationId: item.raw?.metadata?.conversation_id,
+    conversationId: raw?.metadata?.conversation_id,
     originalAuthorUsername: item.authors?.[0]?.username,
     originalAuthorId: item.authors?.[0]?.id,
     curatorUsername: extractCuratorUsername(item),
@@ -128,7 +76,7 @@ const convertToDbItem = (item: any): NewItem => {
 };
 
 // Enhanced item processing with database storage
-const processItem = (item: any, itemNumber: number) =>
+const processItem = (item: SourceItem, itemNumber: number) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
 
@@ -158,7 +106,7 @@ const processItem = (item: any, itemNumber: number) =>
   });
 
 // State persistence using database
-const saveState = (state: any) =>
+const saveState = (state: StreamState) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
     yield* db.saveStreamState({
@@ -190,20 +138,16 @@ const loadState = () =>
   });
 
 // Main streaming program with database integration
-const program = Effect.gen(function* () {
-  // Install signal handlers for graceful shutdown
-  const shutdown = () => {
-    console.log('\n🛑 Shutting down gracefully...');
-    runtime.runPromise(Effect.gen(function* () {
-      const pluginService = yield* PluginService;
-      yield* pluginRuntime.shutdown();
-    }).pipe(Effect.provide(runtime))).finally(() => process.exit(0));
-  };
-
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-
+const main = Effect.gen(function* () {
   console.log('🚀 Starting Masa Twitter streaming with database storage...\n');
+
+  // Get the client directly
+  const { client } = yield* Effect.tryPromise(() =>
+    runtime.usePlugin("@curatedotfun/masa-source", {
+      secrets: { apiKey: "{{MASA_API_KEY}}" },
+      variables: { baseUrl: "https://data.gopher-ai.com/api/v1", timeout: 30000 }
+    })
+  );
 
   // Load initial state from database
   const initialState = yield* loadState();
@@ -214,45 +158,25 @@ const program = Effect.gen(function* () {
     console.log('📂 Starting fresh historical backfill');
   }
 
-  // Create streaming pipeline that handles both historical and live phases
-  const pluginService = yield* PluginService;
-  const masaPlugin = yield* MasaPlugin;
-
-  const stream = yield* pluginRuntime.streamPlugin(
-    masaPlugin,
-    {
-      procedure: "search",
-      input: {
-        query: BASE_QUERY,
-        maxResults: 10000,
-        budgetMs: 60000,
-        sourceType: 'twitter',
-        searchMethod: 'searchbyfullarchive',
-      },
-      state: initialState,
-    },
-    {
-      maxInvocations: 1000, // High limit for long-running stream
-      onStateChange: (newState: any, items: any[]) =>
-        Effect.gen(function* () {
-          // Log batch info and save state to database
-          if (items.length > 0) {
-            const phase = newState.phase || 'unknown';
-            const emoji = phase === 'initial' ? '🚀' : phase === 'backfill' ? '🏛️' : phase === 'live' ? '🔴' : '📥';
-            console.log(`${emoji} Processing ${items.length} items (${newState.totalProcessed || 0} total, phase: ${phase})`);
-          } else if (newState.phase === 'live') {
-            console.log('⏰ No new items, waiting for next poll...');
-          }
-
-          yield* saveState(newState);
-        }).pipe(Effect.provide(DatabaseServiceLive))
-    }
+  // Get async iterable directly
+  const streamResult = yield* Effect.tryPromise(() =>
+    client.search({
+      query: BASE_QUERY,
+      sourceType: 'twitter',
+      searchMethod: 'searchbyfullarchive',
+      sinceId: initialState?.mostRecentId ?? undefined,
+      maxId: initialState?.oldestSeenId ?? undefined,
+      enableLive: true,
+      maxTotalResults: 10000,
+    })
   );
 
-  // Process each item individually from the stream
+  // Convert to Effect Stream and process
+  const stream = Stream.fromAsyncIterable(streamResult, (error) => error);
+
   let itemCount = 0;
   yield* stream.pipe(
-    Stream.tap((item: any) =>
+    Stream.tap((item) =>
       Effect.gen(function* () {
         itemCount++;
         yield* processItem(item, itemCount);
@@ -261,12 +185,10 @@ const program = Effect.gen(function* () {
     Stream.runDrain
   );
 
-}).pipe(
-  Effect.provide(Logger.minimumLogLevel(LogLevel.Info)),
-  Effect.provide(MasaPluginLive),
-  Effect.provide(DatabaseServiceLive),
-  Effect.provide(runtime)
-);
+  yield* Effect.tryPromise(() => runtime.shutdown());
+});
 
-// Run the program
-await runtime.runPromise(program);
+// Run the program with database service
+await Effect.runPromise(
+  main.pipe(Effect.provide(DatabaseService.Default))
+);
