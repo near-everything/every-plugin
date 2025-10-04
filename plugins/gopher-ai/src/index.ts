@@ -2,45 +2,39 @@ import { implement } from "@orpc/server";
 import { createPlugin, PluginConfigurationError } from "every-plugin";
 import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
-import { MasaApiError, MasaClient } from "./client";
+import { ApiError, GopherAIClient } from "./client";
 import { JobManager } from "./job-manager";
 import {
-  masaContract,
-  type SourceItem,
-  type MasaSourceType,
-  type MasaSearchMethod,
+  contract
 } from "./schemas";
 import {
-  handleMasaError,
-  convertMasaResultToSourceItem,
-  buildBackfillQuery,
-  buildLiveQuery
-} from "./utils";
-import {
-  fetchAndConvert,
   backfillStream,
-  liveStream,
   gapDetectionAndLiveStream,
+  liveStream
 } from "./streaming";
+import {
+  convertResultToSourceItem,
+  handleError
+} from "./utils";
 
 export default createPlugin({
-  id: "@curatedotfun/masa-source",
+  id: "@curatedotfun/gopher-ai",
   type: "source",
-  
+
   variables: z.object({
     baseUrl: z.string().url().optional().default("https://data.gopher-ai.com/api/v1"),
     timeout: z.number().optional().default(30000),
   }),
-  
+
   secrets: z.object({
-    apiKey: z.string().min(1, "Masa API key is required"),
+    apiKey: z.string().min(1, " API key is required"),
   }),
-  
-  contract: masaContract,
+
+  contract: contract,
 
   initialize: (config) => Effect.gen(function* () {
     const baseUrl = config.variables?.baseUrl || "https://data.gopher-ai.com/api/v1";
-    const client = new MasaClient(
+    const client = new GopherAIClient(
       baseUrl,
       config.secrets.apiKey,
       config.variables?.timeout
@@ -57,8 +51,8 @@ export default createPlugin({
       })
     });
 
-    console.log("Masa source plugin initialized successfully", {
-      pluginId: "@curatedotfun/masa-source",
+    console.log(" source plugin initialized successfully", {
+      pluginId: "@curatedotfun/gopher-ai",
       baseUrl
     });
 
@@ -66,7 +60,7 @@ export default createPlugin({
   }),
 
   createRouter: (context) => {
-    const os = implement(masaContract);
+    const os = implement(contract);
 
     // Core job operations
     const submitSearchJob = os.submitSearchJob.handler(async ({ input, errors }) => {
@@ -80,7 +74,7 @@ export default createPlugin({
         );
         return { jobId };
       } catch (error) {
-        return handleMasaError(error, errors);
+        return handleError(error, errors);
       }
     });
 
@@ -89,43 +83,43 @@ export default createPlugin({
         const status = await context.client.checkJobStatus(input.jobId);
         return { status: status as 'submitted' | 'in progress' | 'done' | 'error' };
       } catch (error) {
-        return handleMasaError(error, errors);
+        return handleError(error, errors);
       }
     });
 
     const getJobResults = os.getJobResults.handler(async ({ input, errors }) => {
       try {
-        const masaResults = await context.client.getJobResults(input.jobId);
-        const items = masaResults.map(convertMasaResultToSourceItem);
+        const results = await context.client.getJobResults(input.jobId);
+        const items = results.map(convertResultToSourceItem);
         return { items };
       } catch (error) {
-        return handleMasaError(error, errors);
+        return handleError(error, errors);
       }
     });
 
     const getById = os.getById.handler(async ({ input, errors }) => {
       try {
-        const masaResult = await context.jobManager.getById(input.sourceType, input.id);
-        const item = convertMasaResultToSourceItem(masaResult);
+        const result = await context.jobManager.getById(input.sourceType, input.id);
+        const item = convertResultToSourceItem(result);
         return { item };
       } catch (error) {
-        return handleMasaError(error, errors);
+        return handleError(error, errors);
       }
     });
 
     const getBulk = os.getBulk.handler(async ({ input, errors }) => {
       try {
-        const masaResults = await context.jobManager.getBulk(input.sourceType, input.ids);
-        const items = masaResults.map(convertMasaResultToSourceItem);
+        const results = await context.jobManager.getBulk(input.sourceType, input.ids);
+        const items = results.map(convertResultToSourceItem);
         return { items };
       } catch (error) {
-        return handleMasaError(error, errors);
+        return handleError(error, errors);
       }
     });
 
     const getReplies = os.getReplies.handler(async ({ input, errors }) => {
       try {
-        const masaResults = await Effect.runPromise(
+        const results = await Effect.runPromise(
           context.jobManager.executeJobWorkflow(
             input.sourceType,
             'getreplies',
@@ -134,16 +128,16 @@ export default createPlugin({
             (results) => results
           )
         );
-        const replies = masaResults.map(convertMasaResultToSourceItem);
+        const replies = results.map(convertResultToSourceItem);
         return { replies };
       } catch (error) {
-        return handleMasaError(error, errors);
+        return handleError(error, errors);
       }
     });
 
     const similaritySearch = os.similaritySearch.handler(async ({ input, errors }) => {
       try {
-        const masaResults = await context.client.similaritySearch({
+        const results = await context.client.similaritySearch({
           query: input.query,
           sources: input.sources,
           keywords: input.keywords,
@@ -151,16 +145,16 @@ export default createPlugin({
           max_results: input.maxResults,
         });
 
-        const items = masaResults.map(convertMasaResultToSourceItem);
+        const items = results.map(convertResultToSourceItem);
         return { items };
       } catch (error) {
-        return handleMasaError(error, errors);
+        return handleError(error, errors);
       }
     });
 
     const hybridSearch = os.hybridSearch.handler(async ({ input, errors }) => {
       try {
-        const masaResults = await context.client.hybridSearch({
+        const results = await context.client.hybridSearch({
           similarity_query: {
             query: input.similarityQuery.query,
             weight: input.similarityQuery.weight,
@@ -175,10 +169,10 @@ export default createPlugin({
           max_results: input.maxResults,
         });
 
-        const items = masaResults.map(convertMasaResultToSourceItem);
+        const items = results.map(convertResultToSourceItem);
         return { items };
       } catch (error) {
-        return handleMasaError(error, errors);
+        return handleError(error, errors);
       }
     });
 
@@ -192,7 +186,7 @@ export default createPlugin({
             1,
             (results) => {
               if (results.length === 0) {
-                throw new MasaApiError(`Profile not found for ${input.username}`, 404, `Get profile ${input.username}`);
+                throw new ApiError(`Profile not found for ${input.username}`, 404, `Get profile ${input.username}`);
               }
               return results[0];
             }
@@ -214,7 +208,7 @@ export default createPlugin({
           }
         };
       } catch (error) {
-        return handleMasaError(error, errors);
+        return handleError(error, errors);
       }
     });
 
@@ -230,7 +224,7 @@ export default createPlugin({
           )
         );
 
-        const trends = results.map((result: any) => ({
+        const trends = results.map((result) => ({
           name: result.content,
           query: result.metadata?.username,
           tweetVolume: result.metadata?.likes,
@@ -239,7 +233,7 @@ export default createPlugin({
 
         return { trends };
       } catch (error) {
-        return handleMasaError(error, errors);
+        return handleError(error, errors);
       }
     });
 
@@ -284,7 +278,7 @@ export default createPlugin({
         );
 
       } catch (error) {
-        handleMasaError(error, errors);
+        handleError(error, errors);
       }
     });
 
@@ -305,7 +299,7 @@ export default createPlugin({
           yield item;
         }
       } catch (error) {
-        handleMasaError(error, errors);
+        handleError(error, errors);
       }
     });
 
@@ -325,7 +319,7 @@ export default createPlugin({
           yield item;
         }
       } catch (error) {
-        handleMasaError(error, errors);
+        handleError(error, errors);
       }
     });
 

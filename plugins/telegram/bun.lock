@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "@curatedotfun/telegram-source",
+      "name": "@curatedotfun/telegram",
       "dependencies": {
         "telegraf": "^4.16.3",
       },

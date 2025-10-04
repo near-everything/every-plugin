@@ -2,14 +2,14 @@ import type { PluginBinding } from "every-plugin";
 import { createPluginRuntime } from "every-plugin/runtime";
 import type { Context } from "telegraf";
 import { describe, expect, it } from "vitest";
-import type TelegramSourcePlugin from "../../index";
+import type TelegramPlugin from "../../index";
 import { TELEGRAM_REMOTE_ENTRY_URL } from "./global-setup";
 
 type TelegramBindings = {
-  "@curatedotfun/telegram-source": PluginBinding<typeof TelegramSourcePlugin>;
+  "@curatedotfun/telegram": PluginBinding<typeof TelegramPlugin>;
 };
 const TEST_REGISTRY = {
-  "@curatedotfun/telegram-source": {
+  "@curatedotfun/telegram": {
     remoteUrl: TELEGRAM_REMOTE_ENTRY_URL,
     type: "source",
     version: "0.0.1",
@@ -47,7 +47,7 @@ describe.sequential("Telegram Polling Integration Tests", () => {
     console.log("🚀 Testing telegram plugin polling");
     console.log(`🔗 Chat ID: ${TEST_CHAT_ID}`);
 
-    const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", POLLING_CONFIG);
+    const { client } = await runtime.usePlugin("@curatedotfun/telegram", POLLING_CONFIG);
 
     console.log("✅ Plugin initialized");
 

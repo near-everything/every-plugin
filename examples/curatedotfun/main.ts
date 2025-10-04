@@ -3,8 +3,8 @@
 import type { PluginBinding } from "every-plugin";
 import { Effect, Stream } from "every-plugin/effect";
 import { createPluginRuntime } from "every-plugin/runtime";
-import type MasaSourcePlugin from '../../plugins/masa-source/src';
-import type { SourceItem } from '../../plugins/masa-source/src/schemas';
+import type GopherAIPlugin from '../../plugins/gopher-ai/src';
+import type { SourceItem } from '../../plugins/gopher-ai/src/schemas';
 import type { NewItem } from "./schemas/database";
 import { DatabaseService } from "./services/db.service";
 
@@ -23,18 +23,19 @@ const BASE_QUERY = "@curatedotfun";
 
 // Typed registry bindings using generated types
 type IRegistry = {
-  "@curatedotfun/masa-source": PluginBinding<typeof MasaSourcePlugin>
+  "@curatedotfun/gopher-ai": PluginBinding<typeof GopherAIPlugin>
 };
 
 export const runtime = createPluginRuntime<IRegistry>({
   registry: {
-    "@curatedotfun/masa-source": {
+    "@curatedotfun/gopher-ai": {
       remoteUrl: "http://localhost:3013/remoteEntry.js",
+      // https://elliot-braem-81-curatedotfun-gohper-ai-every-plug-e92865b2f-ze.zephyrcloud.app
       type: "source"
     }
   },
   secrets: {
-    MASA_API_KEY: Bun.env.MASA_API_KEY || "your-masa-api-key-here"
+    GOPHERAI_API_KEY: Bun.env.GOPHERAI_API_KEY || "your-masa-api-key-here"
   }
 });
 
@@ -53,7 +54,6 @@ const detectSubmissionCommands = (content: string): boolean => {
   return content.toLowerCase().includes("!submit");
 };
 
-// Convert Masa plugin item to database item
 const convertToDbItem = (item: SourceItem): NewItem => {
   const raw = item.raw as any;
   const platform = raw?.source === "twitter" ? "twitter" :
@@ -139,12 +139,12 @@ const loadState = () =>
 
 // Main streaming program with database integration
 const main = Effect.gen(function* () {
-  console.log('🚀 Starting Masa Twitter streaming with database storage...\n');
+  console.log('🚀 Starting Twitter streaming with database storage...\n');
 
   // Get the client directly
   const { client } = yield* Effect.tryPromise(() =>
-    runtime.usePlugin("@curatedotfun/masa-source", {
-      secrets: { apiKey: "{{MASA_API_KEY}}" },
+    runtime.usePlugin("@curatedotfun/gopher-ai", {
+      secrets: { apiKey: "{{GOPHERAI_API_KEY}}" },
       variables: { baseUrl: "https://data.gopher-ai.com/api/v1", timeout: 30000 }
     })
   );

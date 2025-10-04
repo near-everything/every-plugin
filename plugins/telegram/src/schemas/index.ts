@@ -9,7 +9,7 @@ export const TelegramContextSchema = z.custom<Context>((val): val is Context => 
 });
 
 // Contract definition for the Telegram source plugin
-export const telegramContract = oc.router({
+export const contract = oc.router({
   webhook: oc
     .route({ method: 'POST', path: '/webhook' })
     .input(z.custom<Update>())
@@ -46,7 +46,3 @@ export const telegramContract = oc.router({
     }))
     .errors(CommonPluginErrors)
 });
-
-// Export types for use in implementation
-export type TelegramContract = typeof telegramContract;
-export type TelegramContext = Context;

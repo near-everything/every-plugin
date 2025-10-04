@@ -103,7 +103,7 @@ const processSubmissionTask = (task: any) =>
     // Get the client directly from runtime
     const { client } = yield* Effect.tryPromise(() =>
       runtime.usePlugin("@curatedotfun/masa-source", {
-        secrets: { apiKey: "{{MASA_API_KEY}}" },
+        secrets: { apiKey: "{{GOPHERAI_API_KEY}}" },
         variables: { baseUrl: "https://data.gopher-ai.com/api/v1", timeout: 30000 }
       })
     );

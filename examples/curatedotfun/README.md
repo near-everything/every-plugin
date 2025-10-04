@@ -20,7 +20,7 @@ bun install
 
 2. Set your Masa API key in `.env`:
 ```bash
-MASA_API_KEY=your-masa-api-key-here
+GOPHERAI_API_KEY=your-masa-api-key-here
 ```
 
 3. Make sure the Masa plugin is running on localhost:3013

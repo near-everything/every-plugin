@@ -1,12 +1,12 @@
 import { Effect } from "every-plugin/effect";
 import type { JobManager } from "./job-manager";
-import type { MasaSourceType, MasaSearchMethod, SourceItem } from "./schemas";
-import { buildBackfillQuery, buildLiveQuery, convertMasaResultToSourceItem } from "./utils";
+import type { SearchMethod, SourceItem, SourceType } from "./schemas";
+import { buildBackfillQuery, buildLiveQuery, convertResultToSourceItem } from "./utils";
 
 export async function fetchAndConvert(
   jobManager: JobManager,
-  sourceType: MasaSourceType,
-  searchMethod: MasaSearchMethod,
+  sourceType: SourceType,
+  searchMethod: SearchMethod,
   query: string,
   pageSize: number
 ): Promise<SourceItem[]> {
@@ -21,7 +21,7 @@ export async function fetchAndConvert(
   );
 
   return results
-    .map(convertMasaResultToSourceItem)
+    .map(convertResultToSourceItem)
     .sort((a, b) =>
       new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()
     );
@@ -30,8 +30,8 @@ export async function fetchAndConvert(
 export async function* backfillStream(
   jobManager: JobManager,
   baseQuery: string,
-  sourceType: MasaSourceType,
-  searchMethod: MasaSearchMethod,
+  sourceType: SourceType,
+  searchMethod: SearchMethod,
   maxId: string | undefined,
   maxResults: number | undefined,
   oldestAllowedId: string | undefined,
@@ -77,8 +77,8 @@ export async function* backfillStream(
 export async function* liveStream(
   jobManager: JobManager,
   baseQuery: string,
-  sourceType: MasaSourceType,
-  searchMethod: MasaSearchMethod,
+  sourceType: SourceType,
+  searchMethod: SearchMethod,
   sinceId: string | undefined,
   maxResults: number | undefined,
   pageSize: number,
@@ -112,8 +112,8 @@ export async function* liveStream(
 export async function* gapDetectionAndLiveStream(
   jobManager: JobManager,
   baseQuery: string,
-  sourceType: MasaSourceType,
-  searchMethod: MasaSearchMethod,
+  sourceType: SourceType,
+  searchMethod: SearchMethod,
   mostRecentId: string | undefined,
   livePageSize: number,
   livePollMs: number

@@ -6,7 +6,7 @@ import type { Context } from "telegraf";
 import { Telegraf } from "telegraf";
 import type { Update } from "telegraf/types";
 import {
-  telegramContract,
+  contract,
 } from "./schemas";
 
 const MAX_QUEUE_SIZE = 1000;
@@ -58,7 +58,7 @@ const handleTelegramError = (error: unknown, errors: Record<string, Function>): 
 };
 
 export default createPlugin({
-  id: "@curatedotfun/telegram-source",
+  id: "@curatedotfun/telegram",
   type: "source",
   variables: z.object({
     domain: z.string().min(1).optional(), // Optional - if not provided, use polling mode
@@ -68,7 +68,7 @@ export default createPlugin({
     webhookToken: z.string().optional(),
     botToken: z.string().min(1, "Telegram bot token is required"),
   }),
-  contract: telegramContract,
+  contract: contract,
 
   initialize: (config) =>
     Effect.gen(function* () {
@@ -221,7 +221,7 @@ export default createPlugin({
     }),
 
   createRouter: (context) => {
-    const os = implement(telegramContract);
+    const os = implement(contract);
 
     const webhook = os.webhook.handler(({ input }) =>
       Effect.runPromise(
@@ -246,7 +246,7 @@ export default createPlugin({
       )
     );
 
-    const listen = os.listen.handler(async function* ({ input, errors }) {
+    const listen = os.listen.handler(async function* ({ input }) {
       const { maxResults, chatId, messageTypes, chatTypes, commands } = input;
 
       console.log(`🎧 [Listen] Starting listen maxResults: ${maxResults}`);

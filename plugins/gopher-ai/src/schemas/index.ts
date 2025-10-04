@@ -19,11 +19,10 @@ const sourceItemSchema = z.object({
   raw: z.unknown(),
 });
 
-// Masa-specific enums and types
-const MasaSourceTypeSchema = z.enum(['twitter', 'tiktok', 'reddit']);
-const MasaSearchMethodSchema = z.enum([
+const SourceTypeSchema = z.enum(['twitter', 'tiktok', 'reddit']);
+const SearchMethodSchema = z.enum([
   'searchbyquery',
-  'searchbyfullarchive', 
+  'searchbyfullarchive',
   'getbyid',
   'getreplies',
   'getretweeters',
@@ -39,13 +38,12 @@ const MasaSearchMethodSchema = z.enum([
   'getspace'
 ]);
 
-// Contract definition for the Masa source plugin
-export const masaContract = {
+export const contract = {
   // Core job operations for async search
   submitSearchJob: oc
     .input(z.object({
-      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
-      searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
+      sourceType: SourceTypeSchema.optional().default('twitter'),
+      searchMethod: SearchMethodSchema.optional().default('searchbyquery'),
       query: z.string(),
       maxResults: z.number().min(1).optional(),
       nextCursor: z.string().optional(),
@@ -77,7 +75,7 @@ export const masaContract = {
   getById: oc
     .input(z.object({
       id: z.string(),
-      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
+      sourceType: SourceTypeSchema.optional().default('twitter'),
     }))
     .output(z.object({
       item: sourceItemSchema
@@ -88,7 +86,7 @@ export const masaContract = {
   getBulk: oc
     .input(z.object({
       ids: z.array(z.string()),
-      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
+      sourceType: SourceTypeSchema.optional().default('twitter'),
     }))
     .output(z.object({
       items: z.array(sourceItemSchema),
@@ -99,7 +97,7 @@ export const masaContract = {
   getReplies: oc
     .input(z.object({
       conversationId: z.string(),
-      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
+      sourceType: SourceTypeSchema.optional().default('twitter'),
       maxResults: z.number().min(1).max(100).optional().default(20),
     }))
     .output(z.object({
@@ -111,7 +109,7 @@ export const masaContract = {
   similaritySearch: oc
     .input(z.object({
       query: z.string(),
-      sources: z.array(MasaSourceTypeSchema).optional(),
+      sources: z.array(SourceTypeSchema).optional(),
       keywords: z.array(z.string()).optional(),
       keywordOperator: z.enum(['and', 'or']).optional().default('and'),
       maxResults: z.number().min(1).max(100).optional().default(10),
@@ -132,7 +130,7 @@ export const masaContract = {
         query: z.string(),
         weight: z.number().min(0).max(1),
       }),
-      sources: z.array(MasaSourceTypeSchema).optional(),
+      sources: z.array(SourceTypeSchema).optional(),
       keywords: z.array(z.string()).optional(),
       keywordOperator: z.enum(['and', 'or']).optional().default('and'),
       maxResults: z.number().min(1).max(100).optional().default(10),
@@ -146,7 +144,7 @@ export const masaContract = {
   getProfile: oc
     .input(z.object({
       username: z.string(),
-      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
+      sourceType: SourceTypeSchema.optional().default('twitter'),
     }))
     .output(z.object({
       profile: z.object({
@@ -167,7 +165,7 @@ export const masaContract = {
   // Get trending topics
   getTrends: oc
     .input(z.object({
-      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
+      sourceType: SourceTypeSchema.optional().default('twitter'),
     }))
     .output(z.object({
       trends: z.array(z.object({
@@ -184,53 +182,53 @@ export const masaContract = {
     .route({ method: 'POST', path: '/search' })
     .input(z.object({
       query: z.string(),
-      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
-      searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
-      
+      sourceType: SourceTypeSchema.optional().default('twitter'),
+      searchMethod: SearchMethodSchema.optional().default('searchbyquery'),
+
       // Resumption cursors (state - changes on resume)
       sinceId: z.string().optional(),
       maxId: z.string().optional(),
-      
+
       // Backfill limits (config - constant on resume)
       maxBackfillResults: z.number().optional(),
       oldestAllowedId: z.string().optional(),
       maxBackfillAgeMs: z.number().optional(),
-      
+
       // Live mode control
       enableLive: z.boolean().default(true),
       livePollMs: z.number().min(1000).max(3600000).optional().default(60000),
-      
+
       // Hard limits
       maxTotalResults: z.number().optional(),
-      
+
       // Page sizes
       backfillPageSize: z.number().min(1).max(100).optional().default(100),
       livePageSize: z.number().min(1).max(100).optional().default(20),
     }))
     .output(eventIterator(sourceItemSchema))
     .errors(CommonPluginErrors),
-  
+
   // Backfill only stream (finite)
   backfill: oc
     .route({ method: 'POST', path: '/backfill' })
     .input(z.object({
       query: z.string(),
-      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
-      searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
+      sourceType: SourceTypeSchema.optional().default('twitter'),
+      searchMethod: SearchMethodSchema.optional().default('searchbyquery'),
       maxId: z.string().optional(),
       maxResults: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional().default(100),
     }))
     .output(eventIterator(sourceItemSchema))
     .errors(CommonPluginErrors),
-  
+
   // Live polling only stream (infinite)
   live: oc
     .route({ method: 'POST', path: '/live' })
     .input(z.object({
       query: z.string(),
-      sourceType: MasaSourceTypeSchema.optional().default('twitter'),
-      searchMethod: MasaSearchMethodSchema.optional().default('searchbyquery'),
+      sourceType: SourceTypeSchema.optional().default('twitter'),
+      searchMethod: SearchMethodSchema.optional().default('searchbyquery'),
       sinceId: z.string().optional(),
       pollMs: z.number().min(1000).max(3600000).optional().default(60000),
       pageSize: z.number().min(1).max(100).optional().default(20),
@@ -240,7 +238,6 @@ export const masaContract = {
 };
 
 // Export types for use in implementation
-export type MasaContract = typeof masaContract;
 export type SourceItem = z.infer<typeof sourceItemSchema>;
-export type MasaSourceType = z.infer<typeof MasaSourceTypeSchema>;
-export type MasaSearchMethod = z.infer<typeof MasaSearchMethodSchema>;
+export type SourceType = z.infer<typeof SourceTypeSchema>;
+export type SearchMethod = z.infer<typeof SearchMethodSchema>;

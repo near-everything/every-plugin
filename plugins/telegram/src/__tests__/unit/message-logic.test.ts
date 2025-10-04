@@ -2,18 +2,18 @@ import { expect, it } from "vitest";
 import type { PluginBinding, PluginRegistry } from "every-plugin";
 import { createLocalPluginRuntime, type PluginMap } from "every-plugin/testing";
 import { beforeAll, describe } from "vitest";
-import TelegramSourcePlugin from "../../index";
+import TelegramPlugin from "../../index";
 import { createCommandUpdate, createTextUpdate } from "../fixtures/telegram-updates";
 import type { Context } from "telegraf";
 
 // Define typed registry bindings for the telegram plugin
 type TelegramBindings = {
-  "@curatedotfun/telegram-source": PluginBinding<typeof TelegramSourcePlugin>;
+  "@curatedotfun/telegram": PluginBinding<typeof TelegramPlugin>;
 };
 
 // Test registry
 const TEST_REGISTRY: PluginRegistry = {
-  "@curatedotfun/telegram-source": {
+  "@curatedotfun/telegram": {
     remoteUrl: "http://localhost:3014/remoteEntry.js",
     type: "source",
     version: "1.0.0",
@@ -37,7 +37,7 @@ const SECRETS_CONFIG = {
 
 // Plugin map for tests
 const TEST_PLUGIN_MAP: PluginMap = {
-  "@curatedotfun/telegram-source": TelegramSourcePlugin,
+  "@curatedotfun/telegram": TelegramPlugin,
 };
 
 const TEST_CHAT_ID = "-4956736324";
@@ -56,17 +56,17 @@ describe("Telegram Message Logic Tests", () => {
 
   describe("Plugin Initialization", () => {
     it("should initialize plugin successfully with polling mode", async () => {
-      const { initialized } = await runtime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+      const { initialized } = await runtime.usePlugin("@curatedotfun/telegram", SHARED_TEST_CONFIG);
 
       expect(initialized).toBeDefined();
-      expect(initialized.plugin.id).toBe("@curatedotfun/telegram-source");
+      expect(initialized.plugin.id).toBe("@curatedotfun/telegram");
       expect(initialized.plugin.type).toBe("source");
     }, { timeout: 10000 });
   });
 
   describe("Message Sending", () => {
     it("should send message successfully", async () => {
-      const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+      const { client } = await runtime.usePlugin("@curatedotfun/telegram", SHARED_TEST_CONFIG);
 
       const testMessage = `Unit test message - ${new Date().toISOString()}`;
 
@@ -81,7 +81,7 @@ describe("Telegram Message Logic Tests", () => {
     }, { timeout: 10000 });
 
     it("should send message with formatting", async () => {
-      const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+      const { client } = await runtime.usePlugin("@curatedotfun/telegram", SHARED_TEST_CONFIG);
 
       const result = await client.sendMessage({
         chatId: TEST_CHAT_ID,
@@ -96,7 +96,7 @@ describe("Telegram Message Logic Tests", () => {
 
   describe("Webhook Processing Logic", () => {
     it("should process webhook updates without registering webhook", async () => {
-      const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+      const { client } = await runtime.usePlugin("@curatedotfun/telegram", SHARED_TEST_CONFIG);
 
       // Create test updates
       const update1 = createTextUpdate("Hello webhook!", parseInt(TEST_CHAT_ID));
@@ -111,7 +111,7 @@ describe("Telegram Message Logic Tests", () => {
     }, { timeout: 10000 });
 
     it("should handle malformed webhook data gracefully", async () => {
-      const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+      const { client } = await runtime.usePlugin("@curatedotfun/telegram", SHARED_TEST_CONFIG);
 
       // Send malformed data
       // @ts-expect-error malformed, type errors are good
@@ -123,7 +123,7 @@ describe("Telegram Message Logic Tests", () => {
 
   describe("Stream Processing Logic", () => {
     it("should process queued updates and stream them", async () => {
-      const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+      const { client } = await runtime.usePlugin("@curatedotfun/telegram", SHARED_TEST_CONFIG);
 
       // Add updates to queue via webhook handler
       const update1 = createTextUpdate("Stream test message 1", parseInt(TEST_CHAT_ID));
@@ -197,7 +197,7 @@ describe("Telegram Message Logic Tests", () => {
     }, { timeout: 15000 });
 
     it("should filter messages by chat ID", async () => {
-      const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+      const { client } = await runtime.usePlugin("@curatedotfun/telegram", SHARED_TEST_CONFIG);
 
       // Send updates from different chats
       const targetUpdate = createTextUpdate("Target chat message", parseInt(TEST_CHAT_ID));
@@ -234,7 +234,7 @@ describe("Telegram Message Logic Tests", () => {
     }, { timeout: 15000 });
 
     it("should filter commands using messageTypes", async () => {
-      const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+      const { client } = await runtime.usePlugin("@curatedotfun/telegram", SHARED_TEST_CONFIG);
 
       // Send mixed messages
       const regularUpdate = createTextUpdate("Regular message", parseInt(TEST_CHAT_ID));
@@ -276,7 +276,7 @@ describe("Telegram Message Logic Tests", () => {
     }, { timeout: 15000 });
 
     it("should handle stream completion properly", async () => {
-      const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", SHARED_TEST_CONFIG);
+      const { client } = await runtime.usePlugin("@curatedotfun/telegram", SHARED_TEST_CONFIG);
 
       // Add a single message to test stream completion
       const update = createTextUpdate("Completion test message", parseInt(TEST_CHAT_ID));

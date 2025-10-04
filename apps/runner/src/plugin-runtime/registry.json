@@ -23,7 +23,7 @@
 		"description": "Masa source plugin for curatedotfun",
 		"type": "source"
 	},
-	"@curatedotfun/telegram-source": {
+	"@curatedotfun/telegram": {
 		"remoteUrl": "http://localhost:3012/remoteEntry.js",
 		"version": "0.0.1",
 		"description": "Telegram source plugin for curatedotfun",

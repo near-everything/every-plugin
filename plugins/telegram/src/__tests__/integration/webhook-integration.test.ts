@@ -2,18 +2,18 @@ import { expect, it } from "vitest";
 import type { PluginBinding } from "every-plugin";
 import { createPluginRuntime } from "every-plugin/runtime";
 import { beforeAll, describe } from "vitest";
-import type TelegramSourcePlugin from "../../index";
+import type TelegramPlugin from "../../index";
 import type { Context } from "telegraf";
 import { TELEGRAM_REMOTE_ENTRY_URL } from "./global-setup";
 
 // Define typed registry bindings for the telegram plugin
 type TelegramBindings = {
-  "@curatedotfun/telegram-source": PluginBinding<typeof TelegramSourcePlugin>;
+  "@curatedotfun/telegram": PluginBinding<typeof TelegramPlugin>;
 };
 
 // Registry for integration tests
 const TEST_REGISTRY = {
-  "@curatedotfun/telegram-source": {
+  "@curatedotfun/telegram": {
     remoteUrl: TELEGRAM_REMOTE_ENTRY_URL,
     type: "source",
     version: "0.0.1",
@@ -75,7 +75,7 @@ describe.sequential("Telegram Webhook Integration Tests", () => {
   });
 
   it("should handle complete integration flow with all features", async () => {
-    const { client } = await runtime.usePlugin("@curatedotfun/telegram-source", INTEGRATION_CONFIG);
+    const { client } = await runtime.usePlugin("@curatedotfun/telegram", INTEGRATION_CONFIG);
 
     console.log("🚀 Testing complete integration: API → webhook → listen → stream");
 

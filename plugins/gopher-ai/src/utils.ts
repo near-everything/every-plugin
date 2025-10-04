@@ -1,5 +1,5 @@
-import type { MasaSearchResult } from "./client";
-import { MasaApiError } from "./client";
+import type { SearchResult } from "./client";
+import { ApiError } from "./client";
 import type { SourceItem } from "./schemas";
 
 export function decrementSnowflakeId(id: string): string {
@@ -22,44 +22,44 @@ export function buildLiveQuery(baseQuery: string, sinceId?: string): string {
   return `${baseQuery} since_id:${sinceId}`;
 }
 
-export function handleMasaError(error: unknown, errors: any): never {
-  if (error instanceof MasaApiError) {
+export function handleError(error: unknown, errors: any): never {
+  if (error instanceof ApiError) {
     switch (error.status) {
       case 401:
         throw errors.UNAUTHORIZED({
           message: 'Invalid API key',
-          data: { provider: 'masa', apiKeyProvided: true }
+          data: { provider: 'gopherai', apiKeyProvided: true }
         });
       case 403:
         throw errors.FORBIDDEN({
           message: 'Access forbidden',
-          data: { provider: 'masa' }
+          data: { provider: 'gopherai' }
         });
       case 400:
         throw errors.BAD_REQUEST({
           message: 'Invalid request parameters',
-          data: { provider: 'masa' }
+          data: { provider: 'gopherai' }
         });
       case 404:
         throw errors.NOT_FOUND({
           message: 'Resource not found',
-          data: { provider: 'masa' }
+          data: { provider: 'gopherai' }
         });
       default:
         throw errors.SERVICE_UNAVAILABLE({
           message: 'Service temporarily unavailable',
-          data: { provider: 'masa' }
+          data: { provider: 'gopherai' }
         });
     }
   }
 
   throw errors.SERVICE_UNAVAILABLE({
     message: error instanceof Error ? error.message : 'Unknown error occurred',
-    data: { provider: 'masa' }
+    data: { provider: 'gopherai' }
   });
 }
 
-export function convertMasaResultToSourceItem(masaResult: MasaSearchResult): SourceItem {
+export function convertResultToSourceItem(result: SearchResult): SourceItem {
   const snowflakeToTimestamp = (id: string): string => {
     const TWITTER_EPOCH = 1288834974657n;
     const snowflake = BigInt(id);
@@ -78,21 +78,21 @@ export function convertMasaResultToSourceItem(masaResult: MasaSearchResult): Sou
     return date >= twitterEpochDate;
   };
 
-  const createdAt = isValidTimestamp(masaResult.metadata?.created_at)
-    ? masaResult.metadata!.created_at
-    : snowflakeToTimestamp(masaResult.id);
+  const createdAt = isValidTimestamp(result.metadata?.created_at)
+    ? result.metadata!.created_at
+    : snowflakeToTimestamp(result.id);
 
   return {
-    externalId: masaResult.id,
-    content: masaResult.content,
+    externalId: result.id,
+    content: result.content,
     contentType: "post",
     createdAt,
-    url: masaResult.metadata?.tweet_id ? `https://twitter.com/i/status/${masaResult.metadata.tweet_id}` : undefined,
-    authors: masaResult.metadata?.username ? [{
-      id: masaResult.metadata?.user_id,
-      username: masaResult.metadata?.username,
-      displayName: masaResult.metadata?.author || masaResult.metadata?.username,
+    url: result.metadata?.tweet_id ? `https://twitter.com/i/status/${result.metadata.tweet_id}` : undefined,
+    authors: result.metadata?.username ? [{
+      id: result.metadata?.user_id,
+      username: result.metadata?.username,
+      displayName: result.metadata?.author || result.metadata?.username,
     }] : undefined,
-    raw: masaResult,
+    raw: result,
   };
 }

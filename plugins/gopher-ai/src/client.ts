@@ -1,30 +1,30 @@
 import { type BetterFetchOption, createFetch } from '@better-fetch/fetch';
 import { z } from 'zod';
-import type { MasaSearchMethod, MasaSourceType } from './schemas';
+import type { SearchMethod, SourceType } from './schemas';
 
-export class MasaApiError extends Error {
+export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
     public readonly context?: string
   ) {
     super(message);
-    this.name = 'MasaApiError';
+    this.name = 'ApiError';
   }
 }
 
 // Response schemas
-const MasaJobResponseSchema = z.object({
+const JobResponseSchema = z.object({
   uuid: z.string().optional(),
   error: z.string().optional()
 });
 
-const MasaJobStatusResponseSchema = z.object({
+const JobStatusResponseSchema = z.object({
   status: z.string(),
   error: z.string().optional()
 });
 
-const MasaSearchResultSchema = z.object({
+const SearchResultSchema = z.object({
   id: z.string(),
   source: z.string(),
   content: z.string(),
@@ -53,7 +53,7 @@ const MasaSearchResultSchema = z.object({
 }).passthrough();
 
 // Types
-export interface MasaSimilaritySearchOptions {
+export interface SimilaritySearchOptions {
   query: string;
   sources?: string[];
   keywords?: string[];
@@ -61,7 +61,7 @@ export interface MasaSimilaritySearchOptions {
   max_results?: number;
 }
 
-export interface MasaHybridSearchOptions {
+export interface HybridSearchOptions {
   similarity_query: { query: string; weight: number };
   text_query: { query: string; weight: number };
   sources?: string[];
@@ -70,7 +70,7 @@ export interface MasaHybridSearchOptions {
   max_results?: number;
 }
 
-export interface MasaSearchResult {
+export interface SearchResult {
   id: string;
   source: string;
   content: string;
@@ -99,7 +99,7 @@ export interface MasaSearchResult {
   [key: string]: unknown;
 }
 
-export class MasaClient {
+export class GopherAIClient {
   private $fetch: ReturnType<typeof createFetch>;
 
   constructor(
@@ -136,7 +136,7 @@ export class MasaClient {
     const { data, error } = await this.$fetch(endpoint, requestOptions);
 
     if (error) {
-      throw new MasaApiError(
+      throw new ApiError(
         error.message || error.statusText || 'Unknown API error',
         error.status,
         options.context
@@ -151,8 +151,8 @@ export class MasaClient {
   }
 
   async submitSearchJob(
-    sourceType: MasaSourceType,
-    searchMethod: MasaSearchMethod,
+    sourceType: SourceType,
+    searchMethod: SearchMethod,
     query: string,
     maxResults: number,
     nextCursor?: string
@@ -163,16 +163,16 @@ export class MasaClient {
         type: sourceType,
         arguments: { type: searchMethod, query, max_results: maxResults, ...(nextCursor && { next_cursor: nextCursor }) }
       },
-      schema: MasaJobResponseSchema,
+      schema: JobResponseSchema,
       context: 'Submit search job'
     });
 
     if (data.error) {
-      throw new MasaApiError(`Invalid request: ${data.error}`, 400, 'Submit search job');
+      throw new ApiError(`Invalid request: ${data.error}`, 400, 'Submit search job');
     }
 
     if (!data.uuid) {
-      throw new MasaApiError('API did not return a job UUID', 503, 'Submit search job');
+      throw new ApiError('API did not return a job UUID', 503, 'Submit search job');
     }
 
     return data.uuid;
@@ -181,19 +181,19 @@ export class MasaClient {
   async checkJobStatus(jobId: string): Promise<string> {
     const data = await this.request(`/search/live/status/${jobId}`, {
       method: 'GET',
-      schema: MasaJobStatusResponseSchema,
+      schema: JobStatusResponseSchema,
       context: `Check job status for ${jobId}`
     });
 
     // Log raw response before any processing
-    console.log(`[MASA] ${jobId} - Raw API response:`, JSON.stringify(data, null, 2));
+    console.log(`[GOPHERAI] ${jobId} - Raw API response:`, JSON.stringify(data, null, 2));
 
     if (data.error) {
-      throw new MasaApiError(`API error: ${data.error}`, 503, `Check job status for ${jobId}`);
+      throw new ApiError(`API error: ${data.error}`, 503, `Check job status for ${jobId}`);
     }
 
     if (!data.status) {
-      throw new MasaApiError('API did not return job status', 503, `Check job status for ${jobId}`);
+      throw new ApiError('API did not return job status', 503, `Check job status for ${jobId}`);
     }
 
     // Normalize API status values
@@ -202,37 +202,37 @@ export class MasaClient {
       normalizedStatus = 'done';
     }
 
-    console.log(`[MASA] ${jobId} - Normalized status: ${normalizedStatus} (original: ${data.status})`);
+    console.log(`[GOPHERAI] ${jobId} - Normalized status: ${normalizedStatus} (original: ${data.status})`);
 
     return normalizedStatus;
   }
 
-  async getJobResults(jobId: string): Promise<MasaSearchResult[]> {
+  async getJobResults(jobId: string): Promise<SearchResult[]> {
     const data = await this.request(`/search/live/result/${jobId}`, {
       method: 'GET',
-      schema: z.array(MasaSearchResultSchema),
+      schema: z.array(SearchResultSchema),
       context: `Get job results for ${jobId}`
     });
 
     return Array.isArray(data) ? data : [];
   }
 
-  async similaritySearch(options: MasaSimilaritySearchOptions): Promise<MasaSearchResult[]> {
+  async similaritySearch(options: SimilaritySearchOptions): Promise<SearchResult[]> {
     const results = await this.request('/search/similarity', {
       method: 'POST',
       body: options,
-      schema: z.array(MasaSearchResultSchema),
+      schema: z.array(SearchResultSchema),
       context: 'Similarity search'
     });
 
     return Array.isArray(results) ? results : [];
   }
 
-  async hybridSearch(options: MasaHybridSearchOptions): Promise<MasaSearchResult[]> {
+  async hybridSearch(options: HybridSearchOptions): Promise<SearchResult[]> {
     const results = await this.request('/search/hybrid', {
       method: 'POST',
       body: options,
-      schema: z.array(MasaSearchResultSchema),
+      schema: z.array(SearchResultSchema),
       context: 'Hybrid search'
     });
 

@@ -58,7 +58,7 @@ const PluginRuntimeLayer = PluginRuntime.Live({
 		DATABASE_URL: process.env.DATABASE_URL || "",
 		NOTION_TOKEN: process.env.NOTION_TOKEN || "",
 		TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
-		MASA_API_KEY: process.env.MASA_API_KEY || "",
+		GOPHERAI_API_KEY: process.env.GOPHERAI_API_KEY || "",
 	},
 });
 

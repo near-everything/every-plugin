@@ -7,7 +7,7 @@ import { createPluginRuntime, type EveryPlugin } from "every-plugin/runtime";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
-import type TelegramPlugin from "../../plugins/telegram-source/src";
+import type TelegramPlugin from "../../plugins/telegram/src";
 import { DatabaseService } from "./services/db.service";
 import { EmbeddingsService } from "./services/embeddings.service";
 import { EntityExtractionService } from "./services/entity-extraction.service";
@@ -18,7 +18,7 @@ import { processMessage } from "./worker";
 
 // Define typed registry bindings for the telegram plugin
 type TelegramBindings = {
-  "@curatedotfun/telegram-source": PluginBinding<typeof TelegramPlugin>;
+  "@curatedotfun/telegram": PluginBinding<typeof TelegramPlugin>;
 };
 
 // Environment configuration
@@ -34,8 +34,8 @@ const useWebhooks = !!WEBHOOK_DOMAIN;
 // Create plugin runtime
 const runtime = createPluginRuntime<TelegramBindings>({
   registry: {
-    "@curatedotfun/telegram-source": {
-      remoteUrl: "https://elliot-braem-64-curatedotfun-telegram-source-ever-d4a8166e2-ze.zephyrcloud.app/remoteEntry.js",
+    "@curatedotfun/telegram": {
+      remoteUrl: "https://elliot-braem-64-curatedotfun-telegram-ever-d4a8166e2-ze.zephyrcloud.app/remoteEntry.js",
       type: "source"
     }
   },
@@ -46,7 +46,7 @@ const runtime = createPluginRuntime<TelegramBindings>({
 });
 
 // Create HTTP server with plugin router integration
-const createHttpServer = (plugin: EveryPlugin.Infer<typeof runtime, "@curatedotfun/telegram-source">) => Effect.gen(function* () {
+const createHttpServer = (plugin: EveryPlugin.Infer<typeof runtime, "@curatedotfun/telegram">) => Effect.gen(function* () {
   const db = yield* DatabaseService;
 
   const app = new Hono();
@@ -167,7 +167,7 @@ const loadState = () =>
 
 const program = Effect.gen(function* () {
   yield* Effect.logInfo("🤖 Starting efizzybusybot...");
-  const plugin = yield* Effect.promise(() => runtime.usePlugin("@curatedotfun/telegram-source", {
+  const plugin = yield* Effect.promise(() => runtime.usePlugin("@curatedotfun/telegram", {
     variables: {
       timeout: 30000,
       ...(useWebhooks && WEBHOOK_DOMAIN && { domain: WEBHOOK_DOMAIN })

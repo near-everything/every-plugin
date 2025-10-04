@@ -31,9 +31,9 @@ Add the Masa Source plugin to your `curate.config.json`:
 ```jsonc
 {
   "plugins": {
-    "@curatedotfun/masa-source": {
+    "@curatedotfun/gohper-ai": {
       "type": "source",
-      "url": "https://unpkg.com/@curatedotfun/masa-source@latest/dist/remoteEntry.js"
+      "url": "https://unpkg.com/@curatedotfun/gohper-ai@latest/dist/remoteEntry.js"
     }
   }
 }
@@ -50,7 +50,7 @@ Configure the plugin in your feed sources:
       "id": "masa-twitter-feed",
       "sources": [
         {
-          "plugin": "@curatedotfun/masa-source",
+          "plugin": "@curatedotfun/gohper-ai",
           "config": {
             "variables": {
               "baseUrl": "https://data.gopher-ai.com/api/v1", // Optional, default shown
@@ -58,7 +58,7 @@ Configure the plugin in your feed sources:
               "defaultMaxResults": 10 // Optional, default shown
             },
             "secrets": {
-              "apiKey": "{MASA_API_KEY}" // Required, hydrated at runtime
+              "apiKey": "{GOPHERAI_API_KEY}" // Required, hydrated at runtime
             }
           }
         }
@@ -68,7 +68,7 @@ Configure the plugin in your feed sources:
 }
 ```
 
-> **Note:** Set `MASA_API_KEY` as an environment variable. Get your API key from the [Masa Data API Dashboard](https://data.gopher-ai.com/).
+> **Note:** Set `GOPHERAI_API_KEY` as an environment variable. Get your API key from the [Masa Data API Dashboard](https://data.gopher-ai.com/).
 
 ## 📋 Available Procedures
 
