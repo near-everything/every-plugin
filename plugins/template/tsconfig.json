@@ -9,12 +9,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "paths": {
-      "every-plugin": ["../../src/index.ts"],
-      "every-plugin/*": ["../../src/*"]
-    }
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../../tsconfig.json" }]
+  "exclude": ["node_modules", "dist"]
 }

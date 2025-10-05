@@ -11,7 +11,6 @@ type TestBindings = {
 const TEST_REGISTRY = {
   "test-plugin": {
     remoteUrl: TEST_REMOTE_ENTRY_URL,
-    type: "source",
     version: "0.0.1",
     description: "Real test plugin for integration testing",
   },
@@ -59,7 +58,6 @@ describe("Module Federation Integration Tests", () => {
     expect(instance).toBeDefined();
     expect(instance.plugin).toBeDefined();
     expect(instance.plugin.id).toBe("test-plugin");
-    expect(instance.plugin.type).toBe("source");
   });
 
   it("should handle invalid plugin ID gracefully", async () => {

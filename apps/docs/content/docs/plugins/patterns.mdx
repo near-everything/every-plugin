@@ -79,7 +79,6 @@ class ApiClient {
 // 4. Create plugin
 export default createPlugin({
   id: "my-plugin",
-  type: "source",
   contract,
   
   // Configuration schemas
@@ -193,7 +192,6 @@ class SimpleClient {
 
 export default createPlugin({
   id: "simple-plugin",
-  type: "source",
   contract,
   variables: z.object({
     timeout: z.number().default(30000)
@@ -266,7 +264,6 @@ const contract = oc.router({
 
 export default createPlugin({
   id: "background-plugin",
-  type: "source",
   contract,
   variables: z.object({
     pollIntervalMs: z.number().default(1000),
@@ -380,7 +377,6 @@ const contract = oc.router({
 
 export default createPlugin({
   id: "error-handling-plugin",
-  type: "source",
   contract,
   variables: z.object({}),
   secrets: z.object({

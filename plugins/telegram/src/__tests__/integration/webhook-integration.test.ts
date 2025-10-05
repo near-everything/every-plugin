@@ -15,7 +15,6 @@ type TelegramBindings = {
 const TEST_REGISTRY = {
   "@curatedotfun/telegram": {
     remoteUrl: TELEGRAM_REMOTE_ENTRY_URL,
-    type: "source",
     version: "0.0.1",
     description: "Telegram source plugin for webhook integration testing",
   },

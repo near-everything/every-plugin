@@ -59,7 +59,6 @@ const handleTelegramError = (error: unknown, errors: Record<string, Function>): 
 
 export default createPlugin({
   id: "@curatedotfun/telegram",
-  type: "source",
   variables: z.object({
     domain: z.string().min(1).optional(), // Optional - if not provided, use polling mode
     timeout: z.number().default(30000),

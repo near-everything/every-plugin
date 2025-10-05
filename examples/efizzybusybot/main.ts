@@ -36,7 +36,6 @@ const runtime = createPluginRuntime<TelegramBindings>({
   registry: {
     "@curatedotfun/telegram": {
       remoteUrl: "https://elliot-braem-64-curatedotfun-telegram-ever-d4a8166e2-ze.zephyrcloud.app/remoteEntry.js",
-      type: "source"
     }
   },
   secrets: {

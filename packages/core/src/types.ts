@@ -87,7 +87,6 @@ export type PluginBindingsFor<R extends RegistryBindings> = {
  */
 export type PluginRegistry = Record<string, {
   remoteUrl: string;
-  type: string;
   version?: string;
   description?: string;
 }>;
@@ -99,7 +98,6 @@ export type PluginRegistry = Record<string, {
 export type PluginRegistryFor<R extends RegistryBindings> = {
   [K in keyof R]: {
     remoteUrl: string;
-    type: string;
     version?: string;
     description?: string;
   };
@@ -137,7 +135,6 @@ export interface PluginInstance<T extends AnyPlugin = AnyPlugin> {
     readonly pluginId: string;
     readonly version?: string;
     readonly description?: string;
-    readonly type?: string;
   };
 }
 
@@ -152,7 +149,6 @@ export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
     readonly pluginId: string;
     readonly version?: string;
     readonly description?: string;
-    readonly type?: string;
   };
   readonly config: z.infer<T["configSchema"]>;
   readonly context: ContextOf<T>;
@@ -187,7 +183,6 @@ export interface EveryPlugin<T extends AnyPlugin = AnyPlugin> {
     readonly pluginId: string;
     readonly version?: string;
     readonly description?: string;
-    readonly type?: string;
   };
   readonly initialized: InitializedPlugin<T>;
 }

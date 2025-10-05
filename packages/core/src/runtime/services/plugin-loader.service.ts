@@ -74,8 +74,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 						ctor,
 						metadata: {
 							pluginId,
-							version: metadata.version,
-							type: metadata.type,
+							version: metadata.version
 						},
 					} satisfies PluginConstructor;
 				}),

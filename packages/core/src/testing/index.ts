@@ -25,7 +25,7 @@ import { createMockModuleFederationServiceLayer, type PluginMap } from "./mocks/
  */
 export type InferBindingsFromMap<T extends PluginMap> = {
 	[K in keyof T]: PluginBinding<T[K]>
-};
+} & RegistryBindings;
 
 /**
  * Creates a test layer with mock ModuleFederationService for unit testing.
@@ -87,7 +87,7 @@ export function createLocalPluginRuntime<T extends PluginMap>(
 	const layer = createTestLayer(config, pluginMap);
 	const runtime = ManagedRuntime.make(layer);
 
-	return new PluginRuntime<InferBindingsFromMap<T>>(runtime, config.registry);
+	return new PluginRuntime(runtime, config.registry) as PluginRuntime<InferBindingsFromMap<T>>;
 }
 
 /**
@@ -98,4 +98,3 @@ export const createTestPluginRuntime = createLocalPluginRuntime;
 // Re-export useful types for tests
 export type { PluginRegistry, RegistryBindings } from "../types";
 export type { PluginMap, PluginRuntimeConfig };
-

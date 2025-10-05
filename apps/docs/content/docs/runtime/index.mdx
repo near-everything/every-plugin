@@ -26,7 +26,6 @@ const { runtime, PluginService } = createPluginRuntime<AppBindings>({
   registry: {
     "data-source": {
       remoteUrl: "https://cdn.example.com/plugins/source/remoteEntry.js",
-      type: "source",
       version: "1.0.0"
     }
   }
@@ -57,7 +56,6 @@ const runtime = createPluginRuntime<AppBindings>({
   registry: {
     "data-source": {
       remoteUrl: "https://cdn.example.com/plugins/source/remoteEntry.js",
-      type: "source",
       version: "1.0.0"
     }
   }
@@ -69,7 +67,6 @@ type DataSourcePlugin = EveryPlugin.Infer<typeof runtime, "data-source">;
 // Use in middleware or utilities
 function logPluginMetadata(plugin: DataSourcePlugin) {
   console.log(`Plugin: ${plugin.metadata.pluginId} v${plugin.metadata.version}`);
-  console.log(`Type: ${plugin.metadata.type}`);
 }
 
 // Use with plugin results
@@ -104,12 +101,10 @@ const { runtime, PluginService } = createLocalPluginRuntime(
     registry: {
       "data-source": {
         remoteUrl: "http://localhost:3000/remoteEntry.js", // Not used, but required
-        type: "source",
         version: "1.0.0"
       },
       "transformer": {
         remoteUrl: "http://localhost:3001/remoteEntry.js",
-        type: "processor",
         version: "1.0.0"
       }
     },
@@ -158,7 +153,6 @@ const { runtime, PluginService } = createPluginRuntime({
   registry: {
     "data-source": {
       remoteUrl: "https://cdn.example.com/plugins/source/remoteEntry.js",
-      type: "source",
       version: "1.0.0"
     }
   },
@@ -200,7 +194,7 @@ const openApiHandler = new OpenAPIHandler(router);
 const rpcHandler = new RPCHandler(router);
 
 // metadata - Plugin information
-console.log(metadata.pluginId, metadata.version, metadata.type);
+console.log(metadata.pluginId, metadata.version);
 
 // initialized - Full plugin state (advanced)
 ```

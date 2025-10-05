@@ -21,7 +21,6 @@ describe("Plugin Lifecycle Unit Tests", () => {
     registry: {
       "test-plugin": {
         remoteUrl: "http://localhost:3999/remoteEntry.js",
-        type: "source",
         version: "0.0.1",
       },
     },
@@ -34,13 +33,11 @@ describe("Plugin Lifecycle Unit Tests", () => {
     const pluginConstructor = await runtime.loadPlugin("test-plugin");
     expect(pluginConstructor).toBeDefined();
     expect(pluginConstructor.metadata.pluginId).toBe("test-plugin");
-    expect(pluginConstructor.metadata.type).toBe("source");
 
     const pluginInstance = await runtime.instantiatePlugin(pluginConstructor);
     expect(pluginInstance).toBeDefined();
     expect(pluginInstance.plugin).toBeDefined();
     expect(pluginInstance.plugin.id).toBe("test-plugin");
-    expect(pluginInstance.plugin.type).toBe("source");
 
     const initializedPlugin = await runtime.initializePlugin(
       pluginInstance,

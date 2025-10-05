@@ -33,7 +33,6 @@ const runtime = createPluginRuntime({
   registry: {
     "data-processor": {
       remoteUrl: "https://cdn.example.com/plugins/processor/remoteEntry.js",
-      type: "transformer",
       version: "1.0.0"
     }
   },
@@ -82,7 +81,6 @@ Plugins are defined in a registry with their remote URLs:
 const registry = {
   "my-plugin": {
     remoteUrl: "https://cdn.example.com/plugins/my-plugin/remoteEntry.js",
-    type: "source", // or "transformer", "distributor"
     version: "1.0.0"
   }
 };
@@ -126,7 +124,6 @@ const runtime = createPluginRuntime({
   registry: {
     "social-feed": {
       remoteUrl: "https://cdn.example.com/plugins/social/remoteEntry.js",
-      type: "source",
       version: "1.0.0"
     }
   },

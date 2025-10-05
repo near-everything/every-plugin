@@ -31,7 +31,6 @@ export const runtime = createPluginRuntime<IRegistry>({
     "@curatedotfun/gopher-ai": {
       remoteUrl: "http://localhost:3013/remoteEntry.js",
       // https://elliot-braem-81-curatedotfun-gohper-ai-every-plug-e92865b2f-ze.zephyrcloud.app
-      type: "source"
     }
   },
   secrets: {

@@ -136,7 +136,6 @@ export type TestPluginClient = ContractRouterClient<typeof testContract>;
 // Create the test plugin
 export const TestPlugin = createPlugin({
 	id: "test-plugin",
-	type: "source",
 	variables: z.object({
 		baseUrl: z.string(),
 		timeout: z.number().optional(),

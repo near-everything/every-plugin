@@ -19,7 +19,6 @@ import {
 
 export default createPlugin({
   id: "@curatedotfun/gopher-ai",
-  type: "source",
 
   variables: z.object({
     baseUrl: z.string().url().optional().default("https://data.gopher-ai.com/api/v1"),

@@ -1,21 +1,14 @@
-import { expect, it } from "vitest";
-import type { PluginBinding, PluginRegistry } from "every-plugin";
-import { createLocalPluginRuntime, type PluginMap } from "every-plugin/testing";
-import { beforeAll, describe } from "vitest";
+import type { PluginRegistry } from "every-plugin";
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import type { Context } from "telegraf";
+import { beforeAll, describe, expect, it } from "vitest";
 import TelegramPlugin from "../../index";
 import { createCommandUpdate, createTextUpdate } from "../fixtures/telegram-updates";
-import type { Context } from "telegraf";
-
-// Define typed registry bindings for the telegram plugin
-type TelegramBindings = {
-  "@curatedotfun/telegram": PluginBinding<typeof TelegramPlugin>;
-};
 
 // Test registry
 const TEST_REGISTRY: PluginRegistry = {
   "@curatedotfun/telegram": {
     remoteUrl: "http://localhost:3014/remoteEntry.js",
-    type: "source",
     version: "1.0.0",
     description: "Telegram source plugin for message logic testing",
   },
@@ -36,14 +29,14 @@ const SECRETS_CONFIG = {
 };
 
 // Plugin map for tests
-const TEST_PLUGIN_MAP: PluginMap = {
+const TEST_PLUGIN_MAP = {
   "@curatedotfun/telegram": TelegramPlugin,
-};
+} as const;
 
 const TEST_CHAT_ID = "-4956736324";
 
 describe("Telegram Message Logic Tests", () => {
-  const runtime = createLocalPluginRuntime<TelegramBindings>({
+  const runtime = createLocalPluginRuntime({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG,
   }, TEST_PLUGIN_MAP);
@@ -60,7 +53,6 @@ describe("Telegram Message Logic Tests", () => {
 
       expect(initialized).toBeDefined();
       expect(initialized.plugin.id).toBe("@curatedotfun/telegram");
-      expect(initialized.plugin.type).toBe("source");
     }, { timeout: 10000 });
   });
 
@@ -143,10 +135,10 @@ describe("Telegram Message Logic Tests", () => {
       });
 
       console.log("🔄 Got stream result, processing messages...");
-      
+
       const contexts: Context[] = [];
       let count = 0;
-      
+
       // Use Promise.race to implement timeout
       await Promise.race([
         (async () => {
@@ -171,28 +163,28 @@ describe("Telegram Message Logic Tests", () => {
 
       // Actual test assertions - we should get at least 1 context
       expect(contexts.length).toBeGreaterThanOrEqual(1);
-      
+
       // Verify each context has the expected Telegraf Context structure
       for (const ctx of contexts) {
         expect(ctx).toHaveProperty('update');
         expect(ctx).toHaveProperty('telegram');
         expect(ctx).toHaveProperty('chat');
         expect(ctx).toHaveProperty('message');
-        
+
         // Verify chat ID matches
         expect(ctx.chat?.id.toString()).toBe(TEST_CHAT_ID);
-        
+
         // Verify update structure
         expect(ctx.update.update_id).toBeGreaterThan(0);
         expect(ctx.message).toBeDefined();
       }
 
       // Verify we can find our test messages
-      const textContexts = contexts.filter(ctx => 
-        ctx.message && 'text' in ctx.message && 
+      const textContexts = contexts.filter(ctx =>
+        ctx.message && 'text' in ctx.message &&
         (ctx.message.text?.includes("Stream test message") || ctx.message.text?.startsWith("/help"))
       );
-      
+
       expect(textContexts.length).toBeGreaterThanOrEqual(1);
     }, { timeout: 15000 });
 
@@ -214,7 +206,7 @@ describe("Telegram Message Logic Tests", () => {
 
       const contexts: Context[] = [];
       let count = 0;
-      
+
       await Promise.race([
         (async () => {
           for await (const ctx of asyncIterable) {
@@ -252,7 +244,7 @@ describe("Telegram Message Logic Tests", () => {
 
       const contexts: Context[] = [];
       let count = 0;
-      
+
       await Promise.race([
         (async () => {
           for await (const ctx of asyncIterable) {
@@ -291,7 +283,7 @@ describe("Telegram Message Logic Tests", () => {
 
       const events: Context[] = [];
       let count = 0;
-      
+
       await Promise.race([
         (async () => {
           for await (const ctx of asyncIterable) {
@@ -304,7 +296,7 @@ describe("Telegram Message Logic Tests", () => {
 
       console.log(`✅ Stream completion test finished with ${events.length} events`);
       expect(events.length).toBe(1);
-      
+
       // Verify the message content
       const ctx = events[0];
       expect(ctx.message).toBeDefined();

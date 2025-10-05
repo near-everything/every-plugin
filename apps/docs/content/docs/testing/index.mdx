@@ -67,7 +67,6 @@ const { runtime, PluginService } = createLocalPluginRuntime(
     registry: {
       "my-plugin": {
         remoteUrl: "http://localhost:3999/remoteEntry.js", // Not actually used
-        type: "source",
         version: "1.0.0"
       }
     },
@@ -115,7 +114,6 @@ type TestBindings = {
 const TEST_REGISTRY = {
   "test-plugin": {
     remoteUrl: "http://localhost:3999/remoteEntry.js",
-    type: "source",
     version: "0.0.1"
   }
 } as const;
@@ -350,7 +348,6 @@ describe("Integration Tests", () => {
     registry: {
       "real-plugin": {
         remoteUrl: REMOTE_URL,
-        type: "source",
         version: "1.0.0"
       }
     },

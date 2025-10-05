@@ -13,7 +13,6 @@ type TestBindings = {
 const TEST_REGISTRY = {
   "test-plugin": {
     remoteUrl: TEST_REMOTE_ENTRY_URL,
-    type: "source",
     version: "0.0.1",
     description: "Real test plugin for background producer integration testing",
   },

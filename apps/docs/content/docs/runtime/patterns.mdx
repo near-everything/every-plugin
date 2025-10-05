@@ -23,7 +23,6 @@ const runtime = createPluginRuntime<AppBindings>({
   registry: {
     "social-api": {
       remoteUrl: "https://cdn.example.com/plugins/social/remoteEntry.js",
-      type: "source",
       version: "1.0.0"
     }
   },
@@ -57,7 +56,6 @@ type SocialApiPlugin = EveryPlugin.Infer<typeof runtime, "social-api">;
 // Type-safe logging middleware
 function logPluginUsage(plugin: SocialApiPlugin) {
   console.log(`[${plugin.metadata.pluginId}] v${plugin.metadata.version}`);
-  console.log(`Type: ${plugin.metadata.type}`);
 }
 
 // Type-safe error handling wrapper
@@ -97,7 +95,6 @@ const runtime = createPluginRuntime({
   registry: {
     "data-api": {
       remoteUrl: "https://cdn.example.com/plugins/data/remoteEntry.js",
-      type: "source",
       version: "1.0.0"
     }
   },
