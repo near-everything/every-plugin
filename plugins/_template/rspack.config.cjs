@@ -20,7 +20,20 @@ function getPluginInfo() {
 
 const pluginInfo = getPluginInfo();
 
-module.exports = withZephyr()({
+module.exports = withZephyr({
+  hooks: {
+    onDeployComplete: (info) => {
+      console.log("🚀 Deployment Complete!");
+      console.log(`   URL: ${info.url}`);
+      console.log(`   Module: ${info.moduleName}`);
+      console.log(`   Build ID: ${info.buildId}`);
+      console.log(`   Dependencies: ${info.federatedDependencies.length}`);
+      console.log(`   Duration: ${info.buildDuration}ms`);
+      console.log(`   Git: ${info.git.branch}@${info.git.commit}`);
+      console.log(`   CI: ${info.isCI ? "Yes" : "No"}`);
+    },
+  },
+})({
   entry: "./src/index",
   mode: process.env.NODE_ENV === "development" ? "development" : "production",
   target: "async-node",
@@ -71,14 +84,14 @@ module.exports = withZephyr()({
           strictVersion: false,
           eager: false,
         },
-        "effect": {
+        effect: {
           version: everyPluginPkg.dependencies.effect,
           singleton: true,
           requiredVersion: everyPluginPkg.dependencies.effect,
           strictVersion: false,
           eager: false,
         },
-        "zod": {
+        zod: {
           version: everyPluginPkg.dependencies.zod,
           singleton: true,
           requiredVersion: everyPluginPkg.dependencies.zod,
