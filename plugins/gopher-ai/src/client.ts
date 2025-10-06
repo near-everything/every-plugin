@@ -1,12 +1,14 @@
 import { type BetterFetchOption, createFetch } from '@better-fetch/fetch';
-import { z } from 'zod';
-import type { SearchMethod, SourceType } from './schemas';
+import { Effect } from 'every-plugin/effect';
+import { z } from 'every-plugin/zod';
+import { GopherResultSchema, type SearchMethod, type SourceType } from './contract';
 
 export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
-    public readonly context?: string
+    public readonly context?: string,
+    public readonly details?: any
   ) {
     super(message);
     this.name = 'ApiError';
@@ -24,34 +26,6 @@ const JobStatusResponseSchema = z.object({
   error: z.string().optional()
 });
 
-const SearchResultSchema = z.object({
-  id: z.string(),
-  source: z.string(),
-  content: z.string(),
-  metadata: z.object({
-    author: z.string().optional(),
-    conversation_id: z.string().optional(),
-    created_at: z.string().optional(),
-    lang: z.string().optional(),
-    likes: z.number().optional(),
-    newest_id: z.string().optional(),
-    oldest_id: z.string().optional(),
-    possibly_sensitive: z.boolean().optional(),
-    public_metrics: z.object({
-      bookmark_count: z.number().optional(),
-      impression_count: z.number().optional(),
-      like_count: z.number().optional(),
-      quote_count: z.number().optional(),
-      reply_count: z.number().optional(),
-      retweet_count: z.number().optional(),
-    }).optional(),
-    tweet_id: z.number().optional(),
-    user_id: z.string().optional(),
-    username: z.string().optional(),
-  }).optional(),
-  updated_at: z.string().optional(),
-}).passthrough();
-
 // Types
 export interface SimilaritySearchOptions {
   query: string;
@@ -68,35 +42,6 @@ export interface HybridSearchOptions {
   keywords?: string[];
   keyword_operator?: 'and' | 'or';
   max_results?: number;
-}
-
-export interface SearchResult {
-  id: string;
-  source: string;
-  content: string;
-  metadata?: {
-    author?: string;
-    conversation_id?: string;
-    created_at?: string;
-    lang?: string;
-    likes?: number;
-    newest_id?: string;
-    oldest_id?: string;
-    possibly_sensitive?: boolean;
-    public_metrics?: {
-      bookmark_count?: number;
-      impression_count?: number;
-      like_count?: number;
-      quote_count?: number;
-      reply_count?: number;
-      retweet_count?: number;
-    };
-    tweet_id?: number;
-    user_id?: string;
-    username?: string;
-  };
-  updated_at?: string;
-  [key: string]: unknown;
 }
 
 export class GopherAIClient {
@@ -139,104 +84,149 @@ export class GopherAIClient {
       throw new ApiError(
         error.message || error.statusText || 'Unknown API error',
         error.status,
-        options.context
+        options.context,
+        error
       );
     }
 
     return data as T;
   }
 
-  async healthCheck(): Promise<string> {
-    return "OK";
+  healthCheck() {
+    return Effect.succeed("OK");
   }
 
-  async submitSearchJob(
+  submitSearchJob(
     sourceType: SourceType,
     searchMethod: SearchMethod,
     query: string,
     maxResults: number,
     nextCursor?: string
-  ): Promise<string> {
-    const data = await this.request('/search/live', {
-      method: 'POST',
-      body: {
-        type: sourceType,
-        arguments: { type: searchMethod, query, max_results: maxResults, ...(nextCursor && { next_cursor: nextCursor }) }
+  ) {
+    return Effect.tryPromise({
+      try: async () => {
+        const data = await this.request('/search/live', {
+          method: 'POST',
+          body: {
+            type: sourceType,
+            arguments: { type: searchMethod, query, max_results: maxResults, ...(nextCursor && { next_cursor: nextCursor }) }
+          },
+          schema: JobResponseSchema,
+          context: 'Submit search job'
+        });
+
+        if (data.error) {
+          throw new ApiError(`Invalid request: ${data.error}`, 400, 'Submit search job');
+        }
+
+        if (!data.uuid) {
+          throw new ApiError('API did not return a job UUID', 503, 'Submit search job');
+        }
+
+        return data.uuid;
       },
-      schema: JobResponseSchema,
-      context: 'Submit search job'
+      catch: (error: unknown) => {
+        if (error instanceof ApiError) throw error;
+        return new Error(`Submit job failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     });
-
-    if (data.error) {
-      throw new ApiError(`Invalid request: ${data.error}`, 400, 'Submit search job');
-    }
-
-    if (!data.uuid) {
-      throw new ApiError('API did not return a job UUID', 503, 'Submit search job');
-    }
-
-    return data.uuid;
   }
 
-  async checkJobStatus(jobId: string): Promise<string> {
-    const data = await this.request(`/search/live/status/${jobId}`, {
-      method: 'GET',
-      schema: JobStatusResponseSchema,
-      context: `Check job status for ${jobId}`
+  checkJobStatus(jobId: string) {
+    return Effect.tryPromise({
+      try: async () => {
+        try {
+          const data = await this.request(`/search/live/status/${jobId}`, {
+            method: 'GET',
+            schema: JobStatusResponseSchema,
+            context: `Check job status for ${jobId}`
+          });
+
+          if (data.error) {
+            throw new ApiError(`API error: ${data.error}`, 503, `Check job status for ${jobId}`);
+          }
+
+          if (!data.status) {
+            throw new ApiError('API did not return job status', 503, `Check job status for ${jobId}`);
+          }
+
+          let normalizedStatus = data.status;
+          if (data.status === 'done(saved)') {
+            normalizedStatus = 'done';
+          }
+
+          return normalizedStatus;
+        } catch (error) {
+          // "No new results" - job completed successfully with empty results
+          if (error instanceof ApiError &&
+              error.status === 500 &&
+              error.details?.details?.error?.toLowerCase().includes('no new results')) {
+            return 'empty';
+          }
+          throw error;
+        }
+      },
+      catch: (error: unknown) => {
+        if (error instanceof ApiError) throw error;
+        return new Error(`Check status failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     });
-
-    // Log raw response before any processing
-    console.log(`[GOPHERAI] ${jobId} - Raw API response:`, JSON.stringify(data, null, 2));
-
-    if (data.error) {
-      throw new ApiError(`API error: ${data.error}`, 503, `Check job status for ${jobId}`);
-    }
-
-    if (!data.status) {
-      throw new ApiError('API did not return job status', 503, `Check job status for ${jobId}`);
-    }
-
-    // Normalize API status values
-    let normalizedStatus = data.status;
-    if (data.status === 'done(saved)') {
-      normalizedStatus = 'done';
-    }
-
-    console.log(`[GOPHERAI] ${jobId} - Normalized status: ${normalizedStatus} (original: ${data.status})`);
-
-    return normalizedStatus;
   }
 
-  async getJobResults(jobId: string): Promise<SearchResult[]> {
-    const data = await this.request(`/search/live/result/${jobId}`, {
-      method: 'GET',
-      schema: z.array(SearchResultSchema),
-      context: `Get job results for ${jobId}`
-    });
+  getJobResults(jobId: string) {
+    return Effect.tryPromise({
+      try: async () => {
+        const data = await this.request(`/search/live/result/${jobId}`, {
+          method: 'GET',
+          schema: z.array(GopherResultSchema),
+          context: `Get job results for ${jobId}`
+        });
 
-    return Array.isArray(data) ? data : [];
+        return Array.isArray(data) ? data : [];
+      },
+      catch: (error: unknown) => {
+        if (error instanceof ApiError) throw error;
+        return new Error(`Get results failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
   }
 
-  async similaritySearch(options: SimilaritySearchOptions): Promise<SearchResult[]> {
-    const results = await this.request('/search/similarity', {
-      method: 'POST',
-      body: options,
-      schema: z.array(SearchResultSchema),
-      context: 'Similarity search'
-    });
+  similaritySearch(options: SimilaritySearchOptions) {
+    return Effect.tryPromise({
+      try: async () => {
+        const results = await this.request('/search/similarity', {
+          method: 'POST',
+          body: options,
+          schema: z.array(GopherResultSchema),
+          context: 'Similarity search'
+        });
 
-    return Array.isArray(results) ? results : [];
+        return Array.isArray(results) ? results : [];
+      },
+      catch: (error: unknown) => {
+        if (error instanceof ApiError) throw error;
+        return new Error(`Similarity search failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
   }
 
-  async hybridSearch(options: HybridSearchOptions): Promise<SearchResult[]> {
-    const results = await this.request('/search/hybrid', {
-      method: 'POST',
-      body: options,
-      schema: z.array(SearchResultSchema),
-      context: 'Hybrid search'
-    });
+  hybridSearch(options: HybridSearchOptions) {
+    return Effect.tryPromise({
+      try: async () => {
+        const results = await this.request('/search/hybrid', {
+          method: 'POST',
+          body: options,
+          schema: z.array(GopherResultSchema),
+          context: 'Hybrid search'
+        });
 
-    return Array.isArray(results) ? results : [];
+        return Array.isArray(results) ? results : [];
+      },
+      catch: (error: unknown) => {
+        if (error instanceof ApiError) throw error;
+        return new Error(`Hybrid search failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
   }
 
 }

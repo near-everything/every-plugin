@@ -3,6 +3,7 @@
 import { Duration, Effect, Logger, LogLevel } from "every-plugin/effect";
 import { runtime } from "../main";
 import { DatabaseService } from "../services/db.service";
+import type { GopherResult } from "../../../plugins/gopher-ai/src/contract";
 
 // Worker ID for tracking which worker is processing tasks
 const WORKER_ID = `worker-${process.pid}-${Date.now()}`;
@@ -44,15 +45,15 @@ const parseCuratorSubmission = (content: string) => {
 
 // Categorize content based on authorship
 const categorizeContent = (
-  originalPost: any,
-  replies: any[],
+  replies: GopherResult[],
   originalAuthorUsername?: string
-): { threadContent: any[]; conversationalContext: any[] } => {
-  const threadContent: any[] = [];
-  const conversationalContext: any[] = [];
+): { threadContent: GopherResult[]; conversationalContext: GopherResult[] } => {
+  const threadContent: GopherResult[] = [];
+  const conversationalContext: GopherResult[] = [];
 
   for (const reply of replies) {
-    const replyAuthor = reply.authors?.[0]?.username;
+    // Access author_username via catchall since it's not in base schema
+    const replyAuthor = reply.author_username;
 
     if (replyAuthor === originalAuthorUsername) {
       // This is additional content from the original author
@@ -102,7 +103,7 @@ const processSubmissionTask = (task: any) =>
 
     // Get the client directly from runtime
     const { client } = yield* Effect.tryPromise(() =>
-      runtime.usePlugin("@curatedotfun/masa-source", {
+      runtime.usePlugin("@curatedotfun/gopher-ai", {
         secrets: { apiKey: "{{GOPHERAI_API_KEY}}" },
         variables: { baseUrl: "https://data.gopher-ai.com/api/v1", timeout: 30000 }
       })
@@ -154,12 +155,17 @@ const processSubmissionTask = (task: any) =>
       );
 
       if (originalPostResult.item) {
+        const originalPost: GopherResult = originalPostResult.item;
         curatedContent.originalPost = {
-          externalId: originalPostResult.item.externalId,
-          content: originalPostResult.item.content,
-          author: originalPostResult.item.authors?.[0] || null,
-          createdAt: originalPostResult.item.createdAt,
-          url: originalPostResult.item.url
+          externalId: originalPost.id, // Changed from externalId
+          content: originalPost.content,
+          author: {
+            username: originalPost.author_username,
+            id: originalPost.author_id,
+            displayName: originalPost.author_username
+          },
+          createdAt: originalPost.created_at || originalPost.updated_at,
+          url: originalPost.tweet_url || `https://twitter.com/${originalPost.author_username}/status/${originalPost.id}`
         };
 
         console.log(`📝 Original post: @${curatedContent.originalPost.author?.username}: "${curatedContent.originalPost.content.substring(0, 100)}..."`);
@@ -185,23 +191,30 @@ const processSubmissionTask = (task: any) =>
 
         // Categorize the replies
         const { threadContent, conversationalContext } = categorizeContent(
-          curatedContent.originalPost,
           repliesResult.replies,
           curatedContent.originalPost.author?.username
         );
 
         curatedContent.threadContent = threadContent.map(reply => ({
-          externalId: reply.externalId,
+          externalId: reply.id,
           content: reply.content,
-          author: reply.authors?.[0] || null,
-          createdAt: reply.createdAt
+          author: {
+            username: reply.author_username,
+            id: reply.author_id,
+            displayName: reply.author_username
+          },
+          createdAt: reply.created_at || reply.updated_at
         }));
 
         curatedContent.conversationalContext = conversationalContext.map(reply => ({
-          externalId: reply.externalId,
+          externalId: reply.id,
           content: reply.content,
-          author: reply.authors?.[0] || null,
-          createdAt: reply.createdAt
+          author: {
+            username: reply.author_username,
+            id: reply.author_id,
+            displayName: reply.author_username
+          },
+          createdAt: reply.created_at || reply.updated_at
         }));
 
         // Perform analysis

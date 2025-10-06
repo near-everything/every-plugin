@@ -4,18 +4,15 @@ import type { PluginBinding } from "every-plugin";
 import { Effect, Stream } from "every-plugin/effect";
 import { createPluginRuntime } from "every-plugin/runtime";
 import type GopherAIPlugin from '../../plugins/gopher-ai/src';
-import type { SourceItem } from '../../plugins/gopher-ai/src/schemas';
+import type { GopherResult } from "../../plugins/gopher-ai/src/contract";
 import type { NewItem } from "./schemas/database";
 import { DatabaseService } from "./services/db.service";
 
 // State type for stream persistence
 type StreamState = {
-  phase: "initial" | "backfill" | "live";
   mostRecentId?: string;
   oldestSeenId?: string;
-  backfillDone?: boolean;
   totalProcessed?: number;
-  nextPollMs?: number;
 };
 
 // Configuration constants
@@ -29,8 +26,7 @@ type IRegistry = {
 export const runtime = createPluginRuntime<IRegistry>({
   registry: {
     "@curatedotfun/gopher-ai": {
-      remoteUrl: "http://localhost:3013/remoteEntry.js",
-      // https://elliot-braem-81-curatedotfun-gohper-ai-every-plug-e92865b2f-ze.zephyrcloud.app
+      remoteUrl: "https://elliot-braem-116-curatedotfun-gopher-ai-every-plu-7e4a2913c-ze.zephyrcloud.app/remoteEntry.js",
     }
   },
   secrets: {
@@ -40,10 +36,11 @@ export const runtime = createPluginRuntime<IRegistry>({
 
 
 // Helper to extract curator username from content mentioning @curatedotfun
-const extractCuratorUsername = (item: SourceItem): string | undefined => {
+const extractCuratorUsername = (item: GopherResult): string | undefined => {
   // For items mentioning @curatedotfun, the curator is typically the author
-  if (item.content?.includes("@curatedotfun")) {
-    return item.authors?.[0]?.username;
+  // For Twitter: author_username field comes through catchall
+  if (item.content.includes(BASE_QUERY)) {
+    return item.author_username;
   }
   return undefined;
 };
@@ -51,31 +48,26 @@ const extractCuratorUsername = (item: SourceItem): string | undefined => {
 // Helper to detect !submit commands in content
 const detectSubmissionCommands = (content: string): boolean => {
   return content.toLowerCase().includes("!submit");
-};
+}
 
-const convertToDbItem = (item: SourceItem): NewItem => {
-  const raw = item.raw as any;
-  const platform = raw?.source === "twitter" ? "twitter" :
-    raw?.source === "tiktok" ? "tiktok" :
-      raw?.source === "reddit" ? "reddit" : "twitter"; // default
-
+const convertToDbItem = (item: GopherResult): NewItem => {
   return {
-    externalId: item.externalId,
-    platform,
+    externalId: item.id,
+    platform: item.source,
     content: item.content,
-    contentType: item.contentType,
-    conversationId: raw?.metadata?.conversation_id,
-    originalAuthorUsername: item.authors?.[0]?.username,
-    originalAuthorId: item.authors?.[0]?.id,
+    contentType: "text", // Default, since this isn't in the base schema
+    conversationId: item.conversation_id || item.metadata?.conversation_id, // Access via catchall
+    originalAuthorUsername: item.author_username, // Access via catchall
+    originalAuthorId: item.author_id, // Access via catchall
     curatorUsername: extractCuratorUsername(item),
-    createdAt: item.createdAt,
-    url: item.url,
-    rawData: item.raw,
+    createdAt: item.created_at || new Date().toISOString(), // Access via catchall or fallback
+    url: item.tweet_url || `https://twitter.com/${item.author_username}/status/${item.id}`, // Construct URL if not available
+    rawData: item, // Store the entire raw item
   };
 };
 
 // Enhanced item processing with database storage
-const processItem = (item: SourceItem, itemNumber: number) =>
+const processItem = (item: GopherResult, itemNumber: number) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
 
@@ -85,20 +77,20 @@ const processItem = (item: SourceItem, itemNumber: number) =>
 
     if (itemId === 0) {
       // Duplicate item, skip processing
-      console.log(`${itemNumber}. Duplicate item skipped: ${item.externalId}`);
+      console.log(`${itemNumber}. Duplicate item skipped: ${item.id}`);
       return;
     }
 
     // Check for !submit commands and enqueue for processing
     if (detectSubmissionCommands(item.content)) {
       yield* db.enqueueProcessing(itemId, "submit");
-      console.log(`📝 Queued !submit for processing: ${item.externalId}`);
+      console.log(`📝 Queued !submit for processing: ${item.id}`);
     }
 
     // Console output for monitoring
-    const tweetId = item.externalId || 'unknown';
-    const timestamp = item.createdAt || new Date().toISOString();
-    const username = item.authors?.[0]?.username || 'unknown';
+    const tweetId = item.id;
+    const timestamp = item.created_at || item.updated_at || new Date().toISOString();
+    const username =(item.author_username) || 'unknown';
     const curator = dbItem.curatorUsername ? ` (curator: ${dbItem.curatorUsername})` : '';
 
     console.log(`${itemNumber}. @${username} (${tweetId}) - ${timestamp}${curator}`);
@@ -109,12 +101,9 @@ const saveState = (state: StreamState) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
     yield* db.saveStreamState({
-      phase: state.phase,
       mostRecentId: state.mostRecentId,
       oldestSeenId: state.oldestSeenId,
-      backfillDone: state.backfillDone,
       totalProcessed: state.totalProcessed,
-      nextPollMs: state.nextPollMs,
     });
   });
 
@@ -125,14 +114,10 @@ const loadState = () =>
 
     if (!state) return null;
 
-    // Convert database state back to plugin state format
     return {
-      phase: state.phase,
-      mostRecentId: state.mostRecentId,
-      oldestSeenId: state.oldestSeenId,
-      backfillDone: state.backfillDone,
-      totalProcessed: state.totalProcessed,
-      nextPollMs: state.nextPollMs,
+      mostRecentId: state.mostRecentId ?? undefined,
+      oldestSeenId: state.oldestSeenId ?? undefined,
+      totalProcessed: state.totalProcessed ?? 0,
     };
   });
 
@@ -162,11 +147,8 @@ const main = Effect.gen(function* () {
     client.search({
       query: BASE_QUERY,
       sourceType: 'twitter',
-      searchMethod: 'searchbyfullarchive',
       sinceId: initialState?.mostRecentId ?? undefined,
-      maxId: initialState?.oldestSeenId ?? undefined,
-      enableLive: true,
-      maxTotalResults: 10000,
+      enableLive: true
     })
   );
 
@@ -174,15 +156,47 @@ const main = Effect.gen(function* () {
   const stream = Stream.fromAsyncIterable(streamResult, (error) => error);
 
   let itemCount = 0;
+  let currentMostRecentId = initialState?.mostRecentId;
+  let currentOldestSeenId = initialState?.oldestSeenId;
+
   yield* stream.pipe(
     Stream.tap((item) =>
       Effect.gen(function* () {
         itemCount++;
         yield* processItem(item, itemCount);
+        
+        // Update mostRecentId (for live mode cursor)
+        const itemId = BigInt(item.id);
+        if (!currentMostRecentId || itemId > BigInt(currentMostRecentId)) {
+          currentMostRecentId = item.id;
+        }
+
+        // Update oldestSeenId (for backfill cursor)
+        if (!currentOldestSeenId || itemId < BigInt(currentOldestSeenId)) {
+          currentOldestSeenId = item.id;
+        }
+        
+        // Periodically save state every 10 items
+        if (itemCount % 10 === 0) {
+          yield* saveState({
+            mostRecentId: currentMostRecentId,
+            oldestSeenId: currentOldestSeenId,
+            totalProcessed: (initialState?.totalProcessed || 0) + itemCount
+          });
+          console.log(`💾 State saved (${itemCount} items in this session)`);
+        }
       })
     ),
     Stream.runDrain
   );
+
+  // Save final state before shutdown
+  yield* saveState({
+    mostRecentId: currentMostRecentId,
+    oldestSeenId: currentOldestSeenId,
+    totalProcessed: (initialState?.totalProcessed || 0) + itemCount
+  });
+  console.log(`\n💾 Final state saved (${itemCount} items processed)`);
 
   yield* Effect.tryPromise(() => runtime.shutdown());
 });
