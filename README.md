@@ -11,7 +11,7 @@
 
 <br/>
 
-A modular plugin runtime & system built with [Effect.TS](https://effect.website/) for loading, initializing, and executing remote plugins via [Module Federation](https://module-federation.io/).
+A framework for building composable, type-safe plugin systems. It combines [Effect](https://effect.website/) for resource lifecycle management, [Module Federation](https://module-federation.io/) for remote loading, and [oRPC](https://orpc.io/) for type-safe contracts.
 
 [![npm bundle size](https://img.shields.io/bundlephobia/minzip/every-plugin@latest)](https://bundlephobia.com/result?p=every-plugin@latest)
 
@@ -23,110 +23,217 @@ bun add every-plugin
 
 ## Quick Start
 
-Create a runtime and execute your first plugin:
+Create a runtime and use your first plugin:
 
 ```typescript
-import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
-import { Effect } from "effect";
+import { createPluginRuntime } from "every-plugin/runtime";
 
 const runtime = createPluginRuntime({
   registry: {
-    "data-processor": {
-      remoteUrl: "https://cdn.example.com/plugins/processor/remoteEntry.js",
-      type: "transformer",
+    "data-source": {
+      remoteUrl: "https://cdn.example.com/plugins/source/remoteEntry.js",
       version: "1.0.0"
     }
   },
-  secrets: {
-    API_KEY: "your-secret-key"
-  }
+  secrets: {API_KEY: "secret-value" }
 });
 
-const result = await runtime.runPromise(
-  Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
-    
-    const plugin = yield* pluginRuntime.usePlugin("data-processor", {
-      secrets: { apiKey: "{{API_KEY}}" },
-      variables: { timeout: 30000 }
-    });
-    
-    return yield* pluginRuntime.executePlugin(plugin, {
-      items: ["data1", "data2", "data3"]
-    });
-  })
-);
+const { client } = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
 
-console.log(result);
-await runtime.disposeRuntime();
+const result = await client.search({ query: "typescript", limit: 20 });
+console.log(`Found ${result.items.length} items`);
+
+await runtime.shutdown();
 ```
 
 ## Core Concepts
 
-### Plugin Runtime
+### Plugins are Type-Safe oRPC Contracts
 
-The runtime manages plugin loading and execution. Create one instance per application:
+Plugins define their interface using [oRPC](https://orpc.io/) procedures. The runtime ensures type safety from contract definition through to client calls:
+
+```typescript
+export default createPlugin({
+  contract: oc.router({
+    getData: oc.procedure
+      .input(z.object({ id: z.string() }))
+      .output(DataSchema),
+    streamItems: oc.procedure
+      .input(QuerySchema)
+      .output(ItemSchema)
+      .serverStream()
+  })
+});
+
+const { client } = await runtime.usePlugin("plugin-id", config);
+const data = await client.getData({ id: "123" });
+```
+
+### Runtime Manages the Lifecycle
+
+The runtime handles plugin loading ([Module Federation](https://module-federation.io/) or local imports), secret injection, initialization, and cleanup. Resources are managed automatically through [Effect](https://effect.website/):
 
 ```typescript
 const runtime = createPluginRuntime({
   registry: { /* plugin definitions */ },
   secrets: { /* secret values */ }
 });
+
+const result = await runtime.usePlugin("plugin-id", config);
+
+await runtime.shutdown();
 ```
 
-### Plugin Registry
+### Multiple Access Patterns from One Interface
 
-Plugins are defined in a registry with their remote URLs:
+`usePlugin()` returns an `EveryPlugin` with three ways to work with plugins:
 
 ```typescript
-const registry = {
-  "my-plugin": {
-    remoteUrl: "https://cdn.example.com/plugins/my-plugin/remoteEntry.js",
-    type: "source", // or "transformer", "distributor"
-    version: "1.0.0"
+const { client, router, metadata } = await runtime.usePlugin(...);
+
+// 1. Client - Direct typed procedure calls
+const data = await client.getData({ id: "123" });
+
+// 2. Router - Mount as HTTP endpoints
+const handler = new OpenAPIHandler(router);
+
+// 3. Streaming - Process continuous data
+const stream = await client.streamItems({ query: "typescript" });
+for await (const item of stream) {
+  console.log(item);
+}
+```
+
+### Local and Remote Plugins, Same API
+
+Two deployment patterns with identical APIs:
+
+```typescript
+// Production - Remote plugins via Module Federation
+const runtime = createPluginRuntime({
+  registry: {
+    "plugin-id": {
+      remoteUrl: "https://cdn.example.com/remoteEntry.js",
+      version: "1.0.0"
+    }
   }
-};
+});
+
+// Development/Testing - Local plugins
+const runtime = createLocalPluginRuntime(
+  { registry: {...} },
+  { "plugin-id": PluginImplementation }
+);
+
+const { client } = await runtime.usePlugin("plugin-id", config);
 ```
 
-Plugins are loaded dynamically using [Module Federation](https://module-federation.io/).
+### Secret Management with Template Injection
 
-### Secret Hydration
-
-Secrets use template syntax and are replaced at runtime:
+Secrets are defined centrally and injected at runtime using template syntax:
 
 ```typescript
-const config = {
+const runtime = createPluginRuntime({
+  registry: { /* plugins */ },
   secrets: {
-    apiKey: "{{API_KEY}}", // Replaced with actual secret
+    API_KEY: process.env.API_KEY,
+    DATABASE_URL: process.env.DATABASE_URL
+  }
+});
+
+const { client } = await runtime.usePlugin("plugin-id", {
+  secrets: {
+    apiKey: "{{API_KEY}}",
     dbUrl: "{{DATABASE_URL}}"
   },
   variables: {
-    timeout: 30000 // Regular values pass through
+    timeout: 30000
   }
-};
+});
 ```
 
-### Plugin Types
+### Plugins Can Be Sophisticated
 
-- **Source**: Fetch data from external APIs with oRPC contracts
-- **Transformer**: Process and transform data between formats  
-- **Distributor**: Send data to external systems
+Plugins aren't limited to simple API wrappers. With Effect's resource management, they can:
+
+**Run Background Tasks** - Continuously poll APIs, process queues, or generate events:
+
+```typescript
+initialize: (config) => Effect.gen(function* () {
+  const queue = yield* Queue.bounded(1000);
+  
+  yield* Effect.forkScoped(
+    Effect.gen(function* () {
+      while (true) {
+        const event = yield* fetchFromExternalAPI();
+        yield* Queue.offer(queue, event);
+        yield* Effect.sleep("1 second");
+      }
+    })
+  );
+  
+  return { queue };
+})
+```
+
+**Stream Data Continuously** - Process infinite streams with backpressure:
+
+```typescript
+streamEvents: handler(async function* () {
+  while (true) {
+    const event = await Effect.runPromise(Queue.take(context.queue));
+    yield event;
+  }
+})
+```
+
+**Compose into Pipelines** - Chain plugins together for complex workflows:
+
+```typescript
+const { client: source } = await runtime.usePlugin("data-source", config);
+const { client: processor } = await runtime.usePlugin("transformer", config);
+const { client: distributor } = await runtime.usePlugin("webhook", config);
+
+const rawData = await source.fetch({ query: "typescript" });
+const transformed = await processor.transform({ items: rawData.items });
+await distributor.send({ items: transformed.items });
+```
+
+**Mount as HTTP APIs** - Expose plugin procedures via OpenAPI or RPC:
+
+```typescript
+const { router } = await runtime.usePlugin("plugin-id", config);
+const handler = new OpenAPIHandler(router);
+
+server.use('/api', handler.handle);
+```
+
+This flexibility means plugins can be:
+
+- **Simple API clients** for basic integrations
+- **Background processors** for continuous data ingestion
+- **Stream transformers** for real-time data pipelines
+- **HTTP services** exposed via OpenAPI
+- **Job workers** in queue systems like BullMQ
+
+All with the same type-safe contract interface, and easy to use with simple async/await.
 
 ## Usage Examples
 
 ### Single Execution
 
-Execute a plugin once with oRPC contract format:
+Execute a plugin once with full type safety:
 
 ```typescript
-import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
-import { Effect } from "effect";
+import { createPluginRuntime } from "every-plugin/runtime";
 
 const runtime = createPluginRuntime({
   registry: {
     "social-feed": {
       remoteUrl: "https://cdn.example.com/plugins/social/remoteEntry.js",
-      type: "source",
       version: "1.0.0"
     }
   },
@@ -135,79 +242,48 @@ const runtime = createPluginRuntime({
   }
 });
 
-const posts = await runtime.runPromise(
-  Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
-    
-    const plugin = yield* pluginRuntime.usePlugin("social-feed", {
-      secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
-      variables: { timeout: 30000 }
-    });
-    
-    return yield* pluginRuntime.executePlugin(plugin, {
-      procedure: "search",
-      input: { query: "typescript", limit: 10 },
-      state: null
-    });
-  })
-);
+const { client } = await runtime.usePlugin("social-feed", {
+  secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
+  variables: { timeout: 30000 }
+});
 
+const posts = await client.search({ query: "typescript", limit: 10 });
 console.log(`Found ${posts.items.length} posts`);
-await runtime.disposeRuntime();
+
+await runtime.shutdown();
 ```
 
 ### Streaming Data
 
-For continuous data processing:
+For continuous data processing with async iterators:
 
 ```typescript
-import { Stream } from "effect";
+const { client } = await runtime.usePlugin("social-feed", {
+  secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
+  variables: { timeout: 30000 }
+});
 
-const stream = await runtime.runPromise(
-  Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
-    
-    return yield* pluginRuntime.streamPlugin(
-      "social-feed",
-      {
-        secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
-        variables: { timeout: 30000 }
-      },
-      {
-        procedure: "search", 
-        input: { query: "typescript" },
-        state: null
-      },
-      { maxItems: 100 }
-    );
-  })
-);
+const stream = await client.streamItems({ query: "typescript" });
 
-// Process stream
-const items = await runtime.runPromise(
-  stream.pipe(Stream.take(50), Stream.runCollect)
-);
-
-console.log(`Streamed ${items.length} items`);
+for await (const item of stream) {
+  console.log("Received item:", item);
+  
+  if (item.id === "target-id") break;
+}
 ```
 
 ### Error Handling
 
-All operations return Effect types with composable error handling:
+Handle errors gracefully with try-catch:
 
 ```typescript
-const safeResult = await runtime.runPromise(
-  Effect.gen(function* () {
-    const pluginRuntime = yield* PluginRuntime;
-    
-    return yield* pluginRuntime.usePlugin("social-feed", config);
-  }).pipe(
-    Effect.catchAll((error) => {
-      console.error("Plugin failed:", error);
-      return Effect.succeed(null);
-    })
-  )
-);
+try {
+  const { client } = await runtime.usePlugin("social-feed", config);
+  const result = await client.search({ query: "typescript" });
+  console.log(result);
+} catch (error) {
+  console.error("Plugin failed:", error);
+}
 ```
 
 ## Advanced Patterns
@@ -218,112 +294,125 @@ Perfect for BullMQ workers or similar job processing systems:
 
 ```typescript
 import { Job } from "bullmq";
-import { Effect } from "effect";
-import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
+import { createPluginRuntime } from "every-plugin/runtime";
 
-// Initialize runtime once per worker
 const runtime = createPluginRuntime({
   registry: pluginRegistry,
   secrets: await loadSecrets(),
 });
 
-// Job processor
-const processJob = (job: Job) => 
-  runtime.runPromise(
-    Effect.gen(function* () {
-      const pluginRuntime = yield* PluginRuntime;
-      const { pluginId, config, input } = job.data;
-      
-      const plugin = yield* pluginRuntime.usePlugin(pluginId, config);
-      return yield* pluginRuntime.executePlugin(plugin, input);
-    })
-  );
+const processJob = async (job: Job) => {
+  const { pluginId, config, input } = job.data;
+  
+  const { client } = await runtime.usePlugin(pluginId, config);
+  return await client.process(input);
+};
 
-// Worker setup
 const worker = new Worker("my-queue", processJob);
 
-// Cleanup on shutdown
 process.on("SIGTERM", async () => {
   await worker.close();
-  await runtime.disposeRuntime();
+  await runtime.shutdown();
 });
 ```
 
-### Granular Control
+### Plugin Pipeline Composition
 
-For step-by-step plugin lifecycle management:
+Chain multiple plugins for complex workflows:
 
 ```typescript
-const processWithGranularControl = Effect.gen(function* () {
-  const pluginRuntime = yield* PluginRuntime;
-  
-  // Step-by-step plugin lifecycle
-  const constructor = yield* pluginRuntime.loadPlugin("@my-org/data-processor");
-  const instance = yield* pluginRuntime.instantiatePlugin(constructor);
-  const initialized = yield* pluginRuntime.initializePlugin(instance, config);
-  const output = yield* pluginRuntime.executePlugin(initialized, input);
-  
-  return output;
+const { client: source } = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{SOURCE_API_KEY}}" }
 });
 
-await runtime.runPromise(processWithGranularControl);
+const { client: processor } = await runtime.usePlugin("transformer", {
+  variables: { format: "json" }
+});
+
+const { client: distributor } = await runtime.usePlugin("webhook", {
+  secrets: { webhookUrl: "{{WEBHOOK_URL}}" }
+});
+
+const rawData = await source.fetch({ query: "typescript" });
+const processed = await processor.transform({ items: rawData.items });
+await distributor.send({ items: processed.items });
 ```
 
-### React/Next.js Integration
+### Mounting Plugins as HTTP APIs
 
 ```typescript
-import { createPluginRuntime, PluginRuntime } from "every-plugin/runtime";
-import { Effect } from "effect";
+import { createPluginRuntime } from "every-plugin/runtime";
+import { OpenAPIHandler } from "orpc/openapi";
+import express from "express";
 
-// Create runtime at app level
-const pluginRuntime = createPluginRuntime({
-  registry: clientSideRegistry,
-  secrets: {} // No secrets on client side
+const runtime = createPluginRuntime({
+  registry: pluginRegistry,
+  secrets: await loadSecrets()
 });
 
-// In a React component or API route
-export async function executePlugin(pluginId: string, config: any, input: any) {
-  return pluginRuntime.runPromise(
-    Effect.gen(function* () {
-      const runtime = yield* PluginRuntime;
-      const plugin = yield* runtime.usePlugin(pluginId, config);
-      return yield* runtime.executePlugin(plugin, input);
-    })
-  );
-}
+const app = express();
 
-// Cleanup in app teardown
-export function cleanup() {
-  return pluginRuntime.dispose();
-}
+const { router } = await runtime.usePlugin("data-api", config);
+const handler = new OpenAPIHandler(router);
+
+app.use('/api', handler.handle);
+app.listen(3000);
 ```
 
 ## API Reference
 
 ### `createPluginRuntime(config)`
 
-Creates a managed runtime for plugin execution.
+Creates a runtime for plugin execution.
 
 **Parameters:**
 
-- `config.registry`: Plugin registry mapping
-- `config.secrets`: Secret values for hydration (optional)
+- `config.registry`: Plugin registry mapping with remote URLs
+- `config.secrets`: Secret values for template injection (optional)
 - `config.logger`: Custom logger implementation (optional)
 
-**Returns:** `ManagedRuntime` instance
+**Returns:** Runtime instance with `usePlugin()` and `shutdown()` methods
 
-### `PluginRuntime`
+### `createLocalPluginRuntime(config, plugins)`
 
-Effect service tag for accessing the plugin runtime within Effect workflows.
+Creates a runtime with local plugin implementations for testing/development.
 
-### Plugin Runtime Methods
+**Parameters:**
 
-- `loadPlugin(pluginId)`: Load plugin constructor from registry
-- `instantiatePlugin(constructor)`: Create plugin instance
-- `initializePlugin(instance, config)`: Initialize with config and secrets
-- `executePlugin(plugin, input)`: Execute plugin with input
-- `usePlugin(pluginId, config)`: Load + instantiate + initialize in one step
-- `streamPlugin(pluginId, config, input, options)`: Stream plugin execution
+- `config`: Same as `createPluginRuntime`
+- `plugins`: Map of plugin IDs to plugin implementations
+
+**Returns:** Runtime instance with same API as `createPluginRuntime`
+
+### `runtime.usePlugin(pluginId, config)`
+
+Load, initialize, and return a plugin interface.
+
+**Parameters:**
+
+- `pluginId`: ID from the registry
+- `config.secrets`: Secret templates to inject
+- `config.variables`: Configuration variables
+
+**Returns:** Promise resolving to `{ client, router, metadata }`
+
+- `client`: Typed client for direct procedure calls
+- `router`: oRPC router for HTTP mounting
+- `metadata`: Plugin metadata
+
+### `runtime.shutdown()`
+
+Cleanup all plugins and release resources.
+
+**Returns:** Promise that resolves when shutdown is complete
+
+## Plugin Types
+
+- **Source**: Fetch data from external APIs with oRPC contracts
+- **Transformer**: Process and transform data between formats
+- **Distributor**: Send data to external systems
+
+All plugin types use the same oRPC contract interface for type safety.
 
 ## Development
 

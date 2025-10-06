@@ -17,7 +17,7 @@ export const items = sqliteTable(
     createdAt: text("created_at"), // When content was posted
     ingestedAt: text("ingested_at").default(sql`CURRENT_TIMESTAMP`),
     url: text("url"),
-    rawData: text("raw_data", { mode: "json" }), // Full JSON from Masa
+    rawData: text("raw_data", { mode: "json" }), // Full JSON from Source
   },
   (table) => ([
     // Unique constraint on external_id to prevent duplicates

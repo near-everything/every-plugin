@@ -33,10 +33,10 @@ import {
 	SimpleTransformerOutputSchema,
 } from "../../plugins/simple-transform/src/schemas/index.js";
 import {
-	TelegramSourceConfigSchema,
-	TelegramSourceInputSchema,
-	TelegramSourceOutputSchema,
-} from "./../../plugins/telegram-source/src/schemas/index.js";
+	TelegramConfigSchema,
+	TelegramInputSchema,
+	TelegramOutputSchema,
+} from "./../../plugins/telegram/src/schemas/index.js";
 import {
 	X23SourceConfigSchema,
 	X23SourceInputSchema,
@@ -65,10 +65,10 @@ const pluginSchemas = {
 		inputSchema: MasaSourceInputSchema,
 		outputSchema: MasaSourceOutputSchema,
 	},
-	"telegram-source": {
-		configSchema: TelegramSourceConfigSchema,
-		inputSchema: TelegramSourceInputSchema,
-		outputSchema: TelegramSourceOutputSchema,
+	"telegram": {
+		configSchema: TelegramConfigSchema,
+		inputSchema: TelegramInputSchema,
+		outputSchema: TelegramOutputSchema,
 	},
 	"x23-source": {
 		configSchema: X23SourceConfigSchema,
@@ -93,7 +93,7 @@ const pluginsToRegister = {
 	"object-transform": "ObjectTransformer",
 	"ai-transform": "AITransformer",
 	"masa-source": "MasaSource",
-	"telegram-source": "TelegramSource",
+	"telegram": "Telegram",
 	"x23-source": "X23Source",
 	notion: "NotionDistributor",
 	rss: "RssDistributor",

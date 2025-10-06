@@ -1,207 +1,167 @@
 ---
-title: Plugin Overview
-description: What are plugins?
+title: Creating Plugins
+description: Build type-safe plugins with oRPC contracts
 ---
 
-## Plugin Types
+Plugins are built using the `createPlugin()` factory with [oRPC](https://orpc.unnoq.com/) contracts. This guide provides copy-paste templates and patterns for common plugin types.
 
-### Source Plugins
+## Plugin Anatomy
 
-Fetch data from external APIs using [oRPC](https://orpc.io/) contracts:
+Every plugin has four key parts:
 
-```typescript
-export class MySourcePlugin implements SourcePlugin<Contract, ConfigSchema, StateSchema> {
-  readonly type = "source" as const;
-  readonly contract = contract; // oRPC contract
-  
-  // Multiple procedures: getById, getBulk, search
-  isStreamable(procedureName: string): boolean {
-    return procedureName === "search";
-  }
-}
-```
+1. **Contract** - oRPC routes defining procedures, inputs, and outputs
+2. **Config Schema** - Variables (non-sensitive) and secrets (sensitive) configuration
+3. **Initialize** - Setup lifecycle that returns context for handlers
+4. **Router** - oRPC handlers that implement the contract
 
-### Transformer Plugins
+### Type Export
 
-Process and transform data between formats:
+`createPlugin()` automatically exports the plugin type in its default export. Consumers can import this type for compile-time type safety:
 
 ```typescript
-export class MyTransformerPlugin implements Plugin<InputSchema, OutputSchema, ConfigSchema> {
-  readonly type = "transformer" as const;
-  
-  execute(input: Input): Effect.Effect<Output, PluginExecutionError> {
-    return Effect.gen(function* () {
-      // Transform input.items to output format
-      const transformedItems = input.items.map(transform);
-      return { success: true, data: { items: transformedItems } };
-    });
-  }
-}
-```
-
-### Distributor Plugins
-
-Send data to external systems or storage:
-
-```typescript
-export class MyDistributorPlugin implements Plugin<InputSchema, OutputSchema, ConfigSchema> {
-  readonly type = "distributor" as const;
-  
-  execute(input: Input): Effect.Effect<Output, PluginExecutionError> {
-    return Effect.gen(function* () {
-      // Send input.items to external system
-      const results = yield* Effect.forEach(input.items, (item) =>
-        Effect.tryPromise(() => this.client.send(item))
-      );
-      
-      return { success: true, data: { sent: results.length } };
-    });
-  }
-}
-```
-
-## Development Workflow
-
-### 1. Fork Template
-
-Start with the appropriate template repository:
-
-```bash
-# For source plugins (data fetching)
-git clone https://github.com/your-org/source-plugin-template my-plugin
-
-# For other plugins
-git clone https://github.com/your-org/plugin-template my-plugin
-```
-
-### 2. Define Contract
-
-Create your plugin's API contract with Zod schemas:
-
-```typescript
-// Input/Output schemas
-export const InputSchema = z.object({
-  query: z.string().min(1),
-  limit: z.number().optional()
+// In your plugin package
+export default createPlugin({
+  id: "my-plugin",
+  // ... plugin definition
 });
 
-export const OutputSchema = z.object({
-  items: z.array(ItemSchema),
-  nextCursor: z.string().optional()
-});
+// Consumers install as dev dependency
+// bun add -D @my-org/my-plugin
 
-// Configuration schema
-export const ConfigSchema = createConfigSchema(
-  z.object({ timeout: z.number().optional() }), // variables
-  z.object({ apiKey: z.string().min(1) })       // secrets
-);
-```
+// Then import type-only for bindings
+import type MyPlugin from "@my-org/my-plugin";
+import type { PluginBinding } from "every-plugin";
 
-### 3. Implement Plugin
-
-Implement the plugin interface with Effect patterns:
-
-```typescript
-export class MyPlugin implements Plugin<typeof InputSchema, typeof OutputSchema, typeof ConfigSchema> {
-  readonly id = "my-plugin" as const;
-  readonly type = "transformer" as const;
-  readonly inputSchema = InputSchema;
-  readonly outputSchema = OutputSchema;
-  readonly configSchema = ConfigSchema;
-
-  initialize(config: Config): Effect.Effect<void, ConfigurationError> {
-    return Effect.gen(function* () {
-      // Initialize with config and secrets
-      this.client = new ApiClient({
-        apiKey: config.secrets.apiKey,
-        timeout: config.variables?.timeout || 30000
-      });
-    });
-  }
-
-  execute(input: Input): Effect.Effect<Output, PluginExecutionError> {
-    return Effect.gen(function* () {
-      // Process input and return validated output
-      const result = yield* Effect.tryPromise({
-        try: () => this.client.process(input),
-        catch: (error) => new PluginExecutionError(`Processing failed: ${error}`, true)
-      });
-      
-      return { success: true, data: result };
-    });
-  }
-
-  shutdown(): Effect.Effect<void, never> {
-    return Effect.gen(function* () {
-      if (this.client) {
-        yield* Effect.promise(() => this.client.disconnect());
-      }
-    });
-  }
-}
-```
-
-### 4. Build and Deploy
-
-Build with Module Federation and deploy to CDN:
-
-```bash
-# Build for production
-npm run build
-
-# Deploy dist/remoteEntry.js to your CDN
-# Update registry with new plugin URL
-```
-
-## Plugin Registry
-
-Register your plugin for runtime discovery:
-
-```typescript
-const registry = {
-  "my-plugin": {
-    remoteUrl: "https://cdn.example.com/plugins/my-plugin@1.0.0/remoteEntry.js",
-    type: "transformer",
-    version: "1.0.0",
-    description: "Custom data transformation plugin"
-  }
+type AppBindings = {
+  "my-plugin": PluginBinding<typeof MyPlugin>;
 };
 ```
 
-## Testing Strategy
-
-Test plugins in isolation and integration:
+This provides autocomplete, type inference, and compile-time validation in the consumer's runtime.
 
 ```typescript
-describe("MyPlugin", () => {
-  it("should process input correctly", async () => {
-    const plugin = new MyPlugin();
-    
-    await plugin.initialize({
-      secrets: { apiKey: "test-key" },
-      variables: { timeout: 5000 }
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import { oc, implement } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+
+export default createPlugin({
+  id: "my-plugin",
+  
+  // Define oRPC contract
+  contract: oc.router({
+    getData: oc.route({ method: 'POST', path: '/getData' })
+      .input(z.object({ id: z.string() }))
+      .output(z.object({ data: z.string() }))
+  }),
+  
+  // Configuration schemas
+  variables: z.object({
+    timeout: z.number().default(30000)
+  }),
+  secrets: z.object({
+    apiKey: z.string()
+  }),
+  
+  // Initialize with context
+  initialize: (config) => Effect.gen(function* () {
+    const client = new ApiClient(config.secrets.apiKey);
+    return { client }; // Context passed to router
+  }),
+  
+  // Create router with handlers
+  createRouter: (context) => {
+    const os = implement(contract).$context<typeof context>();
+    return os.router({
+      getData: os.getData.handler(async ({ input }) => {
+        const data = await context.client.fetchData(input.id);
+        return { data };
+      })
     });
-    
-    const result = await plugin.execute({
-      items: ["test1", "test2"]
-    });
-    
-    expect(result.success).toBe(true);
-    expect(result.data.items).toHaveLength(2);
-  });
+  }
 });
 ```
 
-## Next Steps
+## Key Principles
 
-<Cards>
-  <Card title="Getting Started" href="/docs/plugins/getting-started">
-    Fork templates and create your first plugin
-  </Card>
-  <Card title="Source Plugins" href="/docs/plugins/source-plugins">
-    Create data fetching plugins with oRPC
-  </Card>
-  <Card title="Deployment" href="/docs/plugins/deployment">
-    Build and deploy plugins to production
-  </Card>
-</Cards>
+### Import Through every-plugin
+
+Always import Effect, oRPC, and Zod through `every-plugin`:
+
+```typescript
+import { Effect, Stream, Queue, Scope } from "every-plugin/effect";
+import { oc, implement, eventIterator } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+```
+
+This ensures version consistency across your plugin ecosystem.
+
+### Context Flow
+
+Context flows from `initialize` → `createRouter` → handlers:
+
+```typescript
+// 1. Initialize returns context
+initialize: (config) => Effect.gen(function* () {
+  const client = new ApiClient(config.secrets.apiKey);
+  const cache = new Map();
+  return { client, cache }; // This is your context
+}),
+
+// 2. createRouter receives context
+createRouter: (context) => {
+  // context.client and context.cache available
+  const os = implement(contract).$context<typeof context>();
+  
+  return os.router({
+    // 3. Handlers access context
+    getData: os.getData.handler(async ({ input }) => {
+      return await context.client.fetch(input.id);
+    })
+  });
+}
+```
+
+### Resource Management
+
+Use `Effect.acquireRelease` for long-lived resources in `initialize`:
+
+```typescript
+initialize: (config) => Effect.gen(function* () {
+  // Resources are scoped to plugin lifetime
+  const queue = yield* Effect.acquireRelease(
+    Queue.bounded(1000),
+    (q) => Queue.shutdown(q)
+  );
+  
+  return { queue };
+})
+```
+
+### Background Tasks
+
+Use `Effect.forkScoped` to start background tasks that live for the plugin's lifetime:
+
+```typescript
+initialize: (config) => Effect.gen(function* () {
+  const queue = yield* Effect.acquireRelease(
+    Queue.bounded(1000),
+    (q) => Queue.shutdown(q)
+  );
+  
+  // Background task runs until plugin shutdown
+  yield* Effect.forkScoped(
+    Effect.gen(function* () {
+      while (true) {
+        const item = yield* fetchFromAPI();
+        yield* Queue.offer(queue, item);
+        yield* Effect.sleep("1 second");
+      }
+    })
+  );
+  
+  return { queue };
+})
+```
+
+The background task is automatically interrupted when the plugin shuts down.

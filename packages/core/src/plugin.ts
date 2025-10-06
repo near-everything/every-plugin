@@ -96,7 +96,6 @@ export interface Plugin<
 	TContext extends Context = Record<never, never>
 > {
 	readonly id: string;
-	readonly type: string;
 	readonly contract: TContract;
 	readonly configSchema: PluginConfigFor<TVariables, TSecrets>;
 
@@ -126,7 +125,6 @@ export function createPlugin<
 	TContext extends Context = Record<never, never>
 >(config: {
 	id: string;
-	type?: string;
 	variables: V;
 	secrets: S;
 	contract: TContract;
@@ -143,7 +141,6 @@ export function createPlugin<
 
 	class CreatedPlugin implements Plugin<TContract, V, S, TContext> {
 		readonly id = config.id;
-		readonly type = config.type || "source";
 		readonly contract = config.contract;
 		readonly configSchema = configSchema;
 

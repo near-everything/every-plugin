@@ -3,9 +3,8 @@
   "description": "every-plugin documentation",
   "pages": [
     "quick-start",
-    "runtime", 
-    "plugins",
-    "examples",
-    "reference"
+    "plugins", 
+    "runtime",
+    "testing"
   ]
 }

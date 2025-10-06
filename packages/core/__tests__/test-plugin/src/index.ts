@@ -134,9 +134,8 @@ export const testContract = oc.router({
 export type TestPluginClient = ContractRouterClient<typeof testContract>;
 
 // Create the test plugin
-export default createPlugin({
+export const TestPlugin = createPlugin({
 	id: "test-plugin",
-	type: "source",
 	variables: z.object({
 		baseUrl: z.string(),
 		timeout: z.number().optional(),
@@ -350,3 +349,5 @@ export default createPlugin({
 		});
 	}
 });
+
+export default TestPlugin;

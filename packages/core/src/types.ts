@@ -1,8 +1,9 @@
 import type { AnyContractRouter } from "@orpc/contract";
 import type { Context, Router } from "@orpc/server";
-import { Scope } from "effect";
+import type { Scope } from "effect";
 import type { z } from "zod";
 import type { Plugin, PluginConfigFor, PluginConstructorWithBinding } from "./plugin";
+import type { PluginRuntime } from "./runtime";
 
 export type AnyContract = Router<AnyContractRouter, any>
 
@@ -31,7 +32,7 @@ export type PluginOf<B> =
   B extends { contract: infer C; config: infer Conf }
   ? Conf extends PluginConfigFor<infer V, infer S>
   ? C extends AnyContractRouter
-  ? Plugin<C, V, S>
+  ? Plugin<C, V, S, Context>
   : never
   : never
   : never;
@@ -86,7 +87,6 @@ export type PluginBindingsFor<R extends RegistryBindings> = {
  */
 export type PluginRegistry = Record<string, {
   remoteUrl: string;
-  type: string;
   version?: string;
   description?: string;
 }>;
@@ -98,7 +98,6 @@ export type PluginRegistry = Record<string, {
 export type PluginRegistryFor<R extends RegistryBindings> = {
   [K in keyof R]: {
     remoteUrl: string;
-    type: string;
     version?: string;
     description?: string;
   };
@@ -136,7 +135,6 @@ export interface PluginInstance<T extends AnyPlugin = AnyPlugin> {
     readonly pluginId: string;
     readonly version?: string;
     readonly description?: string;
-    readonly type?: string;
   };
 }
 
@@ -151,7 +149,6 @@ export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
     readonly pluginId: string;
     readonly version?: string;
     readonly description?: string;
-    readonly type?: string;
   };
   readonly config: z.infer<T["configSchema"]>;
   readonly context: ContextOf<T>;
@@ -179,16 +176,38 @@ export interface RuntimeOptions {
 /**
  * Enhanced plugin result containing client, router, and metadata.
  */
-export interface PluginResult<T extends AnyPlugin = AnyPlugin> {
+export interface EveryPlugin<T extends AnyPlugin = AnyPlugin> {
   readonly client: import("@orpc/server").RouterClient<RouterOf<T>, Record<never, never>>;
   readonly router: RouterOf<T>;
   readonly metadata: {
     readonly pluginId: string;
     readonly version?: string;
     readonly description?: string;
-    readonly type?: string;
   };
   readonly initialized: InitializedPlugin<T>;
+}
+
+/**
+ * Namespace containing type utilities for working with plugin results.
+ */
+export namespace EveryPlugin {
+  /**
+   * Extract the typed plugin result from a runtime instance.
+   * Provides full type safety for plugin clients, routers, and metadata.
+   * 
+   * @example
+   * ```ts
+   * const runtime = createPluginRuntime<MyBindings>({...});
+   * let plugin: EveryPlugin.Infer<typeof runtime, "my-plugin">;
+   * plugin = await runtime.usePlugin("my-plugin", config);
+   * ```
+   */
+  export type Infer<
+    T extends PluginRuntime<any>,
+    K extends T extends PluginRuntime<infer R> ? keyof R : never
+  > = T extends PluginRuntime<infer R>
+    ? EveryPlugin<PluginOf<R[K]>>
+    : never;
 }
 
 /**

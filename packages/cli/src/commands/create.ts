@@ -19,9 +19,9 @@ const AVAILABLE_TEMPLATES: PluginTemplate[] = [
     source: "near-everything/every-plugin/plugins/masa-source"
   },
   {
-    name: "telegram-source", 
+    name: "telegram", 
     description: "Telegram source plugin template",
-    source: "near-everything/every-plugin/plugins/telegram-source"
+    source: "near-everything/every-plugin/plugins/telegram"
   },
   {
     name: "basic",

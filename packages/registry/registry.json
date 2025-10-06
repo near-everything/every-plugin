@@ -629,7 +629,7 @@
 		"version": "0.0.1",
 		"description": "Masa source plugin for curatedotfun"
 	},
-	"@curatedotfun/telegram-source": {
+	"@curatedotfun/telegram": {
 		"remoteUrl": "http://localhost:3012/remoteEntry.js",
 		"configSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",

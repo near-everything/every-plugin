@@ -41,7 +41,6 @@ function RouteComponent() {
 		{
 			id: "source-template",
 			name: "Source Template Plugin",
-			type: "source",
 			version: "1.0.0",
 			status: "active",
 			lastExecution: "2 minutes ago",
@@ -51,7 +50,6 @@ function RouteComponent() {
 		{
 			id: "data-processor",
 			name: "Data Processor",
-			type: "transformer",
 			version: "2.1.0",
 			status: "active",
 			lastExecution: "5 minutes ago",
@@ -61,7 +59,6 @@ function RouteComponent() {
 		{
 			id: "analytics-sink",
 			name: "Analytics Sink",
-			type: "sink",
 			version: "1.5.2",
 			status: "inactive",
 			lastExecution: "1 hour ago",
@@ -172,7 +169,7 @@ function RouteComponent() {
 									<div className="flex items-center gap-4">
 										<div className="flex items-center gap-3">
 											<Badge variant="secondary" className="text-xs">
-												{plugin.type}
+												"TYPE"
 											</Badge>
 											<div>
 												<h3 className="font-medium">{plugin.name}</h3>

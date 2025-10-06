@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 
 import { RPCHandler } from "@orpc/server/fetch";
-import type { PluginBinding, PluginOf } from "every-plugin";
+import type { PluginBinding } from "every-plugin";
 import { Effect, Layer, Logger, LogLevel, Stream } from "every-plugin/effect";
-import { createPluginRuntime, type PluginResult } from "every-plugin/runtime";
+import { createPluginRuntime, type EveryPlugin } from "every-plugin/runtime";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
-import type TelegramPlugin from "../../plugins/telegram-source/src";
+import type TelegramPlugin from "../../plugins/telegram/src";
 import { DatabaseService } from "./services/db.service";
 import { EmbeddingsService } from "./services/embeddings.service";
 import { EntityExtractionService } from "./services/entity-extraction.service";
@@ -18,7 +18,7 @@ import { processMessage } from "./worker";
 
 // Define typed registry bindings for the telegram plugin
 type TelegramBindings = {
-  "@curatedotfun/telegram-source": PluginBinding<typeof TelegramPlugin>;
+  "@curatedotfun/telegram": PluginBinding<typeof TelegramPlugin>;
 };
 
 // Environment configuration
@@ -32,11 +32,10 @@ const HTTP_PORT = parseInt(Bun.env.HTTP_PORT || "4000");
 const useWebhooks = !!WEBHOOK_DOMAIN;
 
 // Create plugin runtime
-const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
+const runtime = createPluginRuntime<TelegramBindings>({
   registry: {
-    "@curatedotfun/telegram-source": {
-      remoteUrl: "https://elliot-braem-64-curatedotfun-telegram-source-ever-d4a8166e2-ze.zephyrcloud.app/remoteEntry.js",
-      type: "source"
+    "@curatedotfun/telegram": {
+      remoteUrl: "https://elliot-braem-64-curatedotfun-telegram-ever-d4a8166e2-ze.zephyrcloud.app/remoteEntry.js",
     }
   },
   secrets: {
@@ -46,7 +45,7 @@ const { runtime, PluginRuntime } = createPluginRuntime<TelegramBindings>({
 });
 
 // Create HTTP server with plugin router integration
-const createHttpServer = (plugin: PluginResult<PluginOf<TelegramBindings["@curatedotfun/telegram-source"]>>) => Effect.gen(function* () {
+const createHttpServer = (plugin: EveryPlugin.Infer<typeof runtime, "@curatedotfun/telegram">) => Effect.gen(function* () {
   const db = yield* DatabaseService;
 
   const app = new Hono();
@@ -130,9 +129,9 @@ const createHttpServer = (plugin: PluginResult<PluginOf<TelegramBindings["@curat
   });
 
   yield* Effect.logInfo("✅ HTTP server running").pipe(
-    Effect.annotateLogs({ 
-      port: HTTP_PORT, 
-      mode: useWebhooks ? 'webhook' : 'polling' 
+    Effect.annotateLogs({
+      port: HTTP_PORT,
+      mode: useWebhooks ? 'webhook' : 'polling'
     })
   );
 
@@ -167,8 +166,7 @@ const loadState = () =>
 
 const program = Effect.gen(function* () {
   yield* Effect.logInfo("🤖 Starting efizzybusybot...");
-  const pluginRuntime = yield* PluginRuntime;
-  const plugin = yield* pluginRuntime.usePlugin("@curatedotfun/telegram-source", {
+  const plugin = yield* Effect.promise(() => runtime.usePlugin("@curatedotfun/telegram", {
     variables: {
       timeout: 30000,
       ...(useWebhooks && WEBHOOK_DOMAIN && { domain: WEBHOOK_DOMAIN })
@@ -177,15 +175,11 @@ const program = Effect.gen(function* () {
       botToken: "{{TELEGRAM_BOT_TOKEN}}",
       ...(useWebhooks && WEBHOOK_TOKEN && { webhookToken: "{{TELEGRAM_WEBHOOK_TOKEN}}" })
     }
-  });
+  }));
 
   const shutdown = () => {
     Effect.runPromise(Effect.logInfo("Shutting down..."));
-    runtime.runPromise(
-      Effect.andThen(PluginRuntime, (pluginRuntime) => pluginRuntime.shutdown()).pipe(
-        Effect.provide(runtime)
-      )
-    ).finally(() => process.exit(0));
+    process.exit(0);
   };
 
   process.on('SIGINT', shutdown);
@@ -218,7 +212,7 @@ const program = Effect.gen(function* () {
         messageCount++;
 
         yield* processMessage(ctx).pipe(
-          Effect.catchAll((error) => 
+          Effect.catchAll((error) =>
             Effect.logError("Failed to process message").pipe(
               Effect.annotateLogs({
                 messageId: ctx.message?.message_id || 'unknown',
@@ -261,7 +255,6 @@ const AppLayer = Layer.merge(MainLayer, DependentLayer);
 await Effect.runPromise(
   program.pipe(
     Effect.provide(AppLayer),
-    Effect.provide(Logger.minimumLogLevel(LogLevel.Info)),
-    Effect.provide(runtime)
+    Effect.provide(Logger.minimumLogLevel(LogLevel.Info))
   )
 );
