@@ -84,13 +84,14 @@ function Home() {
               >
                 Get Started
               </Link>
-              <Link
-                to="/docs/$"
-                params={{ _splat: "examples" }}
+              <a
+                href="https://github.com/near-everything/every-plugin/tree/main/examples"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="px-8 py-4 bg-black/50 backdrop-blur-sm text-white border border-white/20 rounded-xl font-medium hover:bg-black/70 transition-all duration-200 shadow-lg hover:shadow-xl text-lg gt-standard-mono"
               >
                 View Examples
-              </Link>
+              </a>
             </motion.div>
           </div>
         </div>
