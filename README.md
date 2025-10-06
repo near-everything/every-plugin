@@ -63,8 +63,7 @@ export default createPlugin({
       .output(DataSchema),
     streamItems: oc.procedure
       .input(QuerySchema)
-      .output(ItemSchema)
-      .serverStream()
+      .output(eventIterator(ItemSchema))
   })
 });
 
