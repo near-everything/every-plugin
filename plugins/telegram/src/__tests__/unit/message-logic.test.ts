@@ -4,15 +4,7 @@ import type { Context } from "telegraf";
 import { beforeAll, describe, expect, it } from "vitest";
 import TelegramPlugin from "../../index";
 import { createCommandUpdate, createTextUpdate } from "../fixtures/telegram-updates";
-
-// Test registry
-const TEST_REGISTRY: PluginRegistry = {
-  "@curatedotfun/telegram": {
-    remoteUrl: "http://localhost:3014/remoteEntry.js",
-    version: "1.0.0",
-    description: "Telegram source plugin for message logic testing",
-  },
-};
+import { TEST_REGISTRY } from "../setup";
 
 // Shared config for all tests - enables instance reuse and prevents polling conflicts
 const SHARED_TEST_CONFIG = {

@@ -1,24 +1,11 @@
 import { expect, it } from "vitest";
-import type { PluginBinding } from "every-plugin";
-import { createPluginRuntime } from "every-plugin/runtime";
+import { createLocalPluginRuntime } from "every-plugin/testing";
 import { beforeAll, describe } from "vitest";
-import type TelegramPlugin from "../../index";
+import TelegramPlugin from "../../index";
 import type { Context } from "telegraf";
-import { TELEGRAM_REMOTE_ENTRY_URL } from "./global-setup";
+import { TEST_REGISTRY } from "../setup";
 
-// Define typed registry bindings for the telegram plugin
-type TelegramBindings = {
-  "@curatedotfun/telegram": PluginBinding<typeof TelegramPlugin>;
-};
-
-// Registry for integration tests
-const TEST_REGISTRY = {
-  "@curatedotfun/telegram": {
-    remoteUrl: TELEGRAM_REMOTE_ENTRY_URL,
-    version: "0.0.1",
-    description: "Telegram source plugin for webhook integration testing",
-  },
-} as const;
+// Import the plugin locally for integration tests
 
 // Load test configuration from .env.test
 const TEST_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -59,12 +46,11 @@ const createWebhookUpdateFromSentMessage = (sentMessage: { messageId: number }, 
     }
   }
 });
-
 describe.sequential("Telegram Webhook Integration Tests", () => {
-  const runtime = createPluginRuntime<TelegramBindings>({
-    registry: TEST_REGISTRY,
-    secrets: SECRETS_CONFIG
-  });
+  const runtime = createLocalPluginRuntime(
+    { registry: TEST_REGISTRY, secrets: SECRETS_CONFIG },
+    { "@curatedotfun/telegram": TelegramPlugin }
+  );
 
   beforeAll(() => {
     if (!TEST_BOT_TOKEN) {

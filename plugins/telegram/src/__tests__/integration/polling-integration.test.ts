@@ -1,20 +1,8 @@
-import type { PluginBinding } from "every-plugin";
-import { createPluginRuntime } from "every-plugin/runtime";
+import { createLocalPluginRuntime } from "every-plugin/testing";
 import type { Context } from "telegraf";
 import { describe, expect, it } from "vitest";
-import type TelegramPlugin from "../../index";
-import { TELEGRAM_REMOTE_ENTRY_URL } from "./global-setup";
-
-type TelegramBindings = {
-  "@curatedotfun/telegram": PluginBinding<typeof TelegramPlugin>;
-};
-const TEST_REGISTRY = {
-  "@curatedotfun/telegram": {
-    remoteUrl: TELEGRAM_REMOTE_ENTRY_URL,
-    version: "0.0.1",
-    description: "Real Telegram source plugin for polling integration testing",
-  },
-} as const;
+import TelegramPlugin from "../../index";
+import { TEST_REGISTRY } from "../setup";
 
 const TEST_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TEST_CHAT_ID = process.env.TELEGRAM_TEST_CHAT_ID || "-4956736324";
@@ -33,10 +21,10 @@ const SECRETS_CONFIG = {
 };
 
 describe.sequential("Telegram Polling Integration Tests", () => {
-  const runtime = createPluginRuntime<TelegramBindings>({
-    registry: TEST_REGISTRY,
-    secrets: SECRETS_CONFIG
-  });
+  const runtime = createLocalPluginRuntime(
+    { registry: TEST_REGISTRY, secrets: SECRETS_CONFIG },
+    { "@curatedotfun/telegram": TelegramPlugin }
+  );
 
   it("should test telegram plugin polling", async () => {
     if (!TEST_BOT_TOKEN) {

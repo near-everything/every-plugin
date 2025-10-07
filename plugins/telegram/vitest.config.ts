@@ -9,20 +9,13 @@ export default defineConfig({
       "src/__tests__/unit/**/*.test.ts",
       "src/__tests__/integration/**/*.test.ts"
     ],
-    exclude: [
-      "node_modules",
-      "dist",
-    ],
+    exclude: ["node_modules", "dist"],
     testTimeout: 30000,
-    // Run integration tests sequentially to avoid polling conflicts
     pool: "threads",
     poolOptions: {
       threads: {
         singleThread: true
       }
-    },
-    typecheck: {
-      enabled: false
     }
   },
   resolve: {
