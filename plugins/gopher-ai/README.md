@@ -31,9 +31,9 @@ Add the Masa Source plugin to your `curate.config.json`:
 ```jsonc
 {
   "plugins": {
-    "@curatedotfun/gohper-ai": {
+    "@curatedotfun/gopher-ai": {
       "type": "source",
-      "url": "https://unpkg.com/@curatedotfun/gohper-ai@latest/dist/remoteEntry.js"
+      "url": "https://unpkg.com/@curatedotfun/gopher-ai@latest/dist/remoteEntry.js"
     }
   }
 }
@@ -50,7 +50,7 @@ Configure the plugin in your feed sources:
       "id": "masa-twitter-feed",
       "sources": [
         {
-          "plugin": "@curatedotfun/gohper-ai",
+          "plugin": "@curatedotfun/gopher-ai",
           "config": {
             "variables": {
               "baseUrl": "https://data.gopher-ai.com/api/v1", // Optional, default shown

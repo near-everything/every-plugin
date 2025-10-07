@@ -7,7 +7,7 @@ export const items = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     externalId: text("external_id").notNull(),
-    platform: text("platform", { enum: ["twitter", "tiktok", "reddit"] }).notNull(),
+    platform: text("platform", { enum: ["twitter", "tiktok", "reddit", "web"] }).notNull(),
     content: text("content").notNull(),
     contentType: text("content_type"),
     conversationId: text("conversation_id"),
@@ -60,12 +60,9 @@ export const processingQueue = sqliteTable(
 // Stream state persistence (replaces JSON file)
 export const streamState = sqliteTable("stream_state", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  phase: text("phase", { enum: ["initial", "backfill", "live"] }).notNull(),
   mostRecentId: text("most_recent_id"),
   oldestSeenId: text("oldest_seen_id"),
-  backfillDone: integer("backfill_done", { mode: "boolean" }).default(false),
   totalProcessed: integer("total_processed").default(0),
-  nextPollMs: integer("next_poll_ms"),
   updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`),
 });
 

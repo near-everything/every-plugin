@@ -1,19 +1,11 @@
 import { implement } from "@orpc/server";
-import { createPlugin, PluginConfigurationError } from "every-plugin";
+import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
-import { ApiError, GopherAIClient } from "./client";
-import { JobManager } from "./job-manager";
+import { GopherAIClient } from "./client";
+import { contract } from "./contract";
+import { GopherAIService } from "./service";
 import {
-  contract
-} from "./schemas";
-import {
-  backfillStream,
-  gapDetectionAndLiveStream,
-  liveStream
-} from "./streaming";
-import {
-  convertResultToSourceItem,
   handleError
 } from "./utils";
 
@@ -39,37 +31,30 @@ export default createPlugin({
       config.variables?.timeout
     );
 
-    const jobManager = new JobManager(client);
+    const service = new GopherAIService(client);
 
-    yield* Effect.tryPromise({
-      try: () => client.healthCheck(),
-      catch: (error) => new PluginConfigurationError({
-        message: `Health check failed: ${error instanceof Error ? error.message : String(error)}`,
-        retryable: false,
-        cause: error instanceof Error ? error : new Error(String(error))
-      })
-    });
+    yield* service.healthCheck();
 
-    console.log(" source plugin initialized successfully", {
-      pluginId: "@curatedotfun/gopher-ai",
-      baseUrl
-    });
-
-    return { client, jobManager };
+    return { service };
   }),
 
+  shutdown: () => Effect.void,
+
   createRouter: (context) => {
+    const { service } = context;
     const os = implement(contract);
 
     // Core job operations
     const submitSearchJob = os.submitSearchJob.handler(async ({ input, errors }) => {
       try {
-        const jobId = await context.client.submitSearchJob(
-          input.sourceType,
-          input.searchMethod,
-          input.query,
-          100,
-          input.nextCursor
+        const jobId = await Effect.runPromise(
+          service.client.submitSearchJob(
+            input.sourceType,
+            input.searchMethod,
+            input.query,
+            100,
+            input.nextCursor
+          )
         );
         return { jobId };
       } catch (error) {
@@ -79,7 +64,7 @@ export default createPlugin({
 
     const checkJobStatus = os.checkJobStatus.handler(async ({ input, errors }) => {
       try {
-        const status = await context.client.checkJobStatus(input.jobId);
+        const status = await Effect.runPromise(service.client.checkJobStatus(input.jobId));
         return { status: status as 'submitted' | 'in progress' | 'done' | 'error' };
       } catch (error) {
         return handleError(error, errors);
@@ -88,9 +73,8 @@ export default createPlugin({
 
     const getJobResults = os.getJobResults.handler(async ({ input, errors }) => {
       try {
-        const results = await context.client.getJobResults(input.jobId);
-        const items = results.map(convertResultToSourceItem);
-        return { items };
+        const results = await Effect.runPromise(service.client.getJobResults(input.jobId));
+        return { items: results };
       } catch (error) {
         return handleError(error, errors);
       }
@@ -98,9 +82,10 @@ export default createPlugin({
 
     const getById = os.getById.handler(async ({ input, errors }) => {
       try {
-        const result = await context.jobManager.getById(input.sourceType, input.id);
-        const item = convertResultToSourceItem(result);
-        return { item };
+        const result = await Effect.runPromise(
+          service.getById(input.sourceType, input.id)
+        );
+        return { item: result };
       } catch (error) {
         return handleError(error, errors);
       }
@@ -108,9 +93,10 @@ export default createPlugin({
 
     const getBulk = os.getBulk.handler(async ({ input, errors }) => {
       try {
-        const results = await context.jobManager.getBulk(input.sourceType, input.ids);
-        const items = results.map(convertResultToSourceItem);
-        return { items };
+        const results = await Effect.runPromise(
+          service.getBulk(input.sourceType, input.ids)
+        );
+        return { items: results };
       } catch (error) {
         return handleError(error, errors);
       }
@@ -119,16 +105,13 @@ export default createPlugin({
     const getReplies = os.getReplies.handler(async ({ input, errors }) => {
       try {
         const results = await Effect.runPromise(
-          context.jobManager.executeJobWorkflow(
+          service.getReplies(
             input.sourceType,
-            'getreplies',
             input.conversationId,
-            input.maxResults || 20,
-            (results) => results
+            input.maxResults || 20
           )
         );
-        const replies = results.map(convertResultToSourceItem);
-        return { replies };
+        return { replies: results };
       } catch (error) {
         return handleError(error, errors);
       }
@@ -136,16 +119,17 @@ export default createPlugin({
 
     const similaritySearch = os.similaritySearch.handler(async ({ input, errors }) => {
       try {
-        const results = await context.client.similaritySearch({
-          query: input.query,
-          sources: input.sources,
-          keywords: input.keywords,
-          keyword_operator: input.keywordOperator,
-          max_results: input.maxResults,
-        });
+        const results = await Effect.runPromise(
+          service.similaritySearch(
+            input.query,
+            input.sources,
+            input.keywords,
+            input.keywordOperator,
+            input.maxResults
+          )
+        );
 
-        const items = results.map(convertResultToSourceItem);
-        return { items };
+        return { items: results };
       } catch (error) {
         return handleError(error, errors);
       }
@@ -153,23 +137,18 @@ export default createPlugin({
 
     const hybridSearch = os.hybridSearch.handler(async ({ input, errors }) => {
       try {
-        const results = await context.client.hybridSearch({
-          similarity_query: {
-            query: input.similarityQuery.query,
-            weight: input.similarityQuery.weight,
-          },
-          text_query: {
-            query: input.textQuery.query,
-            weight: input.textQuery.weight,
-          },
-          sources: input.sources,
-          keywords: input.keywords,
-          keyword_operator: input.keywordOperator,
-          max_results: input.maxResults,
-        });
+        const results = await Effect.runPromise(
+          service.hybridSearch(
+            input.similarityQuery,
+            input.textQuery,
+            input.sources,
+            input.keywords,
+            input.keywordOperator,
+            input.maxResults
+          )
+        );
 
-        const items = results.map(convertResultToSourceItem);
-        return { items };
+        return { items: results };
       } catch (error) {
         return handleError(error, errors);
       }
@@ -178,18 +157,7 @@ export default createPlugin({
     const getProfile = os.getProfile.handler(async ({ input, errors }) => {
       try {
         const profileData = await Effect.runPromise(
-          context.jobManager.executeJobWorkflow(
-            input.sourceType,
-            'searchbyprofile',
-            input.username,
-            1,
-            (results) => {
-              if (results.length === 0) {
-                throw new ApiError(`Profile not found for ${input.username}`, 404, `Get profile ${input.username}`);
-              }
-              return results[0];
-            }
-          )
+          service.getProfile(input.sourceType, input.username)
         );
 
         return {
@@ -214,13 +182,7 @@ export default createPlugin({
     const getTrends = os.getTrends.handler(async ({ input, errors }) => {
       try {
         const results = await Effect.runPromise(
-          context.jobManager.executeJobWorkflow(
-            input.sourceType,
-            'gettrends',
-            '',
-            50,
-            (results) => results
-          )
+          service.getTrends(input.sourceType)
         );
 
         const trends = results.map((result) => ({
@@ -236,90 +198,45 @@ export default createPlugin({
       }
     });
 
-    // Unified search stream (backfill → gap detection → live)
-    const search = os.search.handler(async function* ({ input, errors }) {
-      try {
-        let mostRecentId: string | undefined = input.sinceId;
-
-        // Phase 1: Backfill (skip if sinceId provided - means resuming after a gap was detected)
-        if (!input.sinceId) {
-          for await (const item of backfillStream(
-            context.jobManager,
-            input.query,
-            input.sourceType,
-            input.searchMethod,
-            input.maxId,
-            input.maxBackfillResults,
-            input.oldestAllowedId,
-            input.maxBackfillAgeMs,
-            input.backfillPageSize
-          )) {
-            yield item;
-
-            const itemId = BigInt(item.externalId);
-            if (!mostRecentId || itemId > BigInt(mostRecentId)) {
-              mostRecentId = item.externalId;
-            }
-          }
-        }
-
-        // Phase 2: Gap detection and live streaming
-        if (!input.enableLive) return; // Can finish after backfill
-
-        yield* gapDetectionAndLiveStream(
-          context.jobManager,
-          input.query,
-          input.sourceType,
-          input.searchMethod,
-          mostRecentId,
-          input.livePageSize,
-          input.livePollMs
-        );
-
-      } catch (error) {
-        handleError(error, errors);
-      }
+    const search = os.search.handler(async function* ({ input }) {
+      yield* service.searchAndStream(
+        input.query,
+        input.sourceType,
+        input.sinceId,
+        input.maxId,
+        input.maxBackfillResults,
+        input.oldestAllowedId,
+        input.maxBackfillAgeMs,
+        input.backfillPageSize,
+        input.enableLive,
+        input.livePageSize,
+        input.livePollMs
+      );
     });
 
-    // Backfill only stream
-    const backfill = os.backfill.handler(async function* ({ input, errors }) {
-      try {
-        for await (const item of backfillStream(
-          context.jobManager,
-          input.query,
-          input.sourceType,
-          input.searchMethod,
-          input.maxId,
-          input.maxResults,
-          undefined, // no oldestAllowedId
-          undefined, // no age limit
-          input.pageSize
-        )) {
-          yield item;
-        }
-      } catch (error) {
-        handleError(error, errors);
-      }
+    const backfill = os.backfill.handler(async function* ({ input }) {
+      yield* service.backfill(
+        input.query,
+        input.sourceType,
+        input.searchMethod,
+        input.maxId,
+        input.maxResults,
+        undefined, // no oldestAllowedId
+        undefined, // no age limit
+        input.pageSize
+      );
     });
 
-    // Live polling only stream
-    const live = os.live.handler(async function* ({ input, errors }) {
-      try {
-        for await (const item of liveStream(
-          context.jobManager,
-          input.query,
-          input.sourceType,
-          input.searchMethod,
-          input.sinceId,
-          undefined,
-          input.pageSize,
-          input.pollMs
-        )) {
-          yield item;
-        }
-      } catch (error) {
-        handleError(error, errors);
-      }
+    const live = os.live.handler(async function* ({ input }) {
+      yield* service.live(
+        input.query,
+        input.sourceType,
+        input.searchMethod,
+        input.sinceId,
+        undefined, // no maxResults
+        input.pageSize,
+        input.pollMs
+      );
     });
 
     return os.router({

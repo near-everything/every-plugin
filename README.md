@@ -51,21 +51,22 @@ await runtime.shutdown();
 
 ## Core Concepts
 
-### Plugins are Type-Safe oRPC Contracts
+### Plugins are Type-Safe Contracts
 
 Plugins define their interface using [oRPC](https://orpc.io/) procedures. The runtime ensures type safety from contract definition through to client calls:
 
 ```typescript
 export default createPlugin({
+  initialize: () => { /* setup resources, return context */ }
   contract: oc.router({
     getData: oc.procedure
       .input(z.object({ id: z.string() }))
       .output(DataSchema),
     streamItems: oc.procedure
       .input(QuerySchema)
-      .output(ItemSchema)
-      .serverStream()
-  })
+      .output(eventIterator(ItemSchema))
+  }),
+  createRouter: (context) => { /* implement contract */ }
 });
 
 const { client } = await runtime.usePlugin("plugin-id", config);

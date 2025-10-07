@@ -1,5 +1,5 @@
 {
-  "name": "@curatedotfun/gohper-ai",
+  "name": "@curatedotfun/gopher-ai",
   "version": "0.0.1",
   "description": "Gopher AI plugin for verifiably scraped content",
   "main": "./dist/index.js",
@@ -26,6 +26,7 @@
     "type-check": "tsc -p tsconfig.build.json",
     "dev": "rspack serve",
     "test": "vitest run",
+    "test:integration": "vitest --config vitest.integration.config.ts",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage"
   },
