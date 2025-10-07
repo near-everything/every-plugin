@@ -10,16 +10,20 @@ import { nearai } from "./nearai-provider";
 const NEAR_AI_API_KEY = Bun.env.NEAR_AI_API_KEY;
 const BOT_OWNER_ID = Bun.env.BOT_OWNER_ID;
 
-const STATIC_SYSTEM_PROMPT = `You are efizzybusybot running on DeepSeek V3.1, powered by NEAR private AI inference.
-All conversations run in a Trusted Execution Environment (TEE), meaning data stays private and never leaves the secure environment.
+const STATIC_SYSTEM_PROMPT = `You are efizzybusybot in an ONGOING conversation.
+
+CRITICAL CONVERSATION RULES:
+- This is a continuing conversation - DO NOT greet again or repeat introductions you've already made
+- Only share information that's directly relevant to the current question
+- Be concise - don't rehash everything you know unless specifically asked
+- Stay focused on what the user is asking RIGHT NOW
+
+You run on DeepSeek V3.1, powered by NEAR private AI inference in a TEE (Trusted Execution Environment). All data stays private and secure.
 
 Core behavior:
-- Be helpful, concise, and friendly to everyone
+- Be helpful, concise, and friendly
 - Never provide harmful, illegal, or dangerous information
-- You can learn from your interactions and adapt over time
-
-You have access to:
-- Past conversation history and memories through semantic search`;
+- You can learn from interactions and adapt over time`;
 
 const buildOwnerContext = (isFromOwner: boolean) => {
   if (!isFromOwner) return '';
@@ -30,6 +34,36 @@ const buildOwnerContext = (isFromOwner: boolean) => {
 - You can execute admin commands only for them (like /ban, /kick, /settings)
 - Regular conversation and info requests from others are fine - answer those for everyone`;
 };
+
+// Use cheaper model to summarize relevant memories
+const summarizeMemories = (relevantMemories: Message[]) =>
+  Effect.gen(function* () {
+    if (relevantMemories.length === 0) return '';
+
+    const memoryText = relevantMemories
+      .map((m, i) => `${i+1}. ${m.content}`)
+      .join('\n');
+
+    const { text } = yield* Effect.tryPromise({
+      try: async () => {
+        return await generateText({
+          model: nearai('qwen-2.5-7b-instruct'),
+          messages: [{
+            role: 'system',
+            content: 'Extract key facts and information from these past messages as a concise bulleted list. Focus on names, projects, preferences, and important context. Keep it under 100 words.'
+          }, {
+            role: 'user',
+            content: memoryText
+          }],
+          maxOutputTokens: 150,
+          temperature: 0.3  // Low temp for consistent extraction
+        });
+      },
+      catch: (error) => new Error(`Memory summarization failed: ${error}`)
+    });
+
+    return text;
+  });
 
 export class NearAiService extends Effect.Service<NearAiService>()(
   "NearAiService",
@@ -78,13 +112,17 @@ export class NearAiService extends Effect.Service<NearAiService>()(
 
             const relevantMemories = yield* databaseService.searchMessagesByEmbedding(
               queryEmbedding,
-              5
+              3  // Reduced from 5 for better focus
             );
 
-            const memoryContext = relevantMemories.length > 0
-              ? `\n\nRelevant past conversations:\n${relevantMemories
-                .map(m => `${m.authorUsername || 'User'}: ${m.content}`)
-                .join('\n')}`
+            // Summarize memories using cheaper model for cost efficiency
+            const memorySummary = yield* Effect.catchAll(
+              summarizeMemories(relevantMemories),
+              () => Effect.succeed('') // Graceful degradation if summarization fails
+            );
+
+            const memoryContext = memorySummary
+              ? `\n\nKey context from past interactions:\n${memorySummary}`
               : '';
 
             if (relevantMemories.length > 0) {

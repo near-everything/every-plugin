@@ -230,7 +230,7 @@ export const processMessage = (
 
 
     if (shouldRespond(ctx)) {
-      const conversationHistory = yield* db.getConversationHistory(chatId, 10);
+      const conversationHistory = yield* db.getConversationHistory(chatId, 3);
 
       const { response, commandType } = yield* generateAiResponse(content, ctx, conversationHistory, messageId, logContext);
 
