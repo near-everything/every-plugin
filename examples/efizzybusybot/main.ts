@@ -10,8 +10,7 @@ import { logger as honoLogger } from "hono/logger";
 import type TelegramPlugin from "../../plugins/telegram/src";
 import { DatabaseService } from "./services/db.service";
 import { EmbeddingsService } from "./services/embeddings.service";
-import { EntityExtractionService } from "./services/entity-extraction.service";
-import { KnowledgeGraphService } from "./services/knowledge-graph.service";
+
 import { LoggerService } from "./services/logger.service";
 import { NearAiService } from "./services/nearai.service";
 import { processMessage } from "./worker";
@@ -35,7 +34,7 @@ const useWebhooks = !!WEBHOOK_DOMAIN;
 const runtime = createPluginRuntime<TelegramBindings>({
   registry: {
     "@curatedotfun/telegram": {
-      remoteUrl: "https://elliot-braem-64-curatedotfun-telegram-ever-d4a8166e2-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-117-curatedotfun-telegram-every-plug-6a7102ecd-ze.zephyrcloud.app/remoteEntry.js",
     }
   },
   secrets: {
@@ -109,6 +108,7 @@ const createHttpServer = (plugin: EveryPlugin.Infer<typeof runtime, "@curatedotf
 
   const { initialized, router } = plugin;
 
+  // @ts-expect-error some mismatch in types
   const handler = new RPCHandler(router);
 
   app.use("/telegram/*", async (c, next) => {
@@ -238,19 +238,12 @@ const program = Effect.gen(function* () {
 
 });
 
-const MainLayer = Layer.mergeAll(
+const AppLayer = Layer.mergeAll(
   DatabaseService.Default,
   EmbeddingsService.Default,
-  LoggerService.Default
-);
-
-const DependentLayer = Layer.mergeAll(
-  EntityExtractionService.Default,
-  KnowledgeGraphService.Default,
+  LoggerService.Default,
   NearAiService.Default
-).pipe(Layer.provide(MainLayer));
-
-const AppLayer = Layer.merge(MainLayer, DependentLayer);
+);
 
 await Effect.runPromise(
   program.pipe(

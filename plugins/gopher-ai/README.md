@@ -1,6 +1,6 @@
 # GopherAI Plugin
 
-A plugin for accessing Twitter, TikTok, and Reddit data through the [GopherAI/Masa Data API](https://data.gopher-ai.com/). Provides streaming search, similarity search, and comprehensive social media data access for the every-plugin framework.
+A plugin for accessing Twitter, TikTok, and Reddit data through the [GopherAI API](https://data.gopher-ai.com/). Provides streaming search, similarity search, and comprehensive social media data access for the every-plugin framework.
 
 ## Installation
 

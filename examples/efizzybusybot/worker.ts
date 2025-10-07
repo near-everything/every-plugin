@@ -4,7 +4,6 @@ import type { Update } from "telegraf/types";
 import type { NewMessage } from "./schemas/database";
 import { DatabaseService } from "./services/db.service";
 import { EmbeddingsService } from "./services/embeddings.service";
-import { EntityExtractionService } from "./services/entity-extraction.service";
 import type { LogContext } from "./services/logger.service";
 import { LoggerService } from "./services/logger.service";
 import { NearAiService } from "./services/nearai.service";
@@ -228,23 +227,7 @@ export const processMessage = (
       );
     }
 
-    if (content.trim().length > 10) {
-      const entityExtraction = yield* EntityExtractionService;
-      yield* entityExtraction.processAndStore(content, messageId, logContext).pipe(
-        Effect.catchAll((error) =>
-          logger.warn(
-            logContext,
-            "Worker",
-            "processMessage",
-            "Entity extraction failed (non-critical)",
-            {
-              error: error instanceof Error ? error.message : String(error),
-              contentPreview: content.slice(0, 100),
-            }
-          ).pipe(Effect.as(Effect.void))
-        )
-      );
-    }
+
 
     if (shouldRespond(ctx)) {
       const conversationHistory = yield* db.getConversationHistory(chatId, 10);
