@@ -525,6 +525,141 @@ export default createPlugin({
 });
 ```
 
+## Documentation & Deployment
+
+After building your plugin, document it well and deploy it so others can use it.
+
+### Writing Good READMEs
+
+Your plugin should have a user-friendly README and the technical LLM.txt (this file) for builders.
+
+**README.md Structure:**
+- **Title and Description** - What your plugin does, who it's for
+- **Installation** - How to add to registry
+- **Usage Examples** - Copy-paste ready code for common use cases
+- **Configuration** - What variables/secrets are needed
+- **Link to LLM.txt** - Point developers to this detailed guide
+
+Example README structure:
+```markdown
+# My Plugin
+
+A plugin for connecting to [External Service] APIs.
+
+## Installation
+
+Add to your registry:
+```javascript
+const registry = {
+  "my-org/my-plugin": {
+    remoteUrl: "https://cdn.example.com/plugins/my-plugin/remoteEntry.js",
+    version: "1.0.0"
+  }
+};
+```
+
+## Usage
+
+```typescript
+const { client } = await runtime.usePlugin("my-org/my-plugin", {
+  variables: { apiUrl: "https://api.external.com" },
+  secrets: { apiKey: "{{API_KEY}}" }
+});
+
+// Single query
+const data = await client.getData({ id: "123" });
+
+// Streaming
+for await (const item of client.streamData({ query: "search" })) {
+  console.log(item);
+}
+```
+
+## Configuration
+
+Required secrets:
+- `API_KEY` - Your external service API key
+
+Optional variables:
+- `timeout` - Request timeout in milliseconds (default: 10000)
+
+---
+
+**For developers building integrations, see [LLM.txt](./LLM.txt).**
+```
+
+### Build Process
+
+Use the included rspack config for Module Federation builds:
+
+```bash
+# Development server with hot reload
+npm run dev         # Serves at http://localhost:3014
+
+# Production build
+npm run build       # Creates dist/ with remoteEntry.js
+```
+
+The build config handles:
+- **Module Federation** - Shares dependencies to reduce bundle size
+- **Zephyr Integration** - For easy CDN deployment
+- **Source Maps** - For debugging remote plugins
+
+### Registry Configuration
+
+Deploy and register your plugin for others to use.
+
+**Local Development Registry:**
+For testing during development - no deployment needed:
+
+```typescript
+import { createLocalPluginRuntime } from "every-plugin/runtime";
+import MyPlugin from "./src/index";
+
+const runtime = createLocalPluginRuntime(
+  { registry: {} },  // Empty registry - plugins loaded locally
+  { "my-plugin": MyPlugin }  // Direct import, same API
+);
+```
+
+**Remote Production Registry:**
+Deploy to a CDN/hosting service, then register:
+
+```javascript
+// Method 1: Localhost for testing
+const runtime = createPluginRuntime({
+  registry: {
+    "my-org/my-plugin": {
+      remoteUrl: "http://localhost:3014/remoteEntry.js",  // From dev server
+      version: "1.0.0"
+    }
+  }
+});
+
+// Method 2: Remote CDN (after deployment)
+const runtime = createPluginRuntime({
+  registry: {
+    "my-org/my-plugin": {
+      remoteUrl: "https://cdn.zephyr.com/v123/plugins/my-plugin/remoteEntry.js",
+      version: "1.0.0"
+    }
+  }
+});
+
+// Same usage API for both!
+const { client } = await runtime.usePlugin("my-org/my-plugin", {
+  variables: { timeout: 30000 },
+  secrets: { apiKey: "{{PROD_API_KEY}}" }  // Template injection
+});
+```
+
+**Deployment Options:**
+1. **Zephyr** - Automatic CDN deployment (`npm run deploy`)
+2. **Manual Upload** - Build then upload `dist/remoteEntry.js` to CDN
+3. **Self-hosted** - Serve from your own infrastructure
+
+Once deployed, share the `remoteUrl` so others can add to their registries.
+
 ## Common Pitfalls
 
 1. **Don't return raw Effects from handlers** - use `Effect.runPromise`
