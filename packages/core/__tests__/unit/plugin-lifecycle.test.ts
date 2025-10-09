@@ -32,9 +32,8 @@ describe("Plugin Lifecycle Unit Tests", () => {
   it("should handle complete plugin lifecycle", { timeout: 4000 }, async () => {
     const pluginConstructor = await runtime.loadPlugin("test-plugin");
     expect(pluginConstructor).toBeDefined();
-    expect(pluginConstructor.metadata.pluginId).toBe("test-plugin");
 
-    const pluginInstance = await runtime.instantiatePlugin(pluginConstructor);
+    const pluginInstance = await runtime.instantiatePlugin("test-plugin", pluginConstructor);
     expect(pluginInstance).toBeDefined();
     expect(pluginInstance.plugin).toBeDefined();
     expect(pluginInstance.plugin.id).toBe("test-plugin");
@@ -134,7 +133,6 @@ describe("Plugin Lifecycle Unit Tests", () => {
     const result1 = await runtime.usePlugin("test-plugin", TEST_CONFIG);
     const result2 = await runtime.usePlugin("test-plugin", TEST_CONFIG);
 
-    expect(result1.metadata.pluginId).toBe(result2.metadata.pluginId);
     expect(result1.initialized.plugin.id).toBe(result2.initialized.plugin.id);
   });
 

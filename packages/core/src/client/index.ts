@@ -28,7 +28,7 @@ export function getPluginRouter<T extends AnyPlugin>(
   }
   
   if (typeof initialized.plugin.createRouter !== "function") {
-    throw new Error(`Plugin ${initialized.metadata?.pluginId || 'unknown'} does not have a createRouter method`);
+    throw new Error(`Plugin ${initialized.plugin.id || 'unknown'} does not have a createRouter method`);
   }
   
   if (!initialized.context) {

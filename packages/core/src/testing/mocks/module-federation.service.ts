@@ -1,9 +1,9 @@
 import { Effect, Layer } from "effect";
-import type { PluginConstructorWithBinding } from "../../plugin";
+import type { LoadedPluginWithBinding } from "../../plugin";
 import { ModuleFederationError } from "../../runtime/errors";
 import { ModuleFederationService } from "../../runtime/services/module-federation.service";
 
-export type PluginMap = Record<string, PluginConstructorWithBinding<any, any, any, any>>;
+export type PluginMap = Record<string, LoadedPluginWithBinding<any, any, any, any>>;
 
 export const createMockModuleFederationServiceLayer = (pluginMap: PluginMap) =>
   Layer.succeed(

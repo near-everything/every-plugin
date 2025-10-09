@@ -47,13 +47,13 @@ describe("Module Federation Integration Tests", () => {
     expect(ctor).not.toBeNull();
   });
 
-  it("should instantiate plugin from remote constructor", async () => {
+  it("should instantiate plugin from loaded plugin", async () => {
     const pluginRuntime = createPluginRuntime<TestBindings>({
       registry: TEST_REGISTRY,
     });
 
-    const ctor = await pluginRuntime.loadPlugin("test-plugin");
-    const instance = await pluginRuntime.instantiatePlugin(ctor);
+    const loadedPlugin = await pluginRuntime.loadPlugin("test-plugin");
+    const instance = await pluginRuntime.instantiatePlugin("test-plugin", loadedPlugin);
 
     expect(instance).toBeDefined();
     expect(instance.plugin).toBeDefined();

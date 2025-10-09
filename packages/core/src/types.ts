@@ -1,11 +1,9 @@
 import type { AnyContractRouter } from "@orpc/contract";
-import type { Context, Router } from "@orpc/server";
+import type { Context, RouterClient } from "@orpc/server";
 import type { Scope } from "effect";
 import type { z } from "zod";
-import type { Plugin, PluginConfigFor, PluginConstructorWithBinding } from "./plugin";
+import type { Plugin, PluginConfigFor } from "./plugin";
 import type { PluginRuntime } from "./runtime";
-
-export type AnyContract = Router<AnyContractRouter, any>
 
 /**
  * Base type for any plugin instance.
@@ -56,52 +54,10 @@ export type RouterOf<T extends AnyPlugin> = ReturnType<T["createRouter"]>;
 export type ContextOf<T extends AnyPlugin> = T extends Plugin<AnyContractRouter, z.ZodTypeAny, z.ZodTypeAny, infer TContext> ? TContext : never;
 
 /**
- * Infers binding definitions from plugin constructor objects.
- * Used to derive RegistryBindings from a collection of plugin constructors.
- */
-export type InferBindingsFromPlugins<T> = {
-  [K in keyof T]:
-  T[K] extends PluginConstructorWithBinding<infer C, infer V, infer S, infer Ctx>
-  ? { contract: C; config: PluginConfigFor<V, S> }
-  : never;
-};
-
-/**
- * Converts registry bindings to plugin constructor types.
- * This is used internally by the runtime to maintain type safety.
- */
-export type PluginBindingsFor<R extends RegistryBindings> = {
-  [K in keyof R]:
-  R[K] extends { contract: infer C; config: infer Conf }
-  ? Conf extends PluginConfigFor<infer V, infer S>
-  ? C extends AnyContractRouter
-  ? PluginConstructorWithBinding<C, V, S, Context>
-  : never
-  : never
-  : never;
-};
-
-/**
  * Runtime registry configuration.
  * Maps plugin IDs to their remote URLs and metadata.
  */
-export type PluginRegistry = Record<string, {
-  remoteUrl: string;
-  version?: string;
-  description?: string;
-}>;
-
-/**
- * Type-safe registry that enforces key alignment with bindings.
- * When used with RegistryBindings, ensures plugin IDs match between registry and type definitions.
- */
-export type PluginRegistryFor<R extends RegistryBindings> = {
-  [K in keyof R]: {
-    remoteUrl: string;
-    version?: string;
-    description?: string;
-  };
-};
+export type PluginRegistry = Record<string, PluginMetadata>;
 
 /**
  * Configuration for secrets injection.
@@ -112,44 +68,38 @@ export interface SecretsConfig {
 }
 
 /**
- * Plugin constructor with metadata.
- * Represents a loaded plugin class ready for instantiation.
+ * Shared metadata for plugin lifecycle stages.
+ * Contains information about the plugin that persists across different stages.
  */
-export interface PluginConstructor<T extends AnyPlugin = AnyPlugin> {
+export type PluginMetadata = {
+  readonly remoteUrl: string;
+  readonly version?: string;
+  readonly description?: string;
+};
+
+/**
+ * Loaded plugin with metadata.
+ */
+export interface LoadedPlugin<T extends AnyPlugin = AnyPlugin> {
   readonly ctor: new () => T;
-  readonly metadata: {
-    readonly pluginId: string;
-    readonly version?: string;
-    readonly description?: string;
-    readonly type?: string;
-  };
+  readonly metadata: PluginMetadata;
 }
 
 /**
  * Instantiated plugin with metadata.
- * Represents a plugin instance ready for initialization.
  */
 export interface PluginInstance<T extends AnyPlugin = AnyPlugin> {
   readonly plugin: T;
-  readonly metadata: {
-    readonly pluginId: string;
-    readonly version?: string;
-    readonly description?: string;
-  };
+  readonly metadata: PluginMetadata;
 }
 
 /**
  * Fully initialized plugin ready for use.
  * Contains the plugin instance, validated config, execution context, and scope.
- * This is what gets passed to createPluginClient for type-safe procedure calls.
  */
 export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
   readonly plugin: T;
-  readonly metadata: {
-    readonly pluginId: string;
-    readonly version?: string;
-    readonly description?: string;
-  };
+  readonly metadata: PluginMetadata;
   readonly config: z.infer<T["configSchema"]>;
   readonly context: ContextOf<T>;
   readonly scope: Scope.CloseableScope;
@@ -159,6 +109,9 @@ export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
  * Runtime options for plugin execution and resource management.
  */
 export interface RuntimeOptions {
+  // TODO: BELOW ARE ALL HYPOTHETICAL, HAVE NOT BEEN IMPLEMENTED.
+
+
   /** Resource isolation level for plugins */
   isolation?: "strict" | "shared" | "none";
   /** Memory limit per plugin instance */
@@ -177,13 +130,9 @@ export interface RuntimeOptions {
  * Enhanced plugin result containing client, router, and metadata.
  */
 export interface EveryPlugin<T extends AnyPlugin = AnyPlugin> {
-  readonly client: import("@orpc/server").RouterClient<RouterOf<T>, Record<never, never>>;
+  readonly client: RouterClient<RouterOf<T>, Record<never, never>>;
   readonly router: RouterOf<T>;
-  readonly metadata: {
-    readonly pluginId: string;
-    readonly version?: string;
-    readonly description?: string;
-  };
+  readonly metadata: PluginMetadata;
   readonly initialized: InitializedPlugin<T>;
 }
 

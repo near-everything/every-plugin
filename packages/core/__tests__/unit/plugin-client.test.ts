@@ -10,7 +10,6 @@ const TEST_PLUGIN_MAP = {
 const TEST_REGISTRY: PluginRegistry = {
   "test-plugin": {
     remoteUrl: "http://localhost:3999/remoteEntry.js",
-    type: "source",
     version: "0.0.1",
   },
 };

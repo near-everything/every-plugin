@@ -44,7 +44,7 @@ describe("Plugin Lifecycle Integration Tests", () => {
     const pluginConstructor = await pluginRuntime.loadPlugin("test-plugin");
     expect(pluginConstructor).toBeDefined();
 
-    const pluginInstance = await pluginRuntime.instantiatePlugin(pluginConstructor);
+    const pluginInstance = await pluginRuntime.instantiatePlugin("test-plugin", pluginConstructor);
     expect(pluginInstance).toBeDefined();
     expect(pluginInstance.plugin).toBeDefined();
 

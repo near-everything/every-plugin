@@ -363,7 +363,7 @@ describe("Integration Tests", () => {
         variables: { timeout: 30000 }
       });
 
-      expect(metadata.pluginId).toBe("real-plugin");
+      expect(metadata.id).toBe("real-plugin");
 
       const result = yield* Effect.tryPromise(() =>
         client.getData({ id: "test" })

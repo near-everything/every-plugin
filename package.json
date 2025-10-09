@@ -1,10 +1,10 @@
 {
 	"name": "run-every-app",
 	"devDependencies": {
-		"turbo": "^2.5.4",
 		"@biomejs/biome": "^2.2.0",
 		"husky": "^9.1.7",
-		"lint-staged": "^16.1.2"
+		"lint-staged": "^16.1.2",
+		"turbo": "^2.5.4"
 	},
 	"lint-staged": {
 		"*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [

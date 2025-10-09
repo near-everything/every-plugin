@@ -3,10 +3,6 @@ import type { Context, Router } from "@orpc/server";
 import { Effect, type Scope } from "effect";
 import { z } from "zod";
 
-/**
- * Derive router type from contract at the type level
- */
-type RouterFromContract<C extends AnyContractRouter, TContext extends Context = Record<never, never>> = Router<C, TContext>;
 
 /**
  * Helper type that correctly constructs the config schema type
@@ -15,9 +11,9 @@ export type PluginConfigFor<V extends z.ZodTypeAny, S extends z.ZodTypeAny> =
 	z.ZodObject<{ variables: V; secrets: S }>;
 
 /**
- * Plugin constructor with static binding property
+ * Loaded plugin with static binding property
  */
-export interface PluginConstructorWithBinding<
+export interface LoadedPluginWithBinding<
 	TContract extends AnyContractRouter,
 	TVariables extends z.ZodTypeAny,
 	TSecrets extends z.ZodTypeAny,
@@ -112,7 +108,7 @@ export interface Plugin<
 	 * @param context The initialized plugin context
 	 * @returns A router with procedures matching the plugin's contract
 	 */
-	createRouter(context?: TContext): RouterFromContract<TContract, TContext>;
+	createRouter(context?: TContext): Router<TContract, TContext>;
 }
 
 /**
@@ -131,7 +127,7 @@ export function createPlugin<
 	initialize?: (
 		config: { variables: z.infer<V>; secrets: z.infer<S> }
 	) => Effect.Effect<TContext, Error, Scope.Scope>;
-	createRouter: (ctx: TContext) => RouterFromContract<TContract, TContext>;
+	createRouter: (ctx: TContext) => Router<TContract, TContext>;
 	shutdown?: (ctx: TContext) => Effect.Effect<void, Error, never>;
 }) {
 	const configSchema = z.object({
@@ -169,7 +165,7 @@ export function createPlugin<
 			});
 		}
 
-		createRouter(context: TContext): RouterFromContract<TContract, TContext> {
+		createRouter(context: TContext): Router<TContract, TContext> {
 			return config.createRouter(context);
 		}
 	}
@@ -187,5 +183,5 @@ export function createPlugin<
 		config: configSchema
 	};
 
-	return PluginConstructor as PluginConstructorWithBinding<TContract, V, S, TContext>;
+	return PluginConstructor as LoadedPluginWithBinding<TContract, V, S, TContext>;
 }

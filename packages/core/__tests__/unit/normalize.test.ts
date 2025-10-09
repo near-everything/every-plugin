@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { getNormalizedRemoteName } from "../../src/runtime/services/normalize";
 
 describe("getNormalizedRemoteName", () => {
@@ -25,7 +25,7 @@ describe("getNormalizedRemoteName", () => {
     // These test cases ensure parity with the rspack config usage
     const testCases = [
       "@scope/masa-source",
-      "@scope/telegram", 
+      "@scope/telegram",
       "@everything/test-plugin",
       "simple-plugin",
       "@SCOPE/Foo/Bar"
@@ -33,7 +33,7 @@ describe("getNormalizedRemoteName", () => {
 
     testCases.forEach(pluginName => {
       const normalized = getNormalizedRemoteName(pluginName);
-      
+
       // Verify it follows the expected pattern
       expect(normalized).toMatch(/^[a-z0-9_-]*$/);
       expect(normalized).not.toMatch(/^@/);

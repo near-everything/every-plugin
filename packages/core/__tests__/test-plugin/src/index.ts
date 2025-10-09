@@ -300,7 +300,7 @@ export const TestPlugin = createPlugin({
 					const event = await Effect.runPromise(Queue.take(backgroundQueue));
 					yield event;
 					count++;
-				} catch (error) {
+				} catch {
 					break;
 				}
 			}

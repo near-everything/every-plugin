@@ -1,11 +1,12 @@
-import { Cause, Effect, Exit, Hash, Layer, ManagedRuntime, Option } from "effect";
+import { Cause, Effect, Exit, Hash, ManagedRuntime, Option } from "effect";
 import type { z } from "zod";
 import { createPluginClient, getPluginRouter } from "../client/index";
 import type {
 	AnyPlugin,
+	ConfigOf,
 	EveryPlugin,
 	InitializedPlugin,
-	PluginConstructor,
+	LoadedPlugin,
 	PluginInstance,
 	PluginOf,
 	PluginRegistry,
@@ -60,20 +61,21 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 		return exit.value;
 	}
 
-	loadPlugin<K extends keyof R>(pluginId: K): Promise<PluginConstructor<PluginOf<R[K]>>> {
+	loadPlugin<K extends keyof R>(pluginId: K): Promise<LoadedPlugin<PluginOf<R[K]>>> {
 		const effect = Effect.gen(this, function* () {
 			const pluginService = yield* PluginService;
 			const validatedId = yield* this.validatePluginId(pluginId);
 			const result = yield* pluginService.loadPlugin(validatedId);
-			return result as PluginConstructor<PluginOf<R[K]>>;
+			return result as LoadedPlugin<PluginOf<R[K]>>;
 		});
 		return this.runPromise(effect);
 	}
 
-	instantiatePlugin<K extends keyof R>(ctor: PluginConstructor<PluginOf<R[K]>>): Promise<PluginInstance<PluginOf<R[K]>>> {
+	instantiatePlugin<K extends keyof R>(pluginId: K, loadedPlugin: LoadedPlugin<PluginOf<R[K]>>): Promise<PluginInstance<PluginOf<R[K]>>> {
 		const effect = Effect.gen(this, function* () {
 			const pluginService = yield* PluginService;
-			const result = yield* pluginService.instantiatePlugin(ctor as PluginConstructor<AnyPlugin>);
+			const pluginIdStr = pluginId as string;
+			const result = yield* pluginService.instantiatePlugin(pluginIdStr, loadedPlugin);
 			return result as PluginInstance<PluginOf<R[K]>>;
 		});
 		return this.runPromise(effect);
@@ -82,7 +84,9 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 	initializePlugin<K extends keyof R>(
 		instance: PluginInstance<PluginOf<R[K]>>,
 		config: z.infer<PluginOf<R[K]>["configSchema"]>
-	): Promise<InitializedPlugin<PluginOf<R[K]>>> {
+	): Promise<InitializedPlugin<PluginOf<R[K]>> & {
+		config: ConfigOf<R[K]>;
+	}> {
 		const effect = Effect.gen(this, function* () {
 			const pluginService = yield* PluginService;
 			const result = yield* pluginService.initializePlugin(
@@ -97,7 +101,11 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 	async usePlugin<K extends keyof R>(
 		pluginId: K,
 		config: z.infer<PluginOf<R[K]>["configSchema"]>
-	): Promise<EveryPlugin<PluginOf<R[K]>>> {
+	): Promise<EveryPlugin<PluginOf<R[K]>> & {
+		initialized: InitializedPlugin<PluginOf<R[K]>> & {
+			config: ConfigOf<R[K]>;
+		};
+	}> {
 		const cacheKey = this.generateCacheKey(String(pluginId), config);
 
 		let cachedPlugin = this.pluginCache.get(cacheKey);
@@ -108,7 +116,7 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 
 				// Load → Instantiate → Initialize
 				const ctor = yield* pluginService.loadPlugin(validatedId);
-				const instance = yield* pluginService.instantiatePlugin(ctor);
+				const instance = yield* pluginService.instantiatePlugin(String(pluginId), ctor);
 				const _initialized = yield* pluginService.initializePlugin(instance, config);
 
 				type PluginType = PluginOf<R[K]>;

@@ -3,7 +3,7 @@ import type { z } from "zod";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
-	PluginConstructor,
+	LoadedPlugin,
 	PluginInstance,
 	PluginRegistry
 } from "../../types";
@@ -72,22 +72,20 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 
 					return {
 						ctor,
-						metadata: {
-							pluginId,
-							version: metadata.version
-						},
-					} satisfies PluginConstructor;
+						metadata: metadata,
+					} satisfies LoadedPlugin;
 				}),
 
 			instantiatePlugin: <T extends AnyPlugin>(
-				pluginConstructor: PluginConstructor<T>,
+				pluginId: string,
+				loadedPlugin: LoadedPlugin<T>,
 			) =>
 				Effect.gen(function* () {
-					const instance = yield* Effect.try(() => new pluginConstructor.ctor()).pipe(
+					const instance = yield* Effect.try(() => new loadedPlugin.ctor()).pipe(
 						Effect.mapError((error) =>
 							toPluginRuntimeError(
 								error,
-								pluginConstructor.metadata.pluginId,
+								pluginId,
 								undefined,
 								"instantiate-plugin",
 								false,
@@ -96,13 +94,13 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 					);
 
 					// Validate plugin ID matches
-					if (instance.id !== pluginConstructor.metadata.pluginId) {
+					if (instance.id !== pluginId) {
 						return yield* Effect.fail(
 							new PluginRuntimeError({
-								pluginId: pluginConstructor.metadata.pluginId,
+								pluginId,
 								operation: "validate-plugin-id",
 								cause: new Error(
-									`Plugin ID mismatch: expected ${pluginConstructor.metadata.pluginId}, got ${instance.id}`,
+									`Plugin ID mismatch: expected ${pluginId}, got ${instance.id}`,
 								),
 								retryable: false,
 							}),
@@ -111,7 +109,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 
 					return {
 						plugin: instance,
-						metadata: pluginConstructor.metadata,
+						metadata: loadedPlugin.metadata,
 					} satisfies PluginInstance<T>;
 				}),
 
@@ -143,7 +141,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 						validatedConfig
 					);
 
-					const finalConfig = yield* validate(
+					const _config = yield* validate(
 						plugin.configSchema,
 						hydratedConfig,
 						plugin.id,
@@ -163,7 +161,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 					const scope = yield* Scope.make();
 
 					// Initialize plugin within the scope
-					const context = yield* plugin.initialize(finalConfig).pipe(
+					const context = yield* plugin.initialize(_config).pipe(
 						Effect.provideService(Scope.Scope, scope),
 						Effect.mapError((error) =>
 							toPluginRuntimeError(error, plugin.id, undefined, "initialize-plugin", false),
@@ -173,7 +171,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 					return {
 						plugin,
 						metadata: pluginInstance.metadata,
-						config: finalConfig as z.infer<T["configSchema"]>,
+						config: _config as z.infer<T["configSchema"]>,
 						context,
 						scope,
 					} satisfies InitializedPlugin<T>;

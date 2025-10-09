@@ -1,5 +1,5 @@
 import type { PluginRegistry } from "every-plugin";
-import { createLocalPluginRuntime, type PluginMap } from "every-plugin/testing";
+import { createLocalPluginRuntime } from "every-plugin/testing";
 import { beforeAll, describe, expect, it } from "vitest";
 import TemplatePlugin from "../../index";
 

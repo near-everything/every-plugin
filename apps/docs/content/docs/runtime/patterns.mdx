@@ -55,7 +55,7 @@ type SocialApiPlugin = EveryPlugin.Infer<typeof runtime, "social-api">;
 
 // Type-safe logging middleware
 function logPluginUsage(plugin: SocialApiPlugin) {
-  console.log(`[${plugin.metadata.pluginId}] v${plugin.metadata.version}`);
+  console.log(`[${plugin.metadata.id}] v${plugin.metadata.version}`);
 }
 
 // Type-safe error handling wrapper
@@ -66,7 +66,7 @@ async function withErrorHandling<T>(
   try {
     return await operation();
   } catch (error) {
-    console.error(`Plugin ${plugin.metadata.pluginId} failed:`, error);
+    console.error(`Plugin ${plugin.metadata.id} failed:`, error);
     throw error;
   }
 }
