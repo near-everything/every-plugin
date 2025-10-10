@@ -1,8 +1,14 @@
+import { Mermaid } from "@/components/mermaid";
+import { LLMCopyButton, ViewOptions } from "@/components/page-actions";
+import { baseOptions } from "@/lib/layout.shared";
+import { source } from "@/lib/source";
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import type { PageTree } from "fumadocs-core/server";
 import { createClientLoader } from "fumadocs-mdx/runtime/vite";
+import { Accordion, Accordions } from "fumadocs-ui/components/accordion";
 import { File, Files, Folder } from "fumadocs-ui/components/files";
+import { Step, Steps } from "fumadocs-ui/components/steps";
 import * as TabsComponents from "fumadocs-ui/components/tabs";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import defaultMdxComponents from "fumadocs-ui/mdx";
@@ -13,10 +19,6 @@ import {
   DocsTitle,
 } from "fumadocs-ui/page";
 import { useMemo } from "react";
-import { Mermaid } from "@/components/mermaid";
-import { LLMCopyButton, ViewOptions } from "@/components/page-actions";
-import { baseOptions } from "@/lib/layout.shared";
-import { source } from "@/lib/source";
 import { docs } from "../../../source.generated";
 
 export const Route = createFileRoute("/docs/$")({
@@ -75,6 +77,10 @@ const clientLoader = createClientLoader(docs.doc, {
               File,
               Folder,
               Files,
+              Accordion,
+              Accordions,
+              Step,
+              Steps,
             }}
           />
         </DocsBody>

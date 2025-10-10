@@ -1,0 +1,624 @@
+---
+title: Creating Plugins
+description: Build type-safe plugins with oRPC contracts
+---
+
+Plugins are built using the `createPlugin()` factory with [oRPC](https://orpc.io/) contracts. This guide provides a complete walkthrough of the plugin creation process.
+
+## Plugin Anatomy
+
+Every plugin has four key parts:
+
+1. **Contract** - oRPC routes defining procedures, inputs, and outputs
+2. **Service** - Plain class encapsulating external API logic
+3. **Config Schema** - Variables (non-sensitive) and secrets (sensitive) configuration
+4. **Plugin** - Wires everything together with `createPlugin()`
+
+### File Structure
+
+```
+plugins/my-plugin/
+├── src/
+│   ├── contract.ts    # API definition
+│   ├── service.ts     # Business logic
+│   └── index.ts       # Plugin implementation
+├── package.json
+├── tsconfig.json
+└── rspack.config.cjs  # Module Federation build
+```
+
+## Step 1: Define the Contract
+
+The contract defines your plugin's API using oRPC:
+
+```typescript title="src/contract.ts"
+import { oc } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+import { CommonPluginErrors } from "every-plugin";
+
+// Define data schemas
+export const ItemSchema = z.object({
+  externalId: z.string(),
+  content: z.string(),
+  createdAt: z.string().datetime().optional(),
+  url: z.string().url().optional(),
+  raw: z.unknown() // Original API response
+});
+
+// Define contract with routes
+export const contract = oc.router({
+  // Single item fetch
+  getById: oc.route({ method: 'POST', path: '/getById' })
+    .input(z.object({ id: z.string() }))
+    .output(z.object({ item: ItemSchema.optional() }))
+    .errors(CommonPluginErrors),
+  
+  // Bulk fetch
+  getBulk: oc.route({ method: 'POST', path: '/getBulk' })
+    .input(z.object({ 
+      ids: z.array(z.string()).max(100) 
+    }))
+    .output(z.object({ 
+      items: z.array(ItemSchema) 
+    }))
+    .errors(CommonPluginErrors),
+  
+  // Search
+  search: oc.route({ method: 'POST', path: '/search' })
+    .input(z.object({
+      query: z.string().min(1),
+      limit: z.number().min(1).max(1000).optional()
+    }))
+    .output(z.object({
+      items: z.array(ItemSchema),
+      hasMore: z.boolean()
+    }))
+    .errors(CommonPluginErrors)
+});
+```
+
+<Callout type="info">
+Routes with `{ method: 'POST', path: '/...' }` enable OpenAPI support. Learn more: [oRPC Routes](https://orpc.io/docs/contract-first/define-contract#routes)
+</Callout>
+
+## Step 2: Create the Service
+
+The service is a plain class, you can do whatever you want here:
+
+```typescript title="src/service.ts"
+import { Effect } from "every-plugin/effect";
+
+export class MyService {
+  constructor(
+    private apiKey: string,
+    private baseUrl: string
+  ) {}
+  
+  // Return Effect for all async operations
+  getById(id: string) {
+    return Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(`${this.baseUrl}/items/${id}`, {
+          headers: { 
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return response.json();
+      },
+      catch: (error: unknown) => {
+        return new Error(`Failed to fetch item: ${error}`);
+      }
+    });
+  }
+  
+  getBulk(ids: string[]) {
+    return Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(`${this.baseUrl}/items/bulk`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ ids })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        return response.json();
+      },
+      catch: (error: unknown) => {
+        return new Error(`Failed to fetch items: ${error}`);
+      }
+    });
+  }
+  
+  search(query: string, limit?: number) {
+    return Effect.tryPromise({
+      try: async () => {
+        const params = new URLSearchParams({ 
+          q: query,
+          ...(limit && { limit: limit.toString() })
+        });
+        
+        const response = await fetch(
+          `${this.baseUrl}/search?${params}`,
+          {
+            headers: { 
+              'Authorization': `Bearer ${this.apiKey}` 
+            }
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        return response.json();
+      },
+      catch: (error: unknown) => {
+        return new Error(`Search failed: ${error}`);
+      }
+    });
+  }
+}
+```
+
+<Callout type="info">
+While not necessary, Services should use Effect.tryPromise for error handling. Learn more: [Effect Error Management](https://effect.website/docs/error-management/expected-errors)
+</Callout>
+
+## Step 3: Wire it Together
+
+The plugin implementation connects the contract and service:
+
+```typescript title="src/index.ts"
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import { z } from "every-plugin/zod";
+import { contract } from "./contract";
+import { MyService } from "./service";
+
+export default createPlugin({
+  id: "my-plugin",
+  contract,
+  
+  // Configuration schemas
+  variables: z.object({
+    baseUrl: z.string().url(),
+    timeout: z.number().default(30000)
+  }),
+  
+  secrets: z.object({
+    apiKey: z.string().min(1)
+  }),
+  
+  // Initialize with context
+  initialize: (config) => Effect.gen(function* () {
+    // Create service instance
+    const service = new MyService(
+      config.secrets.apiKey,
+      config.variables.baseUrl
+    );
+    
+    // Test connection
+    yield* Effect.tryPromise({
+      try: () => fetch(`${config.variables.baseUrl}/health`),
+      catch: () => new Error("Connection failed")
+    });
+    
+    // Return context for handlers
+    return { service };
+  }),
+  
+  // Create router with handlers
+  createRouter: (context, builder) => {
+    // builder is pre-configured: implement(contract).$context<TContext>()
+    
+    return {
+      getById: builder.getById.handler(async ({ input, errors }) => {
+        try {
+          const item = await Effect.runPromise(
+            context.service.getById(input.id)
+          );
+          return { item };
+        } catch (error) {
+          throw errors.SERVICE_UNAVAILABLE({
+            message: "Failed to fetch item",
+            data: { retryAfter: 30 }
+          });
+        }
+      }),
+      
+      getBulk: builder.getBulk.handler(async ({ input, errors }) => {
+        try {
+          const items = await Effect.runPromise(
+            context.service.getBulk(input.ids)
+          );
+          return { items };
+        } catch (error) {
+          throw errors.SERVICE_UNAVAILABLE({
+            message: "Failed to fetch items",
+            data: { retryAfter: 30 }
+          });
+        }
+      }),
+      
+      search: builder.search.handler(async ({ input, errors }) => {
+        try {
+          const result = await Effect.runPromise(
+            context.service.search(input.query, input.limit)
+          );
+          return {
+            items: result.items,
+            hasMore: result.hasMore
+          };
+        } catch (error) {
+          throw errors.SERVICE_UNAVAILABLE({
+            message: "Search failed",
+            data: { retryAfter: 30 }
+          });
+        }
+      })
+    };
+  }
+});
+```
+
+## Key Principles
+
+### Import Through every-plugin
+
+Always import Effect, oRPC, and Zod through `every-plugin`:
+
+```typescript
+import { Effect, Stream, Queue } from "every-plugin/effect";
+import { oc, eventIterator } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+```
+
+<Callout type="warning">
+This ensures version consistency across your plugin ecosystem.
+</Callout>
+
+### Context Flow
+
+Context flows from `initialize` → `createRouter` → handlers:
+
+```typescript
+// 1. Initialize returns context
+initialize: (config) => Effect.gen(function* () {
+  const service = new MyService(config.secrets.apiKey);
+  return { service }; // This is your context
+}),
+
+// 2. createRouter receives (context, builder)
+createRouter: (context, builder) => {
+  // context.service available
+  
+  return {
+    // 3. Handlers access context
+    getData: builder.getData.handler(async ({ input }) => {
+      return await context.service.fetch(input.id);
+    })
+  };
+}
+```
+
+### Resource Management
+
+Use `Effect.acquireRelease` for long-lived resources:
+
+```typescript
+initialize: (config) => Effect.gen(function* () {
+  // Resources are scoped to plugin lifetime
+  const queue = yield* Effect.acquireRelease(
+    Queue.bounded(1000),
+    (q) => Queue.shutdown(q) // Cleanup on shutdown
+  );
+  
+  return { queue };
+})
+```
+
+### Background Tasks
+
+Use `Effect.forkScoped` for background tasks:
+
+```typescript
+initialize: (config) => Effect.gen(function* () {
+  const queue = yield* Effect.acquireRelease(
+    Queue.bounded(1000),
+    (q) => Queue.shutdown(q)
+  );
+  
+  // Background task runs until plugin shutdown
+  yield* Effect.forkScoped(
+    Effect.gen(function* () {
+      while (true) {
+        const item = yield* fetchFromAPI();
+        yield* Queue.offer(queue, item);
+        yield* Effect.sleep("1 second");
+      }
+    })
+  );
+  
+  return { queue };
+})
+```
+
+The background task is automatically interrupted when the plugin shuts down.
+
+## Common Patterns
+
+### Simple Data Fetch
+
+Basic plugin without streaming or background tasks:
+
+```typescript
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import { oc } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+
+const ItemSchema = z.object({
+  id: z.string(),
+  data: z.string()
+});
+
+const contract = oc.router({
+  getData: oc.route({ method: 'POST', path: '/getData' })
+    .input(z.object({ id: z.string() }))
+    .output(z.object({ item: ItemSchema }))
+});
+
+class SimpleService {
+  constructor(private apiKey: string) {}
+  
+  fetchOne(id: string) {
+    return Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(`https://api.example.com/items/${id}`, {
+          headers: { Authorization: `Bearer ${this.apiKey}` }
+        });
+        return response.json();
+      },
+      catch: (e: unknown) => new Error(`Failed: ${e}`)
+    });
+  }
+}
+
+export default createPlugin({
+  id: "simple-plugin",
+  contract,
+  variables: z.object({ timeout: z.number().default(30000) }),
+  secrets: z.object({ apiKey: z.string() }),
+  
+  initialize: (config) => Effect.gen(function* () {
+    const service = new SimpleService(config.secrets.apiKey);
+    
+    // Test connection
+    yield* Effect.tryPromise({
+      try: () => fetch('https://api.example.com/health'),
+      catch: () => new Error("Connection failed")
+    });
+    
+    return { service };
+  }),
+  
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input }) => {
+      const item = await Effect.runPromise(
+        context.service.fetchOne(input.id)
+      );
+      return { item };
+    })
+  })
+});
+```
+
+### Streaming Plugin
+
+Plugin with async generator for streaming:
+
+```typescript
+import { eventIterator } from "every-plugin/orpc";
+
+const contract = oc.router({
+  streamItems: oc.route({ method: 'POST', path: '/stream' })
+    .input(z.object({ query: z.string() }))
+    .output(eventIterator(ItemSchema))
+});
+
+// In service
+class StreamService {
+  async *streamItems(query: string) {
+    let cursor: string | undefined;
+    
+    while (true) {
+      const response = await fetch(
+        `https://api.example.com/stream?q=${query}&cursor=${cursor || ''}`
+      );
+      const data = await response.json();
+      
+      for (const item of data.items) {
+        yield item;
+      }
+      
+      if (!data.hasMore) break;
+      cursor = data.cursor;
+      
+      // Prevent tight loops
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+}
+
+// In router
+createRouter: (context, builder) => ({
+  streamItems: builder.streamItems.handler(async function* ({ input }) {
+    yield* context.service.streamItems(input.query);
+  })
+})
+```
+
+### Error Handling
+
+Using `CommonPluginErrors` for consistent error responses:
+
+```typescript
+import { CommonPluginErrors } from "every-plugin";
+
+const contract = oc.router({
+  getData: oc.route({ method: 'POST', path: '/getData' })
+    .input(z.object({ id: z.string() }))
+    .output(z.object({ data: z.string() }))
+    .errors(CommonPluginErrors) // Include standard errors
+});
+
+// In handlers
+createRouter: (context, builder) => ({
+  getData: builder.getData.handler(async ({ input, errors }) => {
+    try {
+      const response = await fetch(`https://api.example.com/data/${input.id}`);
+      
+      if (response.status === 401) {
+        throw errors.UNAUTHORIZED({
+          message: "Invalid API key",
+          data: { 
+            apiKeyProvided: true,
+            authType: 'apiKey' as const
+          }
+        });
+      }
+      
+      if (response.status === 429) {
+        throw errors.RATE_LIMITED({
+          message: "Rate limit exceeded",
+          data: {
+            retryAfter: 60,
+            remainingRequests: 0,
+            limitType: 'requests' as const
+          }
+        });
+      }
+      
+      if (!response.ok) {
+        throw errors.SERVICE_UNAVAILABLE({
+          message: "Service temporarily unavailable",
+          data: { retryAfter: 30 }
+        });
+      }
+      
+      const data = await response.json();
+      return { data: data.value };
+      
+    } catch (error) {
+      // Re-throw oRPC errors
+      if (error && typeof error === 'object' && 'code' in error) {
+        throw error;
+      }
+      
+      // Wrap unexpected errors
+      throw errors.SERVICE_UNAVAILABLE({
+        message: error instanceof Error ? error.message : 'Unknown error',
+        data: { retryAfter: 10 }
+      });
+    }
+  })
+})
+```
+
+## Type Exports
+
+`createPlugin()` automatically exports the plugin type in its default export:
+
+```typescript
+// In your plugin package
+export default createPlugin({
+  id: "my-plugin",
+  // ... plugin definition
+});
+
+// Consumers can import the type
+import type MyPlugin from "@my-org/my-plugin";
+import type { PluginBinding } from "every-plugin";
+
+type AppBindings = {
+  "my-plugin": PluginBinding<typeof MyPlugin>;
+};
+```
+
+This provides autocomplete, type inference, and compile-time validation in the consumer's runtime.
+
+## Best Practices
+
+### ✅ Do This
+
+```typescript
+// Use Effect for error handling
+getData(id: string) {
+  return Effect.tryPromise({
+    try: async () => { /* ... */ },
+    catch: (e) => new Error(`Failed: ${e}`)
+  });
+}
+
+// Scope resources properly
+initialize: (config) => Effect.gen(function* () {
+  const queue = yield* Effect.acquireRelease(
+    Queue.bounded(1000),
+    (q) => Queue.shutdown(q)
+  );
+  return { queue };
+})
+
+// Fork background tasks
+yield* Effect.forkScoped(backgroundTask);
+
+// Use CommonPluginErrors
+throw errors.RATE_LIMITED({
+  message: "Rate limit exceeded",
+  data: { retryAfter: 60 }
+});
+```
+
+### ❌ Don't Do This
+
+```typescript
+// Don't use unscoped resources
+const queue = Queue.bounded(1000); // Not cleaned up!
+
+// Don't use regular fork or forkDaemon
+Effect.fork(backgroundTask); // Orphaned!
+
+// Don't block in async generators
+async function* stream() {
+  while (true) {
+    const data = await heavyComputation(); // Blocks!
+    yield data;
+  }
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Deployment" href="/docs/creating-plugins/deployment">
+    Build and deploy your plugin
+  </Card>
+  <Card title="Testing" href="/docs/testing">
+    Test your plugin locally
+  </Card>
+  <Card title="Recipes" href="/docs/recipes">
+    Advanced patterns and examples
+  </Card>
+</Cards>
