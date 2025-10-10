@@ -1,0 +1,216 @@
+---
+title: Plugin Deployment
+description: Build and deploy plugins with Module Federation
+---
+
+Once your plugin is built, you need to deploy it to be accessible remotely.
+
+## Building Your Plugin
+
+Build the plugin for production:
+
+```bash
+# Production build
+bun run build
+```
+
+This generates:
+- `dist/remoteEntry.js` - The Module Federation entry point
+- `dist/*.js` - Additional module chunks
+- `dist/index.d.ts` - TypeScript definitions
+
+## Deployment Options
+
+The build output is a static bundle that can be deployed anywhere. Popular choices include:
+
+- Static hosting (Netlify, Vercel, Cloudflare Pages)
+- CDN services (AWS CloudFront, Cloudflare CDN)
+- Object storage (AWS S3, Google Cloud Storage)
+- Any web server serving static files
+
+Simply deploy the `dist/` directory and access your plugin via:
+
+```
+https://your-domain.com/path-to-dist/remoteEntry.js
+```
+
+### Zephyr Cloud (Recommended)
+
+The plugin template comes pre-configured with [Zephyr Cloud](https://zephyr-cloud.io/) for managed hosting:
+
+```bash
+bun run build
+```
+
+<Callout type="info">
+Zephyr Cloud automatically handles versioning, CDN distribution, and provides analytics for your plugins.
+</Callout>
+
+## Plugin Registry
+
+Once deployed, add your plugin to the runtime registry:
+
+```typescript
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      remoteUrl: "https://cdn.example.com/plugins/my-plugin/v1.0.0/remoteEntry.js",
+      version: "1.0.0"
+    }
+  }
+});
+```
+
+## Versioning Strategy
+
+### Semantic Versioning
+
+In order to take the best advantages of module federation and consistent updates, it is very important to follow semantic versioning for your plugins so changes do not break existing applications:
+
+- **Major (1.0.0 → 2.0.0)** - Breaking contract changes
+- **Minor (1.0.0 → 1.1.0)** - New procedures added
+- **Patch (1.0.0 → 1.0.1)** - Bug fixes, no contract changes
+
+### Deployment Pattern
+
+```bash
+# Deploy to versioned URL
+https://cdn.example.com/plugins/my-plugin/v1.2.3/remoteEntry.js
+
+# Also update "latest" pointer for consumers who want automatic updates
+https://cdn.example.com/plugins/my-plugin/latest/remoteEntry.js
+```
+
+<Callout type="warning">
+Breaking changes require a major version bump. Consumers must explicitly update their registry to use the new version.
+</Callout>
+
+## Publishing Types
+
+Publish your plugin package to npm for type bindings:
+
+```bash
+# Build types
+bun run build
+
+# Publish to npm (types only, not runtime code)
+bun publish --access public
+```
+
+Consumers install for types:
+
+```bash
+# Install as dev dependency for types
+bun add -D @my-org/my-plugin
+```
+
+```typescript
+// Import type-only
+import type MyPlugin from "@my-org/my-plugin";
+import type { PluginBinding } from "every-plugin";
+
+type AppBindings = {
+  "my-plugin": PluginBinding<typeof MyPlugin>;
+};
+```
+
+## Testing Before Deployment
+
+Always test your plugin locally before deploying:
+
+```typescript
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import MyPlugin from "./src/index";
+
+const runtime = createLocalPluginRuntime(
+  { 
+    registry: { 
+      "my-plugin": { 
+        remoteUrl: "", 
+        version: "1.0.0" 
+      } 
+    },
+    secrets: { API_KEY: "test-key" }
+  },
+  { "my-plugin": MyPlugin } as const
+);
+
+const { client } = await runtime.usePlugin("my-plugin", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { baseUrl: "https://api.example.com" }
+});
+
+// Test your procedures
+const result = await client.getData({ id: "test" });
+console.log(result);
+```
+
+## Deployment Checklist
+
+Before deploying to production:
+
+- [ ] All tests passing
+- [ ] Contract procedures have input/output schemas
+- [ ] Error paths tested with `CommonPluginErrors`
+- [ ] Resources use `Effect.acquireRelease`
+- [ ] Background tasks use `Effect.forkScoped`
+- [ ] Secrets properly hydrated via `{{TEMPLATE}}`
+- [ ] Build produces valid `remoteEntry.js`
+- [ ] TypeScript types exported correctly
+- [ ] Version number updated in `package.json`
+- [ ] Plugin tested locally with `createLocalPluginRuntime`
+
+## Troubleshooting
+
+### Module Federation Errors
+
+If you see "Shared module is not available":
+
+```javascript
+// Ensure shared dependencies match host app versions
+shared: {
+  "effect": {
+    singleton: true,
+    requiredVersion: "^3.10.0", // Match host app version
+    strictVersion: false // Allow minor version differences
+  }
+}
+```
+
+### CORS Issues
+
+If loading from CDN fails due to CORS:
+
+```
+# Add CORS headers to your CDN response
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, OPTIONS
+```
+
+### Type Resolution
+
+If types aren't resolving:
+
+```json
+// Ensure declaration is enabled in tsconfig.json
+{
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true
+  }
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Testing" href="/docs/testing">
+    Test your plugin locally
+  </Card>
+  <Card title="Using Plugins" href="/docs/using-plugins">
+    Use plugins in your app
+  </Card>
+  <Card title="Recipes" href="/docs/recipes">
+    Advanced patterns and examples
+  </Card>
+</Cards>

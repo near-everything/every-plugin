@@ -1,10 +1,10 @@
 {
   "title": "Documentation",
-  "description": "every-plugin documentation",
   "pages": [
-    "quick-start",
-    "plugins", 
-    "runtime",
-    "testing"
+    "getting-started",
+    "creating-plugins",
+    "using-plugins",
+    "testing",
+    "recipes"
   ]
 }

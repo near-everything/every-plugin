@@ -1,0 +1,378 @@
+---
+title: Local Development
+description: Develop plugins locally without Module Federation
+---
+
+For local development, monorepos, or testing, you can use `createLocalPluginRuntime` to work with plugins directly without Module Federation overhead.
+
+## Setup
+
+Import the local runtime from the testing package:
+
+```typescript
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import DataSource from "./plugins/data-source";
+import Transformer from "./plugins/transformer";
+```
+
+## Basic Usage
+
+Create a local runtime with your plugin map:
+
+```typescript
+// Define plugin map with 'as const' for type inference
+const pluginMap = {
+  "data-source": DataSource,
+  "transformer": Transformer
+} as const;
+
+// Runtime automatically infers bindings from plugin map
+const runtime = createLocalPluginRuntime(
+  {
+    registry: {
+      "data-source": {
+        remoteUrl: "http://localhost:3000/remoteEntry.js", // Not used, but still required
+        version: "1.0.0"
+      },
+      "transformer": {
+        remoteUrl: "http://localhost:3001/remoteEntry.js", // you can put dummy value
+        version: "1.0.0"
+      }
+    },
+    secrets: { API_KEY: "dev-key" }
+  },
+  pluginMap
+);
+
+// Get fully typed client
+const { client } = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
+
+// Call procedures with full type safety
+const result = await client.getData({ id: "123" });
+```
+
+<Callout>
+**Always use `as const`** on plugin maps for automatic type inference.
+</Callout>
+
+## Automatic Type Inference
+
+When you define your plugin map with `as const`, type bindings are automatically inferred:
+
+```typescript
+const pluginMap = {
+  "data-source": DataSource,
+  "transformer": Transformer
+} as const;
+
+// Bindings automatically inferred - no manual typing needed
+const runtime = createLocalPluginRuntime(
+  { registry: {...}, secrets: {...} },
+  pluginMap
+);
+
+// Full type safety without manual bindings
+const { client } = await runtime.usePlugin("data-source", config);
+//                                         ^-- Autocomplete for "data-source" | "transformer"
+
+const result = await client.getData({ id: "123" });
+//                          ^-- Autocomplete for all procedures
+```
+
+**Benefits:**
+- IDE autocomplete for plugin IDs and procedure names
+- Type inference for config (variables/secrets)
+- Compile-time validation of inputs/outputs
+- Better refactoring support
+
+## When to Use
+
+### ✅ Use Local Runtime For:
+
+- **Monorepo development** - Work with local plugin implementations
+- **Unit testing** - Test plugins without Module Federation overhead
+- **Integration testing** - Test plugin interactions locally
+- **Development servers** - Run plugins from source during development
+- **CI/CD pipelines** - Test before deploying
+
+### ⚠️ Use Remote Runtime For:
+
+- **Production** - Load plugins via Module Federation from CDN
+- **Distributed systems** - Plugins deployed separately from runtime
+- **Remote plugins** - Third-party plugins from external sources
+
+## Development Workflow
+
+<Steps>
+
+### Create Plugin Locally
+
+```typescript title="plugins/my-plugin/src/index.ts"
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import { z } from "every-plugin/zod";
+
+export default createPlugin({
+  id: "my-plugin",
+  contract: {
+    getData: oc.route({ method: 'POST', path: '/getData' })
+      .input(z.object({ id: z.string() }))
+      .output(z.object({ data: z.string() }))
+  },
+  variables: z.object({ baseUrl: z.string() }),
+  secrets: z.object({ apiKey: z.string() }),
+  initialize: (config) => Effect.gen(function* () {
+    const service = new MyService(config.secrets.apiKey);
+    return { service };
+  }),
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input }) => {
+      const data = await Effect.runPromise(
+        context.service.getData(input.id)
+      );
+      return { data };
+    })
+  })
+});
+```
+
+### Test Locally
+
+```typescript title="dev-server.ts"
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import MyPlugin from "./plugins/my-plugin/src/index";
+
+const pluginMap = {
+  "my-plugin": MyPlugin
+} as const;
+
+const runtime = createLocalPluginRuntime(
+  {
+    registry: {
+      "my-plugin": {
+        remoteUrl: "", // Not used locally
+        version: "1.0.0"
+      }
+    },
+    secrets: {
+      API_KEY: process.env.DEV_API_KEY || "dev-key"
+    }
+  },
+  pluginMap
+);
+
+const { client } = await runtime.usePlugin("my-plugin", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { baseUrl: "http://localhost:8080" }
+});
+
+// Test your plugin
+const result = await client.getData({ id: "test-123" });
+console.log(result);
+
+await runtime.shutdown();
+```
+
+### Deploy When Ready
+
+Once tested locally, build and deploy:
+
+```bash
+cd plugins/my-plugin
+bun run build
+# Deploy dist/ to CDN
+```
+
+</Steps>
+
+## Monorepo Example
+
+Perfect for monorepos where plugins live alongside the main app:
+
+```
+my-app/
+├── apps/
+│   └── api/
+│       └── src/
+│           └── main.ts          # Uses createLocalPluginRuntime in dev
+├── plugins/
+│   ├── data-source/
+│   │   └── src/index.ts
+│   └── transformer/
+│       └── src/index.ts
+└── package.json
+```
+
+```typescript title="apps/api/src/main.ts"
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import DataSource from "../../../plugins/data-source/src/index";
+import Transformer from "../../../plugins/transformer/src/index";
+
+const pluginMap = {
+  "data-source": DataSource,
+  "transformer": Transformer
+} as const;
+
+const runtime = createLocalPluginRuntime(
+  {
+    registry: {
+      "data-source": { remoteUrl: "", version: "1.0.0" },
+      "transformer": { remoteUrl: "", version: "1.0.0" }
+    },
+    secrets: {
+      API_KEY: process.env.API_KEY!
+    }
+  },
+  pluginMap
+);
+
+// Use plugins locally during development
+const { client: source } = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{API_KEY}}" }
+});
+
+const { client: transformer } = await runtime.usePlugin("transformer", {
+  variables: { format: "json" }
+});
+
+// Execute pipeline
+const data = await source.fetch({ query: "test" });
+const transformed = await transformer.transform({ items: data.items });
+```
+
+## Testing Example
+
+Use in test files for comprehensive testing:
+
+```typescript title="__tests__/plugin.test.ts"
+import { describe, it, expect } from "vitest";
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import MyPlugin from "../src/index";
+
+describe("MyPlugin", () => {
+  const pluginMap = { "my-plugin": MyPlugin } as const;
+  
+  const runtime = createLocalPluginRuntime(
+    {
+      registry: {
+        "my-plugin": {
+          remoteUrl: "",
+          version: "1.0.0"
+        }
+      },
+      secrets: { API_KEY: "test-key" }
+    },
+    pluginMap
+  );
+
+  it("should fetch data correctly", async () => {
+    const { client } = await runtime.usePlugin("my-plugin", {
+      secrets: { apiKey: "{{API_KEY}}" },
+      variables: { baseUrl: "http://localhost:1337" }
+    });
+
+    const result = await client.getData({ id: "test-123" });
+    
+    expect(result).toHaveProperty("data");
+    expect(result.data).toBe("test-data");
+  });
+  
+  it("should handle errors", async () => {
+    const { client } = await runtime.usePlugin("my-plugin", {
+      secrets: { apiKey: "invalid-key" },
+      variables: { baseUrl: "http://localhost:1337" }
+    });
+
+    await expect(
+      client.getData({ id: "invalid" })
+    ).rejects.toThrow();
+  });
+});
+```
+
+## Environment-Specific Runtime
+
+Switch between local and remote based on environment:
+
+```typescript
+import { createPluginRuntime } from "every-plugin/runtime";
+import { createLocalPluginRuntime } from "every-plugin/testing";
+
+const isDevelopment = process.env.NODE_ENV === "development";
+
+const runtime = isDevelopment
+  ? createLocalPluginRuntime(
+      { registry: {...}, secrets: {...} },
+      { "my-plugin": LocalPlugin } as const
+    )
+  : createPluginRuntime({
+      registry: {
+        "my-plugin": {
+          remoteUrl: "https://cdn.example.com/my-plugin/remoteEntry.js",
+          version: "1.0.0"
+        }
+      },
+      secrets: {...}
+    });
+
+// Same API for both
+const { client } = await runtime.usePlugin("my-plugin", config);
+```
+
+## Best Practices
+
+### ✅ Do This
+
+```typescript
+// Always use 'as const' for type inference
+const pluginMap = {
+  "plugin-1": Plugin1,
+  "plugin-2": Plugin2
+} as const;
+
+// Test locally before deploying
+const runtime = createLocalPluginRuntime(...);
+const { client } = await runtime.usePlugin(...);
+await client.testOperation();
+
+// Switch to remote runtime for production
+if (process.env.NODE_ENV === "production") {
+  runtime = createPluginRuntime({
+    registry: { /* remote URLs */ }
+  });
+}
+```
+
+### ❌ Don't Do This
+
+```typescript
+// Don't forget 'as const'
+const pluginMap = {
+  "plugin-1": Plugin1  // No type inference!
+};
+
+// Don't use local runtime in production
+if (process.env.NODE_ENV === "production") {
+  runtime = createLocalPluginRuntime(...); // Wrong!
+}
+
+// Don't skip testing
+// Just deploy without local testing
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Testing" href="/docs/testing">
+    Comprehensive testing guide
+  </Card>
+  <Card title="Deployment" href="/docs/creating-plugins/deployment">
+    Deploy plugins to production
+  </Card>
+  <Card title="Recipes" href="/docs/recipes">
+    Advanced patterns
+  </Card>
+</Cards>

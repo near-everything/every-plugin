@@ -34,7 +34,7 @@ const useWebhooks = !!WEBHOOK_DOMAIN;
 const runtime = createPluginRuntime<TelegramBindings>({
   registry: {
     "@curatedotfun/telegram": {
-      remoteUrl: "https://elliot-braem-117-curatedotfun-telegram-every-plug-6a7102ecd-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-151-curatedotfun-telegram-every-plug-834aa3704-ze.zephyrcloud.app/remoteEntry.js",
     }
   },
   secrets: {

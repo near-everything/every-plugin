@@ -211,34 +211,30 @@ export default createPlugin({
   
   shutdown: () => Effect.void,
   
-  createRouter: (context) => {
+  createRouter: (context, builder) => {
     const { service } = context;
-    const os = implement(contract);
-    
-    const getById = os.getById.handler(async ({ input }) => {
-      const item = await Effect.runPromise(service.getById(input.id));
-      return { item };
-    });
-    
-    const search = os.search.handler(async function* ({ input }) {
-      const generator = await Effect.runPromise(
-        service.search(input.query, input.limit)
-      );
-      
-      for await (const result of generator) {
-        yield result;
-      }
-    });
-    
-    const ping = os.ping.handler(async () => {
-      return await Effect.runPromise(service.ping());
-    });
-    
-    return os.router({
-      getById,
-      search,
-      ping,
-    });
+    // builder is already: implement(contract).$context<TContext>()
+
+    return {
+      getById: builder.getById.handler(async ({ input }) => {
+        const item = await Effect.runPromise(service.getById(input.id));
+        return { item };
+      }),
+
+      search: builder.search.handler(async function* ({ input }) {
+        const generator = await Effect.runPromise(
+          service.search(input.query, input.limit)
+        );
+
+        for await (const result of generator) {
+          yield result;
+        }
+      }),
+
+      ping: builder.ping.handler(async () => {
+        return await Effect.runPromise(service.ping());
+      }),
+    };
   }
 });
 ```
@@ -294,7 +290,7 @@ initialize: (config) =>
   }),
 
 // In createRouter - stream from queue
-const stream = os.stream.handler(async function* () {
+const stream = builder.stream.handler(async function* ({ input }) {
   while (true) {
     const item = await Effect.runPromise(Queue.take(context.queue));
     yield item;
@@ -344,8 +340,8 @@ getById(id: string) {
   });
 }
 
-// In handler - map to CommonPluginErrors
-const getById = os.getById.handler(async ({ input, errors }) => {
+// In createRouter - map to CommonPluginErrors
+const getById = builder.getById.handler(async ({ input, errors }) => {
   try {
     const item = await Effect.runPromise(service.getById(input.id));
     return { item };
@@ -356,14 +352,14 @@ const getById = os.getById.handler(async ({ input, errors }) => {
         data: { apiKeyProvided: true }
       });
     }
-    
+
     if (error instanceof Error && error.message.includes('Rate limited')) {
       throw errors.RATE_LIMITED({
         message: "API rate limit exceeded",
         data: { retryAfter: 60, limitType: 'requests' as const }
       });
     }
-    
+
     throw errors.SERVICE_UNAVAILABLE({
       message: error instanceof Error ? error.message : 'Unknown error',
       data: { retryAfter: 30 }
@@ -424,14 +420,14 @@ const webhookQueue = yield* Effect.acquireRelease(
 );
 
 // In createRouter
-const webhook = os.webhook.handler(async ({ input }) => {
+const webhook = builder.webhook.handler(async ({ input }) => {
   await Effect.runPromise(
     Queue.offer(context.webhookQueue, transformWebhookData(input))
   );
   return { processed: true };
 });
 
-const stream = os.stream.handler(async function* () {
+const stream = builder.stream.handler(async function* ({ input }) => {
   while (true) {
     const event = await Effect.runPromise(Queue.take(context.webhookQueue));
     yield event;
@@ -513,14 +509,14 @@ export default createPlugin({
     return { service };
   }),
   shutdown: () => Effect.void,
-  createRouter: (ctx) => {
-    const os = implement(contract);
-    return os.router({
-      getData: os.getData.handler(async ({ input }) => {
+  createRouter: (ctx, builder) => {
+    // builder is already: implement(contract).$context<TContext>()
+    return {
+      getData: builder.getData.handler(async ({ input }) => {
         const data = await Effect.runPromise(ctx.service.getData(input.id));
         return { data };
       })
-    });
+    };
   }
 });
 ```

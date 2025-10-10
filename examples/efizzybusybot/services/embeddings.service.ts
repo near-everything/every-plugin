@@ -1,4 +1,4 @@
-import { env, pipeline, type FeatureExtractionPipeline } from "@xenova/transformers";
+import { env, type FeatureExtractionPipeline, pipeline } from "@xenova/transformers";
 import { Effect } from "every-plugin/effect";
 
 env.allowLocalModels = false;
@@ -110,4 +110,4 @@ export class EmbeddingsService extends Effect.Service<EmbeddingsService>()(
       };
     })
   }
-) {}
+) { }

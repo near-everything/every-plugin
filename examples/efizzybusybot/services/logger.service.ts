@@ -1,5 +1,5 @@
-import { Effect } from "every-plugin/effect";
 import { randomUUID } from "node:crypto";
+import { Effect } from "every-plugin/effect";
 
 export interface LogContext {
   requestId: string;
@@ -93,4 +93,4 @@ export class LoggerService extends Effect.Service<LoggerService>()("LoggerServic
         }),
     };
   }),
-}) {}
+}) { }

@@ -1,8 +1,37 @@
 ---
 title: Introduction
+description: Build composable, type-safe plugin systems with remote modules
 ---
 
-**every-plugin** is a framework for building composable, type-safe plugin systems. It combines [Effect](https://effect.website/) for resource lifecycle management, [Module Federation](https://module-federation.io/) for remote loading, and [oRPC](https://orpc.io/) for type-safe contracts.
+**every-plugin** is a framework for building composable, type-safe plugin systems. It combines [Effect](https://effect.website/) for resource lifecycle management, [Module Federation](https://module-federation.io/) for remote module loading, and [oRPC](https://orpc.io/) for type-safe contracts.
+
+## Why Remote Modules?
+
+Traditional npm packages require publish/install/rebuild cycles. **every-plugin** uses Module Federation to load plugins at runtime:
+
+```typescript
+// No npm install needed - plugins loaded remotely
+const runtime = createPluginRuntime({
+  registry: {
+    "data-source": {
+      remoteUrl: "https://cdn.example.com/plugins/source/remoteEntry.js",
+      version: "1.0.0"
+    }
+  }
+});
+
+// Plugin code loads from CDN at runtime
+const { client } = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{API_KEY}}" }
+});
+```
+
+**Benefits:**
+
+- 🚀 **Deploy instantly** - Plugin updates available immediately to all consumers
+- 📦 **Zero conflicts** - Shared dependencies via Module Federation
+- 🔄 **Independent versioning** - No coordinated releases required
+- ⚡ **No build cycles** - Just deploy and use
 
 ## Quick Example
 
@@ -16,17 +45,24 @@ const runtime = createPluginRuntime({
       version: "1.0.0"
     }
   },
-  secrets: { API_KEY: "secret-value" }
+  secrets: { API_KEY: process.env.SOCIAL_API_KEY }
 });
 
-// Get the client
+// Get typed client
 const { client } = await runtime.usePlugin("data-source", {
   secrets: { apiKey: "{{API_KEY}}" },
   variables: { timeout: 30000 }
 });
 
+// Call procedures
 const result = await client.search({ query: "typescript", limit: 20 });
 console.log(`Found ${result.items.length} items`);
+
+// Stream data
+const stream = await client.streamPosts({ query: "realtime" });
+for await (const post of stream) {
+  console.log(post);
+}
 
 await runtime.shutdown();
 ```
@@ -39,65 +75,66 @@ Plugins define their interface using [oRPC](https://orpc.io/) procedures. The ru
 
 ```typescript
 export default createPlugin({
-  initialize: () => { /* setup resources, return context */ }
   contract: oc.router({
-    getData: oc.procedure
+    getData: oc.route({ method: 'POST', path: '/getData' }) // for OpenAPI support
       .input(z.object({ id: z.string() }))
-      .output(DataSchema),
-    streamItems: oc.procedure
-      .input(QuerySchema)
+      .output(z.object({ data: z.string() })),
+    
+    streamItems: oc.route({ method: 'POST', path: '/stream' })
+      .input(z.object({ query: z.string() }))
       .output(eventIterator(ItemSchema))
   }),
-  createRouter: (context) => { /* implement contract */ }
+  
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input }) => {
+      return await context.service.fetch(input.id);
+    })
+  })
 });
-
-const { client } = await runtime.usePlugin("plugin-id", config);
-const data = await client.getData({ id: "123" });
 ```
 
-### Runtime Manages the Lifecycle
+### Runtime Manages Lifecycle
 
-The runtime handles plugin loading ([Module Federation](https://module-federation.io/) or local imports), secret injection, initialization, and cleanup. Resources are managed automatically through [Effect](https://effect.website/):
+The runtime handles plugin loading ([Module Federation](https://module-federation.io/) or local imports), secret injection, initialization, and cleanup. Resources are managed automatically through Effect's [ManagedRuntime](https://effect.website/docs/runtime/#managedruntime):
 
 ```typescript
 const runtime = createPluginRuntime({
-  registry: { /* plugin definitions */ },
+  registry: { /* plugins */ },
   secrets: { /* secret values */ }
 });
 
 // Runtime handles initialization, resource management, and cleanup
-const result = await runtime.usePlugin("plugin-id", config);
+const { client } = await runtime.usePlugin("plugin-id", config);
 
-// Cleanup happens automatically
-await runtime.shutdown();
+await runtime.shutdown(); // Automatic resource cleanup
 ```
 
-### Multiple Access Patterns from One Interface
+### Multiple Access Patterns
 
 `usePlugin()` returns an `EveryPlugin` with three ways to work with plugins:
 
 ```typescript
-const { client, router, metadata } = await runtime.usePlugin(...);
+const { client, router, metadata } = await runtime.usePlugin("plugin-id", config);
 
-// 1. Client - Direct typed procedure calls
+// 1. Client - Direct procedure calls
 const data = await client.getData({ id: "123" });
 
 // 2. Router - Mount as HTTP endpoints
 const handler = new OpenAPIHandler(router);
 
 // 3. Streaming - Process continuous data
-const stream = await client.streamItems({ query: "typescript" });
+const stream = await client.streamItems({ query: "test" });
 for await (const item of stream) {
   console.log(item);
 }
 ```
 
-### Local and Remote Plugins, Same API
+### Local and Remote
 
-Two deployment patterns with identical APIs:
+Same API for development and production:
 
 ```typescript
-// Production - Remote plugins via Module Federation
+// Production - Load from CDN via Module Federation
 const runtime = createPluginRuntime({
   registry: {
     "plugin-id": {
@@ -107,19 +144,20 @@ const runtime = createPluginRuntime({
   }
 });
 
-// Development/Testing - Local plugins
+// Development - Load locally without Module Federation
+import { createLocalPluginRuntime } from "every-plugin/testing";
 const runtime = createLocalPluginRuntime(
   { registry: {...} },
-  { "plugin-id": PluginImplementation }
+  { "plugin-id": PluginImplementation } as const
 );
 
-// Same API for both
+// Identical API for both
 const { client } = await runtime.usePlugin("plugin-id", config);
 ```
 
-### Secret Management with Template Injection
+### Secret Management
 
-Secrets are defined centrally and injected at runtime using template syntax:
+Template injection for runtime secrets:
 
 ```typescript
 const runtime = createPluginRuntime({
@@ -133,125 +171,93 @@ const runtime = createPluginRuntime({
 // Templates get replaced with actual values
 const { client } = await runtime.usePlugin("plugin-id", {
   secrets: {
-    apiKey: "{{API_KEY}}",      // Injected at runtime
+    apiKey: "{{API_KEY}}",      // Replaced at runtime
     dbUrl: "{{DATABASE_URL}}"
   },
   variables: {
-    timeout: 30000              // Regular values pass through
+    timeout: 30000              // Regular config values
   }
 });
 ```
 
-### Plugins Can Be Sophisticated
+## Plugin Architecture
 
-Plugins aren't limited to simple API wrappers. With Effect's resource management, they can:
+Every plugin follows a three-file structure:
 
-**Run Background Tasks** - Continuously poll APIs, process queues, or generate events:
-```typescript
-initialize: (config) => Effect.gen(function* () {
-  const queue = yield* Queue.bounded(1000);
-  
-  // Background producer runs until plugin shuts down
-  yield* Effect.forkScoped(
-    Effect.gen(function* () {
-      while (true) {
-        const event = yield* fetchFromExternalAPI();
-        yield* Queue.offer(queue, event);
-        yield* Effect.sleep("1 second");
-      }
-    })
-  );
-  
-  return { queue };
-})
 ```
+plugins/your-plugin/
+├── src/
+│   ├── contract.ts    # oRPC contract (API definition)
+│   ├── service.ts     # Plain class wrapping external API
+│   └── index.ts       # Plugin implementation
+```
+<Accordions>
+<Accordion title="See Example Structure">
 
-**Stream Data Continuously** - Process infinite streams with backpressure:
 ```typescript
-streamEvents: handler(async function* () {
-  // Stream from queue with automatic backpressure
-  while (true) {
-    const event = await Effect.runPromise(Queue.take(context.queue));
-    yield event;
+// contract.ts - Define your API
+export const contract = oc.router({
+  getData: oc.route({ method: 'POST', path: '/getData' })
+    .input(z.object({ id: z.string() }))
+    .output(z.object({ data: z.string() }))
+});
+
+// service.ts - Handlers use service
+export class MyService {
+  constructor(private apiKey: string) {}
+  
+  getData(id: string) {
+    return Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(`https://api.example.com/data/${id}`, {
+          headers: { Authorization: `Bearer ${this.apiKey}` }
+        });
+        return response.json();
+      },
+      catch: (e: unknown) => new Error(`Failed: ${e}`)
+    });
   }
-})
+}
+
+// index.ts - Wire it together
+export default createPlugin({
+  id: "my-plugin",
+  contract,
+  variables: z.object({ timeout: z.number().default(30000) }),
+  secrets: z.object({ apiKey: z.string() }),
+  
+  initialize: (config) => Effect.gen(function* () {
+    const service = new MyService(config.secrets.apiKey);
+    return { service };
+  }),
+  
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input }) => {
+      const data = await Effect.runPromise(
+        context.service.getData(input.id)
+      );
+      return { data };
+    })
+  })
+});
 ```
 
-**Compose into Pipelines** - Chain plugins together for complex workflows:
-```typescript
-// Source → Processor → Distributor
-const { client: source } = await runtime.usePlugin("data-source", config);
-const { client: processor } = await runtime.usePlugin("transformer", config);
-const { client: distributor } = await runtime.usePlugin("webhook", config);
-
-const rawData = await source.fetch({ query: "typescript" });
-const transformed = await processor.transform({ items: rawData.items });
-await distributor.send({ items: transformed.items });
-```
-
-**Mount as HTTP APIs** - Expose plugin procedures via OpenAPI or RPC:
-```typescript
-const { router } = await runtime.usePlugin("plugin-id", config);
-const handler = new OpenAPIHandler(router);
-
-// Now your plugin is an HTTP API
-server.use('/api', handler.handle);
-```
-
-This flexibility means plugins can be:
-- **Simple API clients** for basic integrations
-- **Background processors** for continuous data ingestion
-- **Stream transformers** for real-time data pipelines
-- **HTTP services** exposed via OpenAPI
-- **Job workers** in queue systems like BullMQ
-
-All with the same type-safe contract interface, and easy to use with simple async/await.
-
-## Architecture
-
-<Mermaid
-  chart="
-graph TD
-  A[Runtime] --> B[Plugin Registry]
-  A --> C[Secret Management]
-  A --> D[Module Federation]
-
-  D --> E[Remote Plugin]
-  E --> F[oRPC Contract]
-  E --> G[Plugin Instance]
-
-  G --> H[Initialize]
-  H --> I[Create Router]
-  I --> J[EveryPlugin]
-
-  J --> K[Client Calls]
-  J --> L[HTTP Mounting]
-  J --> M[Streaming]
-
-  classDef runtime fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff
-  classDef system fill:#7c3aed,stroke:#6d28d9,stroke-width:2px,color:#fff
-  classDef plugin fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
-  classDef access fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
-
-  class A runtime
-  class B,C,D system
-  class E,F,G,H,I plugin
-  class J,K,L,M access"
-/>
+</Accordion>
+</Accordions>
 
 ## Getting Started
 
 <Cards>
-  <Card title="Quick Start" href="/docs/quick-start">
-    Get running in 5 minutes
+  <Card title="Quick Start" href="/docs/getting-started">
+    Install and run in 5 minutes
   </Card>
-  <Card title="Creating Plugins" href="/docs/plugins">
-    Build plugins with oRPC contracts
+  <Card title="Creating Plugins" href="/docs/creating-plugins">
+    Build your first plugin
   </Card>
-  <Card title="Using Plugins" href="/docs/runtime">
-    Runtime patterns and recipes
+  <Card title="Using Plugins" href="/docs/using-plugins">
+    Runtime patterns and usage
   </Card>
   <Card title="Testing" href="/docs/testing">
-    Test plugins with mock services
+    Test plugins locally
   </Card>
 </Cards>

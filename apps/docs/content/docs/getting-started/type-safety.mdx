@@ -1,0 +1,278 @@
+---
+title: Type Safety
+description: Optional type bindings for enhanced developer experience
+---
+
+## Understanding Runtime vs Development Types
+
+**Important:** Plugins are already completely type-safe at runtime through their oRPC contracts. Type bindings are optional and only enhance your IDE experience during development.
+
+### Why This Matters
+
+every-plugin uses **Module Federation** to load plugins at runtime. This is fundamentally different from traditional npm packages:
+
+```typescript
+// ❌ Traditional approach - install packages
+// npm install @my-org/plugin
+// import plugin from '@my-org/plugin'
+
+// ✅ every-plugin - remote modules loaded at runtime
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      remoteUrl: "https://cdn.example.com/v1/my-plugin/remoteEntry.js",
+      version: "1.0.0"
+    }
+  }
+});
+
+// Plugin is loaded remotely - no npm install!
+const { client } = await runtime.usePlugin("my-plugin", config);
+```
+
+This enables:
+
+- **Deploy plugin updates instantly** - all consumers get them immediately
+- **No publish/install cycles** - just deploy and use
+- **Zero dependency conflicts** - shared dependencies via Module Federation
+- **Independent versioning** - each plugin manages its own lifecycle
+
+### Runtime Safety is Guaranteed
+
+Your plugin's oRPC contract ensures complete type safety at runtime:
+
+```typescript
+// Contract defines the API
+const contract = oc.router({
+  getData: oc.route({ method: 'POST', path: '/getData' })
+    .input(z.object({ id: z.string() }))
+    .output(z.object({ name: z.string(), age: z.number() }))
+});
+
+// Runtime validates inputs/outputs automatically
+const result = await client.getData({ id: "123" });
+// ✅ Guaranteed to have { name: string, age: number } if successful
+// ✅ Will throw oRPC error if contract violated
+```
+
+Without type bindings, your code is still completely safe. The contract validates everything at runtime.
+
+### Type Bindings = Better DX
+
+Type bindings give you IDE autocomplete and compile-time checks, but they're optional:
+
+```typescript
+// Without bindings - works perfectly, just no autocomplete
+const { client } = await runtime.usePlugin("my-plugin", config);
+const result = await client.getData({ id: "123" });
+// ✅ Still type-safe at runtime
+// ❌ No IDE autocomplete
+
+// With bindings - same safety + autocomplete
+import type { PluginBinding } from "every-plugin";
+import type MyPlugin from "@my-org/my-plugin";
+
+type AppBindings = {
+  "my-plugin": PluginBinding<typeof MyPlugin>;
+};
+
+const runtime = createPluginRuntime<AppBindings>({...});
+const { client } = await runtime.usePlugin("my-plugin", config);
+//                                         ^-- IDE suggests plugin IDs
+const result = await client.getData({ id: "123" });
+//                          ^-- Autocomplete shows procedures
+// ✅ Type-safe at runtime
+// ✅ IDE autocomplete and validation
+```
+
+<Callout>
+Remember: Type bindings are installed as dev dependencies only. They never affect your production bundle or runtime behavior.
+</Callout>
+
+## Setting Up Type Bindings
+
+<Steps>
+
+### Install Plugin Types
+
+```bash
+# Install as dev dependency - NOT a runtime dependency
+bun add -D @my-org/data-source-plugin
+```
+
+<Callout type="info">
+This installs the plugin package ONLY for its TypeScript types. The actual plugin code is loaded remotely at runtime via Module Federation.
+</Callout>
+
+### Define Bindings
+
+```typescript
+import type { PluginBinding } from "every-plugin";
+import type DataSource from "@my-org/data-source-plugin";
+
+type AppBindings = {
+  "data-source": PluginBinding<typeof DataSource>;
+};
+```
+
+### Apply to Runtime
+
+```typescript
+const runtime = createPluginRuntime<AppBindings>({
+  registry: {
+    "data-source": {
+      remoteUrl: "https://cdn.example.com/v1/data-source/remoteEntry.js",
+      version: "1.0.0"
+    }
+  }
+});
+
+// Now get autocomplete
+const { client } = await runtime.usePlugin("data-source", config);
+```
+
+</Steps>
+
+## Type Extraction
+
+Due to this paradigm, accessing a plugin's types can be difficult. 
+To assist the `EveryPlugin` type offers a way to infer the types of a plugin from the provided runtime.
+
+```typescript
+import type { EveryPlugin } from "every-plugin";
+
+// Extract the full plugin type from your runtime
+type DataSourcePlugin = EveryPlugin.Infer<typeof runtime, "data-source">;
+```
+
+This is useful for:
+
+- Building middleware that works across different plugins
+- Creating plugin wrappers for monitoring/logging
+- Type-safe plugin composition utilities
+
+## Local Runtime Type Inference
+
+When using `createLocalPluginRuntime` for development/testing, type inference is automatic:
+
+```typescript
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import DataSource from "./plugins/data-source";
+import Transformer from "./plugins/transformer";
+
+// Use 'as const' - bindings are inferred automatically
+const pluginMap = {
+  "data-source": DataSource,
+  "transformer": Transformer
+} as const;
+
+// No manual type bindings needed!
+const runtime = createLocalPluginRuntime(
+  { registry: {...}, secrets: {...} },
+  pluginMap
+);
+
+// Full autocomplete from plugin map
+const { client } = await runtime.usePlugin("data-source", config);
+//                                         ^-- IDE knows this from pluginMap
+```
+
+<Callout>
+**Always use `as const`** on plugin maps for automatic type inference.
+</Callout>
+
+## Common Pitfalls
+
+### ❌ Don't Install Plugins as Runtime Dependencies
+
+```typescript
+// ❌ WRONG - plugin as runtime dependency
+// package.json: { "dependencies": { "@my-org/plugin": "^1.0.0" } }
+
+// ✅ CORRECT - plugin as dev dependency for types only
+// package.json: { "devDependencies": { "@my-org/plugin": "^1.0.0" } }
+```
+
+<Callout type="warning">
+Installing plugins as runtime dependencies defeats the purpose of Module Federation. The plugin code should ONLY be loaded remotely.
+</Callout>
+
+### ❌ Don't Import Plugin Code
+
+```typescript
+// ❌ WRONG - importing plugin code directly
+import MyPlugin from "@my-org/my-plugin";
+const runtime = createPluginRuntime({...});
+// This bundles the plugin into your app!
+
+// ✅ CORRECT - type-only import
+import type MyPlugin from "@my-org/my-plugin";
+const runtime = createPluginRuntime({...});
+// Plugin loaded remotely at runtime
+```
+
+### ❌ Don't Assume Types Match Deployed Version
+
+```typescript
+// Your dev dependency might be:
+// "@my-org/plugin": "1.0.0"
+
+// But production might use:
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      remoteUrl: "https://cdn.example.com/v1/my-plugin/remoteEntry.js",
+      version: "1.2.0"  // Newer version deployed!
+    }
+  }
+});
+
+// Type bindings might be outdated
+// Runtime contract is the source of truth
+```
+
+<Callout type="info">
+The oRPC contract is the source of truth. Type bindings can lag behind deployed versions. When in doubt, trust runtime validation.
+</Callout>
+
+## The Remote Module Paradigm
+
+Understanding this paradigm shift is critical:
+
+### Traditional npm Packages
+
+```
+Build plugin → Publish to npm → Install in app → Bundle together → Deploy app
+```
+
+- **Coupling:** App and plugins deployed together
+- **Updates:** Require app rebuild and redeployment
+- **Dependencies:** Can conflict between plugins
+- **Versioning:** All or nothing
+
+### Remote Modules (every-plugin)
+
+```
+Build plugin → Deploy to CDN → App loads at runtime
+```
+
+- **Decoupling:** App and plugins deployed independently
+- **Updates:** Plugin updates available immediately
+- **Dependencies:** Shared via Module Federation (no conflicts)
+- **Versioning:** Per-plugin, independent updates
+
+This is why type bindings are optional - the plugin code never enters your bundle. Types are just for your IDE.
+
+## Next Steps
+
+<Cards>
+  <Card title="Create a Plugin" href="/docs/creating-plugins">
+    Build your first plugin
+  </Card>
+  <Card title="Local Development" href="/docs/using-plugins/local-development">
+    Develop plugins locally
+  </Card>
+  <Card title="Testing" href="/docs/testing">
+    Test plugins with local runtime
+  </Card>
+</Cards>

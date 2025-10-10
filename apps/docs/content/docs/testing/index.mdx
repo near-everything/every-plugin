@@ -3,436 +3,573 @@ title: Testing Plugins
 description: Unit and integration testing for plugins
 ---
 
-Test plugins using `createLocalPluginRuntime`, which loads plugins directly without Module Federation overhead. This is the same tool used for local plugin development.
+Test plugins using `createLocalPluginRuntime`, which loads plugins directly without Module Federation overhead.
 
-## Testing with Local Plugins
+## Setup
 
 Import the local plugin runtime from `every-plugin/testing`:
 
 ```typescript
 import { createLocalPluginRuntime } from "every-plugin/testing";
-import { Effect } from "every-plugin/effect";
-import { expect, it } from "@effect/vitest";
+import { describe, it, expect } from "vitest";
+import TestPlugin from "../src/index";
 ```
 
-The `createLocalPluginRuntime` function is designed for two scenarios:
-- **Testing** - Test plugins in isolation with mock services
-- **Local Development** - Work with plugins from source in monorepos
+## Basic Test Structure
 
-Both use cases share the same API, making it easy to test locally and deploy remotely.
-
-## Automatic Type Inference
-
-When you define your plugin map with `as const`, type bindings are automatically inferred:
-
-**Benefits:**
-- IDE autocomplete for plugin IDs and procedure names
-- Type inference for config (variables/secrets)
-- Compile-time validation of test inputs/outputs
-- Better refactoring support
+Create a test suite with automatic type inference:
 
 ```typescript
-import TestPlugin from "./my-plugin";
-
-// Use 'as const' for automatic type inference
-const pluginMap = {
-  "my-plugin": TestPlugin
-} as const;
-
-// Runtime automatically infers bindings from the map
-const { runtime, PluginService } = createLocalPluginRuntime(
-  { registry: {...}, secrets: {...} },
-  pluginMap
-);
-```
-
-No manual type definitions needed - the plugin map provides full type safety automatically.
-
-## Unit Testing Plugins
-
-Test plugins in isolation using `createLocalPluginRuntime`:
-
-```typescript
+import { describe, it, expect } from "vitest";
 import { createLocalPluginRuntime } from "every-plugin/testing";
-import TestPlugin from "./my-plugin";
+import TestPlugin from "../src/index";
 
-// Create plugin map with 'as const' for type inference
-const pluginMap = {
-  "my-plugin": TestPlugin
-} as const;
+describe("Test Plugin", () => {
+  // Define plugin map with 'as const' for type inference
+  const pluginMap = {
+    "test-plugin": TestPlugin
+  } as const;
 
-// Create local runtime - bindings automatically inferred
-const { runtime, PluginService } = createLocalPluginRuntime(
-  {
-    registry: {
-      "my-plugin": {
-        remoteUrl: "http://localhost:3999/remoteEntry.js", // Not actually used
-        version: "1.0.0"
+  const runtime = createLocalPluginRuntime(
+    {
+      registry: {
+        "test-plugin": {
+          remoteUrl: "http://localhost:3999/remoteEntry.js",
+          version: "0.0.1"
+        }
+      },
+      secrets: {
+        API_KEY: "test-api-key-value"
       }
     },
-    secrets: {
-      API_KEY: "test-api-key"
-    }
-  },
-  pluginMap
-);
+    pluginMap
+  );
 
-// Get the client
-const { client } = await runtime.runPromise(
-  Effect.gen(function* () {
-    const pluginService = yield* PluginService;
-    
-    return yield* pluginService.usePlugin("my-plugin", {
+  it("should fetch single item", async () => {
+    const { client } = await runtime.usePlugin("test-plugin", {
       secrets: { apiKey: "{{API_KEY}}" },
       variables: { baseUrl: "http://localhost:1337" }
     });
-  })
-);
 
-// Test with plain promises
-const result = await client.getById({ id: "test-123" });
-expect(result.item.externalId).toBe("test-123");
+    const result = await client.getById({ id: "test-123" });
+
+    expect(result).toHaveProperty("item");
+    expect(result.item.externalId).toBe("test-123");
+  });
+});
 ```
 
-## Complete Test Example
+<Callout>
+**Always use `as const`** on plugin maps for automatic type inference in tests.
+</Callout>
 
-Full test suite for a plugin:
+## Testing Procedures
+
+### Single Item Fetch
 
 ```typescript
-import { expect, it } from "@effect/vitest";
-import { Effect, Stream } from "every-plugin/effect";
-import { describe } from "vitest";
-import { createLocalPluginRuntime } from "every-plugin/testing";
-import type { PluginBinding } from "every-plugin";
-import TestPlugin from "../src/index";
+it("should fetch single item", async () => {
+  const { client } = await runtime.usePlugin("test-plugin", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { baseUrl: "http://localhost:1337" }
+  });
 
-// Optional: Type bindings for autocomplete and validation
-type TestBindings = {
-  "test-plugin": PluginBinding<typeof TestPlugin>;
-};
+  const result = await client.getById({ id: "test-123" });
 
-const TEST_REGISTRY = {
-  "test-plugin": {
-    remoteUrl: "http://localhost:3999/remoteEntry.js",
-    version: "0.0.1"
+  expect(result).toHaveProperty("item");
+  expect(result.item?.externalId).toBe("test-123");
+});
+```
+
+### Bulk Operations
+
+```typescript
+it("should fetch bulk items", async () => {
+  const { client } = await runtime.usePlugin("test-plugin", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { baseUrl: "http://localhost:1337" }
+  });
+
+  const result = await client.getBulk({ 
+    ids: ["item-1", "item-2", "item-3"] 
+  });
+
+  expect(result).toHaveProperty("items");
+  expect(result.items).toHaveLength(3);
+  expect(result.items[0].externalId).toBe("item-1");
+});
+```
+
+### Search Operations
+
+```typescript
+it("should search and return results", async () => {
+  const { client } = await runtime.usePlugin("test-plugin", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { baseUrl: "http://localhost:1337" }
+  });
+
+  const result = await client.search({ 
+    query: "typescript",
+    limit: 10
+  });
+
+  expect(result).toHaveProperty("items");
+  expect(result.items.length).toBeGreaterThan(0);
+  expect(result.items.length).toBeLessThanOrEqual(10);
+});
+```
+
+## Testing Streaming
+
+Test streaming procedures with async iteration:
+
+```typescript
+it("should stream items", async () => {
+  const { client } = await runtime.usePlugin("test-plugin", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { baseUrl: "http://localhost:1337" }
+  });
+
+  const stream = await client.streamItems({ 
+    query: "test",
+    limit: 5
+  });
+
+  const items = [];
+  for await (const item of stream) {
+    items.push(item);
+    if (items.length >= 5) break;
   }
-} as const;
 
-const TEST_CONFIG = {
-  variables: {
-    baseUrl: "http://localhost:1337",
-    timeout: 5000
-  },
-  secrets: {
-    apiKey: "test-api-key-value"
-  }
-};
+  expect(items.length).toBe(5);
+  expect(items[0]).toHaveProperty("item");
+});
+```
 
-const SECRETS_CONFIG = {
-  API_KEY: "test-api-key-value"
-};
+### Testing with Effect Streams
 
-const PLUGIN_MAP = {
-  "test-plugin": TestPlugin
-} as const;
+```typescript
+import { Stream, Effect } from "every-plugin/effect";
 
-describe("Test Plugin", () => {
-  const { runtime, PluginService } = createLocalPluginRuntime(
-    {
-      registry: TEST_REGISTRY,
-      secrets: SECRETS_CONFIG
-    },
-    PLUGIN_MAP
+it("should stream with Effect", async () => {
+  const { client } = await runtime.usePlugin("test-plugin", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { baseUrl: "http://localhost:1337" }
+  });
+
+  const streamResult = await client.streamItems({ 
+    query: "test",
+    limit: 5
+  });
+
+  const items = await Effect.runPromise(
+    Stream.fromAsyncIterable(streamResult, error => error).pipe(
+      Stream.take(5),
+      Stream.runCollect
+    )
   );
 
-  it.effect("should fetch single item", () =>
-    Effect.gen(function* () {
-      const pluginService = yield* PluginService;
-      const { client } = yield* pluginService.usePlugin("test-plugin", TEST_CONFIG);
-
-      // Client methods return promises
-      const result = await client.getById({ id: "test-123" });
-
-      expect(result).toHaveProperty("item");
-      expect(result.item.externalId).toBe("test-123");
-    }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-  );
-
-  it.effect("should fetch bulk items", () =>
-    Effect.gen(function* () {
-      const pluginService = yield* PluginService;
-      const { client } = yield* pluginService.usePlugin("test-plugin", TEST_CONFIG);
-
-      const result = await client.getBulk({ ids: ["item-1", "item-2", "item-3"] });
-
-      expect(result).toHaveProperty("items");
-      expect(result.items).toHaveLength(3);
-      expect(result.items[0].externalId).toBe("item-1");
-    }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-  );
-
-  it.effect("should stream items", () =>
-    Effect.gen(function* () {
-      const pluginService = yield* PluginService;
-      const { client } = yield* pluginService.usePlugin("test-plugin", TEST_CONFIG);
-
-      // Streaming procedures return async iterables
-      const streamResult = await client.simpleStream({ count: 3, prefix: "test" });
-
-      const stream = Stream.fromAsyncIterable(streamResult, error => error);
-      const items = yield* stream.pipe(Stream.runCollect);
-
-      const itemArray = Array.from(items);
-      expect(itemArray.length).toBe(3);
-      expect(itemArray[0].item.externalId).toBe("test_0");
-    }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-  );
+  const itemArray = Array.from(items);
+  expect(itemArray.length).toBe(5);
 });
 ```
 
 ## Testing Error Handling
 
-Test plugin error responses:
+### Common Plugin Errors
 
 ```typescript
-it.effect("should handle rate limit error", () =>
-  Effect.gen(function* () {
-    const pluginService = yield* PluginService;
-    const { client } = yield* pluginService.usePlugin("test-plugin", TEST_CONFIG);
+import { CommonPluginErrors } from "every-plugin";
 
-    try {
-      await client.throwError({
-        errorType: "RATE_LIMITED",
-        customMessage: "Test rate limit"
-      });
-      
-      // Should not reach here
-      expect(true).toBe(false);
-    } catch (error: any) {
-      expect(error.code).toBe("RATE_LIMITED");
-      expect(error.data.retryAfter).toBe(60);
-      expect(error.data.limitType).toBe("requests");
+it("should handle rate limit error", async () => {
+  const { client } = await runtime.usePlugin("test-plugin", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { baseUrl: "http://localhost:1337" }
+  });
+
+  try {
+    await client.triggerRateLimit();
+    fail("Should have thrown error");
+  } catch (error: any) {
+    expect(error.code).toBe("RATE_LIMITED");
+    expect(error.data.retryAfter).toBe(60);
+    expect(error.data.limitType).toBe("requests");
+  }
+});
+
+it("should handle unauthorized error", async () => {
+  const { client } = await runtime.usePlugin("test-plugin", {
+    secrets: { apiKey: "invalid-key" },
+    variables: { baseUrl: "http://localhost:1337" }
+  });
+
+  await expect(
+    client.getData({ id: "test" })
+  ).rejects.toMatchObject({
+    code: "UNAUTHORIZED",
+    data: {
+      apiKeyProvided: true,
+      authType: "apiKey"
     }
-  }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-);
+  });
+});
 
-it.effect("should handle unauthorized error", () =>
-  Effect.gen(function* () {
-    const pluginService = yield* PluginService;
-    const { client } = yield* pluginService.usePlugin("test-plugin", TEST_CONFIG);
+it("should handle service unavailable", async () => {
+  const { client } = await runtime.usePlugin("test-plugin", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { baseUrl: "http://invalid-host" }
+  });
 
-    try {
-      await client.throwError({ errorType: "UNAUTHORIZED" });
-      
-      expect(true).toBe(false);
-    } catch (error: any) {
-      expect(error.code).toBe("UNAUTHORIZED");
-      expect(error.data.apiKeyProvided).toBe(true);
-      expect(error.data.authType).toBe("apiKey");
+  await expect(
+    client.getData({ id: "test" })
+  ).rejects.toMatchObject({
+    code: "SERVICE_UNAVAILABLE",
+    data: {
+      retryAfter: expect.any(Number)
     }
-  }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-);
-```
-
-## Testing Background Producers
-
-Test plugins with background tasks:
-
-```typescript
-it.effect("should test background producer pattern", () =>
-  Effect.gen(function* () {
-    const pluginService = yield* PluginService;
-
-    const { client } = yield* pluginService.usePlugin("background-plugin", {
-      variables: {
-        baseUrl: "http://localhost:1337",
-        backgroundEnabled: true,
-        backgroundIntervalMs: 100,
-        backgroundMaxItems: 5
-      },
-      secrets: { apiKey: "test-key" }
-    });
-
-    // Wait for background producer to generate events
-    yield* Effect.sleep("1 second");
-
-    // Streaming procedures return async iterables
-    const streamResult = await client.listenBackground({ maxResults: 3 });
-
-    const stream = Stream.fromAsyncIterable(streamResult, error => error);
-    const events = yield* stream.pipe(
-      Stream.take(3),
-      Stream.runCollect
-    );
-
-    const eventArray = Array.from(events);
-    expect(eventArray.length).toBe(3);
-    expect(eventArray[0].id).toMatch(/^bg-\d+$/);
-  }).pipe(Effect.provide(runtime), Effect.timeout("15 seconds"))
-);
+  });
+});
 ```
 
 ## Testing Router Access
 
-Test that routers work with oRPC handlers:
+Test HTTP mounting with oRPC handlers:
 
 ```typescript
-import { OpenAPIHandler, RPCHandler } from "@orpc/server/node";
+import { OpenAPIHandler } from "@orpc/openapi/node";
 import { createServer } from "node:http";
 
-it.effect("should work via OpenAPI handler", () =>
-  Effect.gen(function* () {
-    const pluginService = yield* PluginService;
-    const result = yield* pluginService.usePlugin("test-plugin", TEST_CONFIG);
+it("should work via OpenAPI handler", async () => {
+  const result = await runtime.usePlugin("test-plugin", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { baseUrl: "http://localhost:1337" }
+  });
 
-    const { router, initialized } = result;
+  const { router, initialized } = result;
+  const handler = new OpenAPIHandler(router);
 
-    // Create OpenAPI handler
-    const handler = new OpenAPIHandler(router);
+  // Start test server
+  const port = 3888;
+  const baseUrl = `http://localhost:${port}`;
 
-    // Start server
-    const port = 3888;
-    const baseUrl = `http://localhost:${port}`;
-
-    const server = createServer(async (req, res) => {
-      const url = new URL(req.url!, baseUrl);
-      if (url.pathname.startsWith("/api")) {
-        const result = await handler.handle(req, res, {
-          prefix: "/api",
-          context: initialized.context
-        });
-        if (result.matched) return;
-      }
+  const server = createServer(async (req, res) => {
+    const response = await handler.handle(req, res, {
+      prefix: "/api",
+      context: initialized.context
+    });
+    if (!response.matched) {
       res.statusCode = 404;
       res.end("Not Found");
-    });
+    }
+  });
 
-    yield* Effect.async<void>((resume) => {
-      server.listen(port, () => resume(Effect.void));
-    });
+  await new Promise<void>((resolve) => {
+    server.listen(port, () => resolve());
+  });
 
-    // Test HTTP request
-    const response = yield* Effect.tryPromise(() =>
-      fetch(`${baseUrl}/api/getById`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: "http-test-123" })
-      })
-    );
+  // Test HTTP request
+  const response = await fetch(`${baseUrl}/api/getById`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: "http-test-123" })
+  });
 
-    const data = yield* Effect.tryPromise(() => response.json());
+  const data = await response.json();
 
-    expect(data).toHaveProperty("item");
-    expect(data.item.externalId).toBe("http-test-123");
+  expect(data).toHaveProperty("item");
+  expect(data.item.externalId).toBe("http-test-123");
 
-    // Cleanup
-    yield* Effect.async<void>((resume) => {
-      server.close(() => resume(Effect.void));
-    });
-  }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-);
+  // Cleanup
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve());
+  });
+});
+```
+
+## Testing with Mock Services
+
+Mock external dependencies for isolated testing:
+
+```typescript
+// Create mock service
+class MockApiService {
+  async getData(id: string) {
+    return {
+      externalId: id,
+      content: "mock-content",
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  async *streamData(query: string) {
+    for (let i = 0; i < 3; i++) {
+      yield {
+        externalId: `${query}_${i}`,
+        content: `mock-content-${i}`,
+        createdAt: new Date().toISOString()
+      };
+    }
+  }
+}
+
+// Use in plugin
+export default createPlugin({
+  id: "test-plugin",
+  // ... contract and config
+  initialize: (config) => Effect.gen(function* () {
+    const service = process.env.NODE_ENV === "test"
+      ? new MockApiService()
+      : new RealApiService(config.secrets.apiKey);
+    
+    return { service };
+  }),
+  // ... router
+});
+```
+
+## Testing Background Tasks
+
+Test plugins with background producers:
+
+```typescript
+it("should produce events in background", async () => {
+  const { client } = await runtime.usePlugin("background-plugin", {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: {
+      baseUrl: "http://localhost:1337",
+      backgroundEnabled: true,
+      backgroundIntervalMs: 100,
+      backgroundMaxItems: 5
+    }
+  });
+
+  // Wait for background producer to generate events
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Listen to background events
+  const stream = await client.listenBackground({ maxResults: 3 });
+
+  const events = [];
+  for await (const event of stream) {
+    events.push(event);
+    if (events.length >= 3) break;
+  }
+
+  expect(events.length).toBe(3);
+  expect(events[0].id).toMatch(/^bg-\d+$/);
+});
 ```
 
 ## Integration Testing
 
-For integration tests with real Module Federation, use the standard runtime:
+Test multiple plugins working together:
 
 ```typescript
-import { createPluginRuntime } from "every-plugin/runtime";
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import SourcePlugin from "./source-plugin";
+import TransformerPlugin from "./transformer-plugin";
 
-// Real Module Federation URL
-const REMOTE_URL = "http://localhost:3001/remoteEntry.js";
+describe("Plugin Integration", () => {
+  const pluginMap = {
+    "source": SourcePlugin,
+    "transformer": TransformerPlugin
+  } as const;
 
-describe("Integration Tests", () => {
-  const { runtime, PluginService } = createPluginRuntime({
-    registry: {
-      "real-plugin": {
-        remoteUrl: REMOTE_URL,
-        version: "1.0.0"
-      }
+  const runtime = createLocalPluginRuntime(
+    {
+      registry: {
+        "source": { remoteUrl: "", version: "1.0.0" },
+        "transformer": { remoteUrl: "", version: "1.0.0" }
+      },
+      secrets: { API_KEY: "test-key" }
     },
-    secrets: { API_KEY: "test-key" }
-  });
-
-  it.effect("should load real plugin via Module Federation", () =>
-    Effect.gen(function* () {
-      const pluginService = yield* PluginService;
-
-      const { client, metadata } = yield* pluginService.usePlugin("real-plugin", {
-        secrets: { apiKey: "{{API_KEY}}" },
-        variables: { timeout: 30000 }
-      });
-
-      expect(metadata.id).toBe("real-plugin");
-
-      const result = yield* Effect.tryPromise(() =>
-        client.getData({ id: "test" })
-      );
-
-      expect(result).toBeDefined();
-    }).pipe(Effect.provide(runtime), Effect.timeout("30 seconds"))
+    pluginMap
   );
+
+  it("should process data through pipeline", async () => {
+    const { client: source } = await runtime.usePlugin("source", {
+      secrets: { apiKey: "{{API_KEY}}" }
+    });
+
+    const { client: transformer } = await runtime.usePlugin("transformer", {
+      variables: { format: "json" }
+    });
+
+    // Fetch from source
+    const sourceData = await source.getData({ id: "test" });
+
+    // Transform data
+    const transformed = await transformer.transform({
+      data: sourceData.item
+    });
+
+    expect(transformed).toHaveProperty("formatted");
+    expect(transformed.format).toBe("json");
+  });
 });
 ```
 
-## Testing Best Practices
+## Complete Test Suite Example
 
-### Use Effect Test Utilities
-
-Use `@effect/vitest` for Effect-aware testing:
+Full test suite for a plugin:
 
 ```typescript
-import { expect, it } from "@effect/vitest";
-import { Effect } from "every-plugin/effect";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import TestPlugin from "../src/index";
 
-it.effect("test name", () =>
-  Effect.gen(function* () {
-    // Your test logic
-  }).pipe(
-    Effect.provide(runtime),
-    Effect.timeout("10 seconds")
-  )
-);
+describe("Complete Plugin Test Suite", () => {
+  const pluginMap = { "test-plugin": TestPlugin } as const;
+
+  const runtime = createLocalPluginRuntime(
+    {
+      registry: {
+        "test-plugin": {
+          remoteUrl: "http://localhost:3999/remoteEntry.js",
+          version: "0.0.1"
+        }
+      },
+      secrets: { API_KEY: "test-api-key" }
+    },
+    pluginMap
+  );
+
+  const TEST_CONFIG = {
+    secrets: { apiKey: "{{API_KEY}}" },
+    variables: { baseUrl: "http://localhost:1337" }
+  };
+
+  describe("Basic Operations", () => {
+    it("should initialize correctly", async () => {
+      const result = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      
+      expect(result.metadata.id).toBe("test-plugin");
+      expect(result.metadata.version).toBe("0.0.1");
+    });
+
+    it("should fetch by ID", async () => {
+      const { client } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const result = await client.getById({ id: "test-123" });
+      
+      expect(result.item?.externalId).toBe("test-123");
+    });
+
+    it("should handle bulk fetch", async () => {
+      const { client } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const result = await client.getBulk({ ids: ["1", "2", "3"] });
+      
+      expect(result.items).toHaveLength(3);
+    });
+  });
+
+  describe("Streaming", () => {
+    it("should stream items", async () => {
+      const { client } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const stream = await client.streamItems({ query: "test", limit: 5 });
+      
+      const items = [];
+      for await (const item of stream) {
+        items.push(item);
+        if (items.length >= 5) break;
+      }
+      
+      expect(items.length).toBe(5);
+    });
+  });
+
+  describe("Error Handling", () => {
+    it("should handle invalid ID", async () => {
+      const { client } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      
+      await expect(
+        client.getById({ id: "" })
+      ).rejects.toThrow();
+    });
+
+    it("should handle rate limits", async () => {
+      const { client } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      
+      try {
+        await client.triggerRateLimit();
+        fail("Should throw");
+      } catch (error: any) {
+        expect(error.code).toBe("RATE_LIMITED");
+      }
+    });
+  });
+
+  afterAll(async () => {
+    await runtime.shutdown();
+  });
+});
 ```
 
-### Mock External Dependencies
+## Best Practices
 
-Mock API clients in your plugin for testing:
+### ✅ Do This
 
 ```typescript
-class MockApiClient {
-  async fetch(id: string) {
-    return { id, data: "mock-data" };
-  }
-}
+// Use descriptive test names
+it("should return empty array when no results found", async () => {
+  // ...
+});
 
-// Use in plugin initialize for testing
-initialize: (config) => Effect.gen(function* () {
-  const client = process.env.NODE_ENV === "test"
-    ? new MockApiClient()
-    : new RealApiClient(config.secrets.apiKey);
-  
-  return { client };
-})
+// Test error cases
+it("should throw UNAUTHORIZED when API key is invalid", async () => {
+  // ...
+});
+
+// Use beforeAll/afterAll for setup/cleanup
+beforeAll(async () => {
+  await setupTestEnvironment();
+});
+
+afterAll(async () => {
+  await runtime.shutdown();
+});
+
+// Test with realistic data
+const testData = {
+  id: "real-looking-id-123",
+  query: "realistic search query",
+  limit: 10
+};
 ```
 
-### Test Resource Cleanup
-
-Verify that resources are properly cleaned up:
+### ❌ Don't Do This
 
 ```typescript
-it.effect("should cleanup resources on shutdown", () =>
-  Effect.gen(function* () {
-    const pluginService = yield* PluginService;
-    const { initialized } = yield* pluginService.usePlugin("test-plugin", config);
+// Don't use vague test names
+it("test 1", async () => {
+  // What does this test?
+});
 
-    // Plugin is running
-    expect(initialized.scope).toBeDefined();
+// Don't forget error cases
+it("should work", async () => {
+  // Only testing happy path
+});
 
-    // Dispose runtime
-    yield* Effect.promise(() => runtime.disposeRuntime());
+// Don't leak resources
+// Missing cleanup:
+// afterAll(async () => {
+//   await runtime.shutdown();
+// });
 
-    // Verify cleanup (plugin-specific checks)
-  }).pipe(Effect.provide(runtime), Effect.timeout("10 seconds"))
-);
+// Don't use unrealistic test data
+const testData = { id: "1", query: "a", limit: 999999 };
 ```
+
+## Next Steps
+
+<Cards>
+  <Card title="Local Development" href="/docs/using-plugins/local-development">
+    Develop plugins locally
+  </Card>
+  <Card title="Deployment" href="/docs/creating-plugins/deployment">
+    Deploy to production
+  </Card>
+  <Card title="Recipes" href="/docs/recipes">
+    Advanced patterns
+  </Card>
+</Cards>

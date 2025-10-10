@@ -5,20 +5,20 @@ import { migrate } from "drizzle-orm/libsql/migrator";
 import { Effect } from "every-plugin/effect";
 import {
   entities,
-  messages,
-  personas,
-  platformAccounts,
-  relationships,
-  streamState,
   type Message,
+  messages,
   type NewEntity,
   type NewMessage,
   type NewPersona,
   type NewPlatformAccount,
   type NewRelationship,
-  type NewStreamState
+  type NewStreamState, 
+  personas,
+  platformAccounts,
+  relationships,
+  streamState
 } from "../schemas/database";
-import type { PersonaType, EntityType } from "../schemas/types";
+import type { EntityType, PersonaType } from "../schemas/types";
 
 export class DatabaseService extends Effect.Service<DatabaseService>()(
   "DatabaseService",

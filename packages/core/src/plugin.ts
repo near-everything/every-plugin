@@ -1,5 +1,6 @@
-import type { AnyContractRouter } from "@orpc/contract";
-import type { Context, Router } from "@orpc/server";
+import type { AnyContractRouter, ContractRouter } from "@orpc/contract";
+import type { Context, Router, Implementer } from "@orpc/server";
+import { implement } from "@orpc/server";
 import { Effect, type Scope } from "effect";
 import { z } from "zod";
 
@@ -106,9 +107,11 @@ export interface Plugin<
 	 * Creates the strongly-typed oRPC router for this plugin.
 	 * The router's procedure types are inferred directly from the contract.
 	 * @param context The initialized plugin context
-	 * @returns A router with procedures matching the plugin's contract
+	 * @returns A router with procedures matching the plugin's contract and composed context
 	 */
-	createRouter(context?: TContext): Router<TContract, TContext>;
+	createRouter<THostContext extends Context = Record<never, never>>(
+		context?: TContext
+	): Router<TContract, TContext & THostContext>;
 }
 
 /**
@@ -127,7 +130,10 @@ export function createPlugin<
 	initialize?: (
 		config: { variables: z.infer<V>; secrets: z.infer<S> }
 	) => Effect.Effect<TContext, Error, Scope.Scope>;
-	createRouter: (ctx: TContext) => Router<TContract, TContext>;
+	createRouter: (
+		context: TContext,
+		builder: Implementer<TContract, TContext & Record<never, never>, TContext & Record<never, never>>
+	) => Router<TContract, TContext & Record<never, never>>;
 	shutdown?: (ctx: TContext) => Effect.Effect<void, Error, never>;
 }) {
 	const configSchema = z.object({
@@ -165,8 +171,13 @@ export function createPlugin<
 			});
 		}
 
-		createRouter(context: TContext): Router<TContract, TContext> {
-			return config.createRouter(context);
+		createRouter<THostContext extends Context = Record<never, never>>(
+			context: TContext
+		): Router<TContract, TContext & THostContext> {
+			const builder = implement(config.contract).$context<TContext & THostContext>();
+			const router = config.createRouter(context, builder);
+			return router;
+			// return router as Router<TContract, TContext & THostContext>;
 		}
 	}
 

@@ -1,5 +1,5 @@
-import type { AnyContractRouter } from "@orpc/contract";
-import type { Context, RouterClient } from "@orpc/server";
+import type { AnyContractRouter, ContractRouter } from "@orpc/contract";
+import type { Context, Router, RouterClient } from "@orpc/server";
 import type { Scope } from "effect";
 import type { z } from "zod";
 import type { Plugin, PluginConfigFor } from "./plugin";
@@ -42,10 +42,13 @@ export type PluginOf<B> =
 export type ConfigOf<B> = z.infer<PluginOf<B>["configSchema"]>;
 
 /**
- * Extracts the router type from a plugin.
- * This enables type inference from Plugin → Router → RouterClient with full procedure autocomplete.
+ * The actual router type returned by plugins (with procedures implemented)
+ * Supports host context composition via THostContext type parameter
  */
-export type RouterOf<T extends AnyPlugin> = ReturnType<T["createRouter"]>;
+export type PluginRouter<
+  T extends AnyPlugin,
+  THostContext extends Context = Record<never, never>
+> = Router<T["contract"], ContextOf<T> & THostContext>;
 
 /**
  * Extracts the context type from a plugin.
@@ -128,10 +131,15 @@ export interface RuntimeOptions {
 
 /**
  * Enhanced plugin result containing client, router, and metadata.
+ * Router is typed as ContractRouter for encapsulation, but runtime compatible with oRPC routers.
+ * Supports host context composition through THostContext type parameter.
  */
-export interface EveryPlugin<T extends AnyPlugin = AnyPlugin> {
-  readonly client: RouterClient<RouterOf<T>, Record<never, never>>;
-  readonly router: RouterOf<T>;
+export interface EveryPlugin<
+  T extends AnyPlugin = AnyPlugin,
+  THostContext extends Context = Record<never, never>
+> {
+  readonly client: RouterClient<PluginRouter<T, THostContext>, THostContext>;
+  readonly router: PluginRouter<T, THostContext>;
   readonly metadata: PluginMetadata;
   readonly initialized: InitializedPlugin<T>;
 }

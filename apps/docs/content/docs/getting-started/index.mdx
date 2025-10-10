@@ -1,0 +1,360 @@
+---
+title: Quick Start
+description: Get running with every-plugin in 5 minutes
+---
+
+## Installation
+
+```bash
+bun add every-plugin
+```
+
+## Basic Usage
+
+<Steps>
+
+### Create Runtime
+
+```typescript
+import { createPluginRuntime } from "every-plugin/runtime";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "social-feed": {
+      remoteUrl: "https://cdn.example.com/plugins/social-feed/remoteEntry.js",
+      version: "1.0.0"
+    }
+  },
+  secrets: {
+    API_KEY: process.env.SOCIAL_API_KEY
+  }
+});
+```
+
+<Callout>
+The plugin is loaded remotely at runtime via Module Federation - no npm install needed.
+</Callout>
+
+### Use Plugin
+
+```typescript
+const { client } = await runtime.usePlugin("social-feed", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
+```
+
+### Call Procedures
+
+```typescript
+// Single item
+const post = await client.getById({ id: "123" });
+
+// Search with limit
+const results = await client.search({ 
+  query: "typescript", 
+  limit: 10 
+});
+
+console.log(`Found ${results.items.length} items`);
+```
+
+### Cleanup
+
+```typescript
+await runtime.shutdown();
+```
+
+</Steps>
+
+## Streaming Example
+
+Streaming procedures return async iterables:
+
+<Tabs items={['Direct Iteration', 'With Effect Streams']}>
+
+<Tab value="Direct Iteration">
+
+```typescript
+const { client } = await runtime.usePlugin("social-feed", config);
+
+const stream = await client.streamPosts({ query: "typescript" });
+
+for await (const post of stream) {
+  console.log(`Processing: ${post.item.id}`);
+}
+```
+
+</Tab>
+
+<Tab value="With Effect Streams">
+
+```typescript
+import { Stream } from "every-plugin/effect";
+
+const stream = await client.streamPosts({ query: "typescript" });
+
+const effectStream = Stream.fromAsyncIterable(stream, error => error);
+
+const items = await Effect.runPromise(
+  effectStream.pipe(
+    Stream.take(50),
+    Stream.runCollect
+  )
+);
+
+console.log(`Processed ${items.length} items`);
+```
+
+</Tab>
+
+</Tabs>
+
+## Core Concepts
+
+### Plugin Structure
+
+Every plugin can be essentially organized into three files:
+
+```
+plugins/your-plugin/
+├── src/
+│   ├── contract.ts    # oRPC contract (API definition)
+│   ├── service.ts     # Service class
+│   └── index.ts       # Plugin implementation
+```
+
+**contract.ts** - Define procedures with oRPC:
+
+```typescript
+import { oc } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+import { CommonPluginErrors } from "every-plugin";
+
+export const contract = oc.router({
+  getData: oc.route({ method: 'POST', path: '/getData' })
+    .input(z.object({ id: z.string() }))
+    .output(z.object({ data: z.string() }))
+    .errors(CommonPluginErrors)
+});
+```
+
+**service.ts** - Service class:
+
+```typescript
+import { Effect } from "every-plugin/effect";
+
+export class MyService {
+  constructor(private apiKey: string, private baseUrl: string) {}
+  
+  getData(id: string) {
+    return Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(`${this.baseUrl}/data/${id}`, {
+          headers: { Authorization: `Bearer ${this.apiKey}` }
+        });
+        return response.json();
+      },
+      catch: (e: unknown) => new Error(`Failed: ${e}`)
+    });
+  }
+}
+```
+
+**index.ts** - Wire everything together:
+
+```typescript
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import { z } from "every-plugin/zod";
+
+export default createPlugin({
+  id: "my-plugin",
+  contract,
+  variables: z.object({ baseUrl: z.string() }),
+  secrets: z.object({ apiKey: z.string() }),
+  
+  initialize: (config) => Effect.gen(function* () {
+    const service = new MyService(
+      config.secrets.apiKey,
+      config.variables.baseUrl
+    );
+    return { service };
+  }),
+  
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input }) => {
+      const data = await Effect.runPromise(
+        context.service.getData(input.id)
+      );
+      return { data };
+    })
+  })
+});
+```
+
+### Context Flow
+
+Context flows: initialize → createRouter → handlers
+
+```typescript
+// 1. Initialize returns context
+initialize: (config) => Effect.gen(function* () {
+  const service = new MyService(config.secrets.apiKey);
+  return { service }; // This becomes context
+}),
+
+// 2. createRouter receives (context, builder)
+createRouter: (context, builder) => {
+  // context.service available here
+  // builder is already: implement(contract).$context<TContext>()
+  
+  return {
+    // 3. Handlers access context
+    getData: builder.getData.handler(async ({ input }) => {
+      return await context.service.fetch(input.id);
+    })
+  };
+}
+```
+
+<Callout type="info">
+The `builder` parameter is pre-configured with your contract and context. Learn more: [oRPC Implementation](https://orpc.io/docs/contract-first/implement-contract)
+</Callout>
+
+### Resource Management
+
+Use Effect for automatic resource cleanup:
+
+```typescript
+initialize: (config) => Effect.gen(function* () {
+  // Acquire resource with automatic cleanup on shutdown
+  const queue = yield* Effect.acquireRelease(
+    Queue.bounded(1000),
+    (q) => Queue.shutdown(q)
+  );
+  
+  return { queue };
+})
+```
+
+<Callout type="info">
+Learn more: [Effect Resource Management](https://effect.website/docs/guides/resource-management/scope)
+</Callout>
+
+### Runtime Lifecycle
+
+The runtime uses Effect's ManagedRuntime:
+
+```typescript
+const runtime = createPluginRuntime({
+  registry: { /* plugins */ },
+  secrets: { /* secrets */ }
+});
+
+// Runtime automatically handles:
+// 1. Plugin loading (Module Federation)
+// 2. Secret injection ({{TEMPLATE}} → actual values)
+// 3. Initialization (Effect lifecycle)
+// 4. Resource cleanup (on shutdown)
+
+await runtime.shutdown();
+```
+
+### Secret Injection
+
+Secrets use template syntax:
+
+```typescript
+const runtime = createPluginRuntime({
+  secrets: {
+    API_KEY: process.env.API_KEY,
+    DB_URL: process.env.DATABASE_URL
+  }
+});
+
+const { client } = await runtime.usePlugin("plugin-id", {
+  secrets: {
+    apiKey: "{{API_KEY}}",  // → Replaced with actual value
+    dbUrl: "{{DB_URL}}"     // → Replaced with actual value
+  },
+  variables: {
+    timeout: 30000          // → Passes through as-is
+  }
+});
+```
+
+### Local vs Remote
+
+Same API for development and production:
+
+<Tabs items={['Local Development', 'Production']}>
+
+<Tab value="Local Development">
+
+```typescript
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import MyPlugin from "./my-plugin";
+
+const runtime = createLocalPluginRuntime(
+  { 
+    registry: { "my-plugin": { remoteUrl: "", version: "1.0.0" } },
+    secrets: { API_KEY: "test-key" }
+  },
+  { "my-plugin": MyPlugin } as const
+);
+
+const { client } = await runtime.usePlugin("my-plugin", config);
+```
+
+</Tab>
+
+<Tab value="Production">
+
+```typescript
+import { createPluginRuntime } from "every-plugin/runtime";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      remoteUrl: "https://cdn.example.com/my-plugin/remoteEntry.js",
+      version: "1.0.0"
+    }
+  },
+  secrets: { API_KEY: process.env.API_KEY }
+});
+
+const { client } = await runtime.usePlugin("my-plugin", config);
+```
+
+</Tab>
+
+</Tabs>
+
+## Import Convention
+
+Always import through `every-plugin` for version consistency:
+
+```typescript
+import { Effect, Stream, Queue } from "every-plugin/effect";
+import { oc, eventIterator } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+```
+
+<Callout type="warning">
+Never import Effect, Zod, or oRPC directly. Always use the `every-plugin` re-exports.
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card title="Type Safety" href="/docs/getting-started/type-safety">
+    Optional type bindings for autocomplete
+  </Card>
+  <Card title="Create a Plugin" href="/docs/creating-plugins">
+    Build your first plugin
+  </Card>
+  <Card title="Testing" href="/docs/testing">
+    Test plugins locally
+  </Card>
+</Cards>

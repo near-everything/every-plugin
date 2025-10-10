@@ -6,7 +6,7 @@
   "types": "./dist/index.d.ts",
   "type": "module",
   "peerDependencies": {
-    "every-plugin": "^0.1.0",
+    "every-plugin": "^0.3.0",
     "typescript": "^5.0.0"
   },
   "devDependencies": {
@@ -16,15 +16,15 @@
     "@rspack/core": "^1.5.2",
     "@types/node": "^24.6.0",
     "dotenv": "^17.2.2",
-    "every-plugin": "link:every-plugin",
+    "every-plugin": "^0.3.0",
     "msw": "^2.3.0",
     "sirv": "^3.0.2",
     "vitest": "^3.2.4",
     "zephyr-rspack-plugin": "^0.0.59"
   },
   "scripts": {
-    "build": "rspack build",
-    "type-check": "tsc -p tsconfig.build.json",
+    "build": "rspack build && tsc -p tsconfig.build.json",
+    "type-check": "tsc -p tsconfig.build.json --noEmit",
     "dev": "rspack serve",
     "test": "vitest run",
     "test:unit": "vitest run src/__tests__/unit",
