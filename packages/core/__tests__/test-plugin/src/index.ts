@@ -4,7 +4,7 @@ import {
 	PluginConfigurationError,
 } from "every-plugin";
 import { Effect, Queue } from "every-plugin/effect";
-import { type ContractRouterClient, eventIterator, implement, oc } from "every-plugin/orpc";
+import { type ContractRouterClient, eventIterator, oc } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 import { TestClient, testItemSchema } from "./client";
 
@@ -217,136 +217,114 @@ export const TestPlugin = createPlugin({
 				backgroundQueue
 			};
 		}),
-	createRouter: (context) => {
+	createRouter: (context, builder) => {
 		const { client, backgroundQueue } = context;
-		const os = implement(testContract).$context<typeof context>();
 
-		// Basic single item fetch
-		const getById = os.getById.handler(async ({ input }) => {
-			const item = await client.fetchById(input.id);
-			return { item };
-		});
 
-		// Basic bulk fetch
-		const getBulk = os.getBulk.handler(async ({ input }) => {
-			const items = await client.fetchBulk(input.ids);
-			return { items };
-		});
+		return {
+			getById: builder.getById.handler(async ({ input }) => {
+				const item = await client.fetchById(input.id);
+				return { item };
+			}),
 
-		// Simple predictable streaming
-		const simpleStream = os.simpleStream.handler(async function* ({ input }) {
-			yield* client.streamItems(input.count, input.prefix);
-		});
+			getBulk: builder.getBulk.handler(async ({ input }) => {
+				const items = await client.fetchBulk(input.ids);
+				return { items };
+			}),
 
-		// Empty stream for testing
-		// biome-ignore lint/correctness/useYield: specific test case
-		const emptyStream = os.emptyStream.handler(async function* ({ input }) {
-			// Log why it's empty, do any setup/cleanup, but don't yield
-			console.log(`Empty stream: ${input.reason}`);
-			// Generator ends without yielding - creates empty AsyncIterable
-			return;
-		});
+			simpleStream: builder.simpleStream.handler(async function* ({ input }) {
+				yield* client.streamItems(input.count, input.prefix);
+			}),
 
-		// Error testing procedure
-		const throwError = os.throwError.handler(async ({ input, errors }) => {
-			const message = input.customMessage || `Test ${input.errorType.toLowerCase()} error`;
+			// biome-ignore lint/correctness/useYield: specific test case
+			emptyStream: builder.emptyStream.handler(async function* ({ input }) {
+				// Log why it's empty, do any setup/cleanup, but don't yield
+				console.log(`Empty stream: ${input.reason}`);
+				// Generator ends without yielding - creates empty AsyncIterable
+				return;
+			}),
 
-			switch (input.errorType) {
-				case 'UNAUTHORIZED':
-					throw errors.UNAUTHORIZED({
-						message,
-						data: { apiKeyProvided: true, authType: 'apiKey' as const }
-					});
-				case 'FORBIDDEN':
-					throw errors.FORBIDDEN({
-						message,
-						data: { requiredPermissions: ['read:data'], action: 'test' }
-					});
-				case 'RATE_LIMITED':
-					throw errors.RATE_LIMITED({
-						message,
-						data: {
-							retryAfter: 60,
-							remainingRequests: 0,
-							limitType: 'requests' as const
-						}
-					});
-				case 'SERVICE_UNAVAILABLE':
-					throw errors.SERVICE_UNAVAILABLE({
-						message,
-						data: {
-							retryAfter: 30,
-							maintenanceWindow: false
-						}
-					});
-			}
-		});
+			throwError: builder.throwError.handler(async ({ input, errors }) => {
+				const message = input.customMessage || `Test ${input.errorType.toLowerCase()} error`;
 
-		// Config validation testing
-		const requiresSpecialConfig = os.requiresSpecialConfig.handler(async ({ input }) => {
-			return {
-				configValue: client.getConfigValue(),
-				inputValue: input.checkValue,
-			};
-		});
-
-		// Background producer streaming
-		const listenBackground = os.listenBackground.handler(async function* ({ input }) {
-			let count = 0;
-			const maxResults = input.maxResults;
-
-			while (!maxResults || count < maxResults) {
-				try {
-					const event = await Effect.runPromise(Queue.take(backgroundQueue));
-					yield event;
-					count++;
-				} catch {
-					break;
+				switch (input.errorType) {
+					case 'UNAUTHORIZED':
+						throw errors.UNAUTHORIZED({
+							message,
+							data: { apiKeyProvided: true, authType: 'apiKey' as const }
+						});
+					case 'FORBIDDEN':
+						throw errors.FORBIDDEN({
+							message,
+							data: { requiredPermissions: ['read:data'], action: 'test' }
+						});
+					case 'RATE_LIMITED':
+						throw errors.RATE_LIMITED({
+							message,
+							data: {
+								retryAfter: 60,
+								remainingRequests: 0,
+								limitType: 'requests' as const
+							}
+						});
+					case 'SERVICE_UNAVAILABLE':
+						throw errors.SERVICE_UNAVAILABLE({
+							message,
+							data: {
+								retryAfter: 30,
+								maintenanceWindow: false
+							}
+						});
 				}
-			}
-		});
+			}),
 
-		// Manual enqueue utility
-		const enqueueBackground = os.enqueueBackground.handler(async ({ input }) => {
-			const event = {
-				id: input.id || `manual-${Date.now()}`,
-				index: -1, // Manual events use -1 to distinguish from auto-generated
-				timestamp: Date.now(),
-			};
+			requiresSpecialConfig: builder.requiresSpecialConfig.handler(async ({ input }) => {
+				return {
+					configValue: client.getConfigValue(),
+					inputValue: input.checkValue,
+				};
+			}),
 
-			await Effect.runPromise(
-				Queue.offer(backgroundQueue, event).pipe(
-					Effect.catchAll(() => Effect.succeed(false))
-				)
-			);
+			listenBackground: builder.listenBackground.handler(async function* ({ input }) {
+				let count = 0;
+				const maxResults = input.maxResults;
 
-			return { ok: true };
-		});
+				while (!maxResults || count < maxResults) {
+					try {
+						const event = await Effect.runPromise(Queue.take(backgroundQueue));
+						yield event;
+						count++;
+					} catch {
+						break;
+					}
+				}
+			}),
 
-		// Queue size diagnostic
-		const getQueueSize = os.getQueueSize.handler(async () => {
-			const size = await Effect.runPromise(Queue.size(backgroundQueue));
-			return { size };
-		});
+			enqueueBackground: builder.enqueueBackground.handler(async ({ input }) => {
+				const event = {
+					id: input.id || `manual-${Date.now()}`,
+					index: -1, // Manual events use -1 to distinguish from auto-generated
+					timestamp: Date.now(),
+				};
 
-		// Simple ping for testing
-		const ping = os.ping.handler(async () => {
-			return { ok: true, timestamp: Date.now() };
-		});
+				await Effect.runPromise(
+					Queue.offer(backgroundQueue, event).pipe(
+						Effect.catchAll(() => Effect.succeed(false))
+					)
+				);
 
-		// Return the oRPC router
-		return os.router({
-			getById,
-			getBulk,
-			simpleStream,
-			emptyStream,
-			throwError,
-			requiresSpecialConfig,
-			listenBackground,
-			enqueueBackground,
-			getQueueSize,
-			ping,
-		});
+				return { ok: true };
+			}),
+
+			getQueueSize: builder.getQueueSize.handler(async () => {
+				const size = await Effect.runPromise(Queue.size(backgroundQueue));
+				return { size };
+			}),
+
+			ping: builder.ping.handler(async () => {
+				return { ok: true, timestamp: Date.now() };
+			}),
+		};
 	}
 });
 

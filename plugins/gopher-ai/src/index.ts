@@ -1,4 +1,3 @@
-import { implement } from "@orpc/server";
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
@@ -40,12 +39,11 @@ export default createPlugin({
 
   shutdown: () => Effect.void,
 
-  createRouter: (context) => {
+  createRouter: (context, builder) => {
     const { service } = context;
-    const os = implement(contract);
 
     // Core job operations
-    const submitSearchJob = os.submitSearchJob.handler(async ({ input, errors }) => {
+    const submitSearchJob = builder.submitSearchJob.handler(async ({ input, errors }) => {
       try {
         const jobId = await Effect.runPromise(
           service.client.submitSearchJob(
@@ -62,7 +60,7 @@ export default createPlugin({
       }
     });
 
-    const checkJobStatus = os.checkJobStatus.handler(async ({ input, errors }) => {
+    const checkJobStatus = builder.checkJobStatus.handler(async ({ input, errors }) => {
       try {
         const status = await Effect.runPromise(service.client.checkJobStatus(input.jobId));
         return { status: status as 'submitted' | 'in progress' | 'done' | 'error' };
@@ -71,7 +69,7 @@ export default createPlugin({
       }
     });
 
-    const getJobResults = os.getJobResults.handler(async ({ input, errors }) => {
+    const getJobResults = builder.getJobResults.handler(async ({ input, errors }) => {
       try {
         const results = await Effect.runPromise(service.client.getJobResults(input.jobId));
         return { items: results };
@@ -80,7 +78,7 @@ export default createPlugin({
       }
     });
 
-    const getById = os.getById.handler(async ({ input, errors }) => {
+    const getById = builder.getById.handler(async ({ input, errors }) => {
       try {
         const result = await Effect.runPromise(
           service.getById(input.sourceType, input.id)
@@ -91,7 +89,7 @@ export default createPlugin({
       }
     });
 
-    const getBulk = os.getBulk.handler(async ({ input, errors }) => {
+    const getBulk = builder.getBulk.handler(async ({ input, errors }) => {
       try {
         const results = await Effect.runPromise(
           service.getBulk(input.sourceType, input.ids)
@@ -102,7 +100,7 @@ export default createPlugin({
       }
     });
 
-    const getReplies = os.getReplies.handler(async ({ input, errors }) => {
+    const getReplies = builder.getReplies.handler(async ({ input, errors }) => {
       try {
         const results = await Effect.runPromise(
           service.getReplies(
@@ -117,7 +115,7 @@ export default createPlugin({
       }
     });
 
-    const similaritySearch = os.similaritySearch.handler(async ({ input, errors }) => {
+    const similaritySearch = builder.similaritySearch.handler(async ({ input, errors }) => {
       try {
         const results = await Effect.runPromise(
           service.similaritySearch(
@@ -135,7 +133,7 @@ export default createPlugin({
       }
     });
 
-    const hybridSearch = os.hybridSearch.handler(async ({ input, errors }) => {
+    const hybridSearch = builder.hybridSearch.handler(async ({ input, errors }) => {
       try {
         const results = await Effect.runPromise(
           service.hybridSearch(
@@ -154,18 +152,23 @@ export default createPlugin({
       }
     });
 
-    const getProfile = os.getProfile.handler(async ({ input, errors }) => {
+    const getProfile = builder.getProfile.handler(async ({ input, errors }) => {
       try {
         const profileData = await Effect.runPromise(
           service.getProfile(input.sourceType, input.username)
         );
 
+        // Type guard for author field from metadata
+        const author = typeof profileData.metadata?.author === 'string'
+          ? profileData.metadata.author
+          : null;
+
         return {
           profile: {
             id: profileData.id,
             username: input.username,
-            displayName: profileData.metadata?.author || input.username,
-            bio: profileData.metadata?.author,
+            displayName: author || input.username,
+            bio: author || undefined,
             followersCount: undefined,
             followingCount: undefined,
             tweetsCount: undefined,
@@ -179,7 +182,7 @@ export default createPlugin({
       }
     });
 
-    const getTrends = os.getTrends.handler(async ({ input, errors }) => {
+    const getTrends = builder.getTrends.handler(async ({ input, errors }) => {
       try {
         const results = await Effect.runPromise(
           service.getTrends(input.sourceType)
@@ -187,8 +190,12 @@ export default createPlugin({
 
         const trends = results.map((result) => ({
           name: result.content,
-          query: result.metadata?.username,
-          tweetVolume: result.metadata?.likes,
+          query: typeof result.metadata?.username === 'string'
+            ? result.metadata.username
+            : undefined,
+          tweetVolume: typeof result.metadata?.likes === 'number'
+            ? result.metadata.likes
+            : undefined,
           raw: result,
         }));
 
@@ -198,7 +205,7 @@ export default createPlugin({
       }
     });
 
-    const search = os.search.handler(async function* ({ input }) {
+    const search = builder.search.handler(async function* ({ input }) {
       yield* service.searchAndStream(
         input.query,
         input.sourceType,
@@ -214,7 +221,7 @@ export default createPlugin({
       );
     });
 
-    const backfill = os.backfill.handler(async function* ({ input }) {
+    const backfill = builder.backfill.handler(async function* ({ input }) {
       yield* service.backfill(
         input.query,
         input.sourceType,
@@ -227,7 +234,7 @@ export default createPlugin({
       );
     });
 
-    const live = os.live.handler(async function* ({ input }) {
+    const live = builder.live.handler(async function* ({ input }) {
       yield* service.live(
         input.query,
         input.sourceType,
@@ -239,7 +246,7 @@ export default createPlugin({
       );
     });
 
-    return os.router({
+    return {
       submitSearchJob,
       checkJobStatus,
       getJobResults,
@@ -253,6 +260,6 @@ export default createPlugin({
       search,
       backfill,
       live,
-    });
+    };
   },
 });

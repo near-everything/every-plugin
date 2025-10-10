@@ -45,7 +45,7 @@ describe.sequential("Background Producer Integration Tests", () => {
     Effect.gen(function* () {
       console.log("🚀 Testing background producer/consumer with real Module Federation");
 
-      const { client } = yield* Effect.promise(() => 
+      const { client } = yield* Effect.promise(() =>
         runtime.usePlugin("test-plugin", BACKGROUND_CONFIG)
       );
 

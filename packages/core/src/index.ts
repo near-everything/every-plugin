@@ -16,6 +16,5 @@ export type {
 	PluginRegistry,
 	PluginRuntimeConfig,
 	RegistryBindings,
-	RouterOf,
 	SecretsConfig
 } from "./types";

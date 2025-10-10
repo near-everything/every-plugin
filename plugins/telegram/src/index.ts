@@ -1,6 +1,5 @@
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
-import { implement } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 import { contract } from "./contract";
 import { TelegramService } from "./service";
@@ -63,17 +62,16 @@ export default createPlugin({
       yield* context.service.stopPolling(context.bot);
     }),
 
-  createRouter: (context) => {
+  createRouter: (context, builder) => {
     const { service, bot, queue } = context;
-    const os = implement(contract);
 
-    const webhook = os.webhook.handler(({ input }) =>
+    const webhook = builder.webhook.handler(({ input }) =>
       Effect.runPromise(
         service.processWebhookUpdate(bot, input)
       ).then(() => ({ processed: true }))
     );
 
-    const listen = os.listen.handler(async function* ({ input }) {
+    const listen = builder.listen.handler(async function* ({ input }) {
       const iterable = await Effect.runPromise(
         service.createListenStream(queue, input)
       );
@@ -83,15 +81,15 @@ export default createPlugin({
       }
     });
 
-    const sendMessage = os.sendMessage.handler(async ({ input, errors }) => {
+    const sendMessage = builder.sendMessage.handler(async ({ input, errors }) => {
       const result = await Effect.runPromise(service.sendMessage(bot, input, errors as any));
       return result;
     });
 
-    return os.router({
+    return {
       webhook,
       listen,
       sendMessage,
-    });
+    };
   }
 });

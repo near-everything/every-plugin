@@ -70,14 +70,14 @@ export default createPlugin({
   }),
   
   // Create router with handlers
-  createRouter: (context) => {
-    const os = implement(contract).$context<typeof context>();
-    return os.router({
-      getData: os.getData.handler(async ({ input }) => {
+  createRouter: (context, builder) => {
+    // builder is already: implement(contract).$context<TContext>()
+    return {
+      getData: builder.getData.handler(async ({ input }) => {
         const data = await context.client.fetchData(input.id);
         return { data };
       })
-    });
+    };
   }
 });
 ```
@@ -109,16 +109,16 @@ initialize: (config) => Effect.gen(function* () {
 }),
 
 // 2. createRouter receives context
-createRouter: (context) => {
+createRouter: (context, builder) => {
   // context.client and context.cache available
-  const os = implement(contract).$context<typeof context>();
-  
-  return os.router({
+  // builder is already: implement(contract).$context<TContext>()
+
+  return {
     // 3. Handlers access context
-    getData: os.getData.handler(async ({ input }) => {
+    getData: builder.getData.handler(async ({ input }) => {
       return await context.client.fetch(input.id);
     })
-  });
+  };
 }
 ```
 

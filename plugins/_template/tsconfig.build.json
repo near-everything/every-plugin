@@ -2,10 +2,13 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "emitDeclarationOnly": true,
-    "noEmit": false,
+    "noEmit": false
   },
+  "include": ["src/**/*"],
   "exclude": [
     "node_modules",
-    "dist", 
+    "dist",
+    "**/*.test.ts",
+    "**/*/__tests__/**/*"
   ]
 }
