@@ -1,0 +1,435 @@
+---
+title: Using Plugins
+description: Runtime patterns and recipes for plugin usage
+---
+
+The runtime loads and executes plugins using Module Federation. This guide provides patterns for common usage scenarios.
+
+## Basic Setup
+
+Create a runtime with your plugin registry:
+
+```typescript
+import { createPluginRuntime } from "every-plugin/runtime";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "data-source": {
+      remoteUrl: "https://cdn.example.com/plugins/data-source/remoteEntry.js",
+      version: "1.0.0"
+    },
+    "transformer": {
+      remoteUrl: "https://cdn.example.com/plugins/transformer/remoteEntry.js",
+      version: "1.0.0"
+    }
+  },
+  secrets: {
+    API_KEY: process.env.API_KEY,
+    DATABASE_URL: process.env.DATABASE_URL
+  }
+});
+```
+
+## Using Plugins
+
+### Basic Usage
+
+Load and use a plugin:
+
+```typescript
+const { client } = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
+
+// Call procedures
+const item = await client.getById({ id: "123" });
+const results = await client.search({ query: "typescript", limit: 20 });
+
+console.log(`Found ${results.items.length} items`);
+```
+
+### Access Patterns
+
+`usePlugin()` returns an `EveryPlugin` object with multiple access patterns:
+
+```typescript
+const { client, router, metadata } = await runtime.usePlugin("data-source", config);
+
+// 1. Client - Direct procedure calls
+const data = await client.getData({ id: "123" });
+
+// 2. Router - Mount as HTTP endpoints
+import { OpenAPIHandler } from "@orpc/openapi/node";
+const handler = new OpenAPIHandler(router);
+
+// 3. Metadata - Plugin information
+console.log(`${metadata.id} v${metadata.version}`);
+```
+
+## HTTP Mounting
+
+Mount plugins as HTTP endpoints using OpenAPI or RPC handlers:
+
+<Callout type="info">
+oRPC offers lots of adapters for popular frameworks. Learn more: [HTTP Adapters](https://orpc.unnoq.com/docs/adapters/http)
+</Callout>
+
+### OpenAPI Handler
+
+```typescript
+import { OpenAPIHandler } from "@orpc/openapi/node";
+import { createServer } from "node:http";
+
+const result = await runtime.usePlugin("data-api", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
+
+const handler = new OpenAPIHandler(result.router);
+
+const server = createServer(async (req, res) => {
+  const response = await handler.handle(req, res, {
+    prefix: '/api',
+    context: result.initialized.context
+  });
+  
+  if (!response.matched) {
+    res.statusCode = 404;
+    res.end('Not Found');
+  }
+});
+
+server.listen(3000, () => {
+  console.log('Plugin API available at http://localhost:3000/api');
+});
+```
+
+### RPC Handler
+
+```typescript
+import { RPCHandler } from "@orpc/server/node";
+
+const handler = new RPCHandler(result.router);
+
+const server = createServer(async (req, res) => {
+  const response = await handler.handle(req, res, {
+    prefix: '/rpc',
+    context: result.initialized.context
+  });
+  
+  if (!response.matched) {
+    res.statusCode = 404;
+    res.end('Not Found');
+  }
+});
+
+server.listen(3000);
+```
+
+## Streaming
+
+Streaming procedures return async iterables:
+
+<Tabs items={['Direct Iteration', 'With Effect Streams']}>
+
+<Tab value="Direct Iteration">
+
+```typescript
+const { client } = await runtime.usePlugin("social-feed", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
+
+const stream = await client.streamPosts({ query: "typescript" });
+
+for await (const post of stream) {
+  console.log(`Processing: ${post.item.externalId}`);
+}
+```
+
+</Tab>
+
+<Tab value="With Effect Streams">
+
+```typescript
+import { Stream } from "every-plugin/effect";
+
+const { client } = await runtime.usePlugin("social-feed", config);
+
+const stream = await client.streamPosts({ query: "typescript" });
+const effectStream = Stream.fromAsyncIterable(stream, error => error);
+
+const items = await Effect.runPromise(
+  effectStream.pipe(
+    Stream.take(50),
+    Stream.runCollect
+  )
+);
+
+console.log(`Processed ${items.length} posts`);
+```
+
+</Tab>
+
+</Tabs>
+
+### Stream Processing Pipeline
+
+Process streams through multiple plugins:
+
+<Tabs items={['Direct Processing', 'With Effect']}>
+
+<Tab value="Direct Processing">
+
+```typescript
+const { client: source } = await runtime.usePlugin("source", sourceConfig);
+const { client: processor } = await runtime.usePlugin("processor", processorConfig);
+
+const stream = await source.streamData({ query: "typescript" });
+
+const processed = [];
+for await (const item of stream) {
+  try {
+    const result = await processor.transform({ data: item });
+    processed.push(result);
+    if (processed.length >= 100) break;
+  } catch (error) {
+    console.error("Processing failed:", error);
+  }
+}
+```
+
+</Tab>
+
+<Tab value="With Effect">
+
+```typescript
+import { Stream } from "every-plugin/effect";
+
+const { client: source } = await runtime.usePlugin("source", sourceConfig);
+const { client: processor } = await runtime.usePlugin("processor", processorConfig);
+
+const stream = await source.streamData({ query: "typescript" });
+const effectStream = Stream.fromAsyncIterable(stream, e => e);
+
+const processed = await Effect.runPromise(
+  effectStream.pipe(
+    Stream.mapEffect((item) =>
+      Effect.tryPromise(() =>
+        processor.transform({ data: item })
+      ).pipe(
+        Effect.catchAll((error) => {
+          console.error("Processing failed:", error);
+          return Effect.succeed(null);
+        })
+      )
+    ),
+    Stream.filter((result) => result !== null),
+    Stream.take(100),
+    Stream.runCollect
+  )
+);
+```
+
+</Tab>
+
+</Tabs>
+
+## Multiple Plugins
+
+Compose multiple plugins in workflows:
+
+```typescript
+// Load multiple plugins
+const { client: source } = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{SOURCE_API_KEY}}" }
+});
+
+const { client: transformer } = await runtime.usePlugin("transformer", {
+  variables: { format: "json" }
+});
+
+const { client: distributor } = await runtime.usePlugin("distributor", {
+  secrets: { webhook: "{{WEBHOOK_URL}}" }
+});
+
+// Execute pipeline
+const rawData = await source.fetch({ query: "typescript" });
+const transformed = await transformer.transform({ items: rawData.items });
+const result = await distributor.send({ items: transformed.items });
+```
+
+### Parallel Execution
+
+Execute multiple plugins in parallel:
+
+```typescript
+const [result1, result2, result3] = await Promise.all([
+  runtime.usePlugin("source-1", config1).then(r => r.client.getData()),
+  runtime.usePlugin("source-2", config2).then(r => r.client.getData()),
+  runtime.usePlugin("source-3", config3).then(r => r.client.getData())
+]);
+```
+
+## Type Safety
+
+For enhanced IDE support, use type bindings:
+
+```typescript
+import type { PluginBinding } from "every-plugin";
+import type DataSource from "@my-org/data-source-plugin";
+
+type AppBindings = {
+  "data-source": PluginBinding<typeof DataSource>;
+};
+
+const runtime = createPluginRuntime<AppBindings>({
+  registry: {
+    "data-source": {
+      remoteUrl: "https://cdn.example.com/plugins/data-source/remoteEntry.js",
+      version: "1.0.0"
+    }
+  }
+});
+
+// Full type safety and autocomplete
+const { client } = await runtime.usePlugin("data-source", config);
+//                                         ^-- Autocomplete for plugin IDs
+```
+
+### Type Extraction
+
+Extract plugin types for utilities:
+
+```typescript
+import type { EveryPlugin } from "every-plugin";
+
+type DataSourcePlugin = EveryPlugin.Infer<typeof runtime, "data-source">;
+
+function logPluginUsage(plugin: DataSourcePlugin) {
+  console.log(`[${plugin.metadata.id}] v${plugin.metadata.version}`);
+}
+
+const result = await runtime.usePlugin("data-source", config);
+logPluginUsage(result);
+```
+
+## Worker Integration
+
+Integrate with job processing systems like BullMQ:
+
+```typescript
+import { Worker, Job } from "bullmq";
+
+const runtime = createPluginRuntime({
+  registry: await loadRegistry(),
+  secrets: await loadSecrets()
+});
+
+const worker = new Worker(
+  'plugin-jobs',
+  async (job: Job) => {
+    const { pluginId, config, input } = job.data;
+    
+    try {
+      const { client } = await runtime.usePlugin(pluginId, config);
+      return await client.process(input);
+    } catch (error) {
+      console.error(`Job ${job.id} failed:`, error);
+      throw error;
+    }
+  },
+  { connection: redisConnection }
+);
+
+// Cleanup on shutdown
+process.on('SIGTERM', async () => {
+  await worker.close();
+  await runtime.shutdown();
+  process.exit(0);
+});
+```
+
+## Error Handling
+
+Handle plugin errors with try/catch:
+
+```typescript
+try {
+  const { client } = await runtime.usePlugin("data-source", config);
+  const result = await client.getData({ id: "123" });
+} catch (error) {
+  console.error("Plugin failed:", error);
+}
+```
+
+## Resource Cleanup
+
+Always shutdown the runtime when done:
+
+```typescript
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  await runtime.shutdown();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  await runtime.shutdown();
+  process.exit(0);
+});
+```
+
+## Best Practices
+
+### ✅ Do This
+
+```typescript
+// Initialize runtime once
+const runtime = createPluginRuntime({...});
+
+// Reuse plugin instances when possible
+const { client } = await runtime.usePlugin("data-source", config);
+
+// Always cleanup
+await runtime.shutdown();
+
+// Use Promise.all for parallel operations
+const results = await Promise.all([
+  client.getData({ id: "1" }),
+  client.getData({ id: "2" }),
+  client.getData({ id: "3" })
+]);
+```
+
+### ❌ Don't Do This
+
+```typescript
+// Don't create multiple runtimes unnecessarily
+const runtime1 = createPluginRuntime({...});
+const runtime2 = createPluginRuntime({...}); // Wasteful
+
+// Don't forget cleanup
+// await runtime.shutdown(); // Missing!
+
+// Don't block event loop with sequential calls
+const result1 = await client.getData({ id: "1" });
+const result2 = await client.getData({ id: "2" });
+const result3 = await client.getData({ id: "3" });
+// Use Promise.all instead!
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Local Development" href="/docs/using-plugins/local-development">
+    Develop with local plugins
+  </Card>
+  <Card title="Testing" href="/docs/testing">
+    Test plugin integrations
+  </Card>
+  <Card title="Recipes" href="/docs/recipes">
+    Advanced patterns
+  </Card>
+</Cards>

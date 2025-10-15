@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
 import { Duration, Effect, Logger, LogLevel } from "every-plugin/effect";
+import type { GopherResult } from "../../../plugins/gopher-ai/src/contract";
 import { runtime } from "../main";
 import { DatabaseService } from "../services/db.service";
-import type { GopherResult } from "../../../plugins/gopher-ai/src/contract";
 
 // Worker ID for tracking which worker is processing tasks
 const WORKER_ID = `worker-${process.pid}-${Date.now()}`;

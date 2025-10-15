@@ -26,7 +26,7 @@ type IRegistry = {
 export const runtime = createPluginRuntime<IRegistry>({
   registry: {
     "@curatedotfun/gopher-ai": {
-      remoteUrl: "https://elliot-braem-116-curatedotfun-gopher-ai-every-plu-7e4a2913c-ze.zephyrcloud.app/remoteEntry.js",
+      remoteUrl: "https://elliot-braem-154-curatedotfun-gopher-ai-every-plu-23288ac68-ze.zephyrcloud.app/remoteEntry.js",
     }
   },
   secrets: {

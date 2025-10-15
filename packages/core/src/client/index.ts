@@ -6,10 +6,11 @@ import {
   type ErrorMap,
   type InferRouterInitialContext,
   type Meta,
+  type Router,
   type RouterClient,
   type Schema
 } from "@orpc/server";
-import type { AnyPlugin, InitializedPlugin, RouterOf } from "../types";
+import type { AnyPlugin, ContextOf, InitializedPlugin, PluginRouter } from "../types";
 
 /**
  * Extracts the oRPC router from an initialized plugin.
@@ -18,25 +19,25 @@ import type { AnyPlugin, InitializedPlugin, RouterOf } from "../types";
  */
 export function getPluginRouter<T extends AnyPlugin>(
   initialized: InitializedPlugin<T>
-): RouterOf<T> & AnyContractRouter {
+): PluginRouter<T> {
   if (!initialized) {
     throw new Error("InitializedPlugin is undefined - plugin initialization failed");
   }
-  
+
   if (!initialized.plugin) {
     throw new Error("Plugin instance is undefined - check service layer dependencies (ModuleFederationService, SecretsService)");
   }
-  
+
   if (typeof initialized.plugin.createRouter !== "function") {
     throw new Error(`Plugin ${initialized.plugin.id || 'unknown'} does not have a createRouter method`);
   }
-  
+
   if (!initialized.context) {
     throw new Error("Plugin context is undefined - plugin initialization incomplete");
   }
-  
-  const router = initialized.plugin.createRouter(initialized.context);
-  return router as RouterOf<T> & AnyContractRouter;
+
+  const router = initialized.plugin.createRouter<Record<never, never>>(initialized.context);
+  return router as PluginRouter<T>;
 }
 
 /**
@@ -52,19 +53,19 @@ export function createPluginClient<
 >(
   initialized: InitializedPlugin<T>,
   options?: CreateProcedureClientOptions<
-    InferRouterInitialContext<RouterOf<T>>,
+    InferRouterInitialContext<PluginRouter<T>>,
     Schema<unknown, unknown>,
     ErrorMap,
     Meta,
     TClientContext
   >
-): RouterClient<RouterOf<T>, TClientContext> {
+): RouterClient<PluginRouter<T>, TClientContext> {
   const router = getPluginRouter(initialized);
-  return createRouterClient(router, options as CreateProcedureClientOptions<
-    InferRouterInitialContext<RouterOf<T>>,
+  return createRouterClient(router as PluginRouter<T>, options as CreateProcedureClientOptions<
+    InferRouterInitialContext<Router<T["contract"], ContextOf<T>>>,
     Schema<unknown, unknown>,
     ErrorMap,
     Meta,
     TClientContext
-  >) as RouterClient<RouterOf<T>, TClientContext>;
+  >);
 }

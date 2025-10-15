@@ -1,6 +1,5 @@
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
-import { implement } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 import { contract } from "./contract";
 import { TemplateService } from "./service";
@@ -44,33 +43,28 @@ export default createPlugin({
 
   shutdown: () => Effect.void,
 
-  createRouter: (context) => { // { service } from initialize
+  createRouter: (context, builder) => { // context: { service } from initialize
     const { service } = context;
-    const os = implement(contract);
 
-    const getById = os.getById.handler(async ({ input }) => {
-      const item = await Effect.runPromise(service.getById(input.id));
-      return { item };
-    });
+    return {
+      getById: builder.getById.handler(async ({ input }) => {
+        const item = await Effect.runPromise(service.getById(input.id));
+        return { item };
+      }),
 
-    const search = os.search.handler(async function* ({ input }) {
-      const generator = await Effect.runPromise(
-        service.search(input.query, input.limit)
-      );
+      search: builder.search.handler(async function* ({ input }) {
+        const generator = await Effect.runPromise(
+          service.search(input.query, input.limit)
+        );
 
-      for await (const result of generator) {
-        yield result;
-      }
-    });
+        for await (const result of generator) {
+          yield result;
+        }
+      }),
 
-    const ping = os.ping.handler(async () => {
-      return await Effect.runPromise(service.ping());
-    });
-
-    return os.router({
-      getById,
-      search,
-      ping,
-    });
+      ping: builder.ping.handler(async () => {
+        return await Effect.runPromise(service.ping());
+      }),
+    };
   }
 });

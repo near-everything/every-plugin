@@ -1,8 +1,0 @@
-{
-  "title": "Creating Plugins",
-  "description": "Build type-safe plugins with oRPC contracts",
-  "pages": [
-    "patterns",
-    "orpc"
-  ]
-}
