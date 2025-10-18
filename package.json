@@ -38,6 +38,7 @@
     "db:migrate": "turbo -F server db:migrate"
   },
   "workspaces": [
+    "apps/*",
     "packages/*",
     "templates/*"
   ]
