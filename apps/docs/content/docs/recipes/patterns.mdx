@@ -1,0 +1,276 @@
+---
+title: Patterns
+description: General patterns and best practices for plugin development
+---
+
+## Rate Limiting
+
+Implement rate limiting in plugin handlers:
+
+```typescript
+import { RateLimiter } from 'limiter';
+
+export default createPlugin({
+  id: "rate-limited-api",
+  contract,
+  variables: z.object({
+    requestsPerSecond: z.number().default(10)
+  }),
+  secrets: z.object({ apiKey: z.string() }),
+
+  initialize: (config) => Effect.gen(function* () {
+    const limiter = new RateLimiter({
+      tokensPerInterval: config.variables.requestsPerSecond,
+      interval: 'second'
+    });
+
+    const service = new ApiService(config.secrets.apiKey);
+
+    return { service, limiter };
+  }),
+
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input, errors }) => {
+      // Wait for rate limit token
+      const hasToken = await context.limiter.removeTokens(1);
+
+      if (!hasToken) {
+        throw errors.RATE_LIMITED({
+          message: "Rate limit exceeded",
+          data: {
+            retryAfter: 1,
+            remainingRequests: 0,
+            limitType: 'requests' as const
+          }
+        });
+      }
+
+      try {
+        const data = await Effect.runPromise(
+          context.service.getData(input.id)
+        );
+        return { data };
+      } catch (error) {
+        throw errors.SERVICE_UNAVAILABLE({
+          message: "Service unavailable",
+          data: { retryAfter: 5 }
+        });
+      }
+    })
+  })
+});
+```
+
+## Retry Logic
+
+Implement exponential backoff for retries:
+
+```typescript
+async function fetchWithRetry(
+  client: any,
+  input: any,
+  maxRetries = 3
+) {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await client.getData(input);
+    } catch (error: any) {
+      lastError = error;
+
+      // Don't retry on auth errors
+      if (error.code === "UNAUTHORIZED") {
+        throw error;
+      }
+
+      // Extract retry-after from error
+      const retryAfter = error.data?.retryAfter || Math.pow(2, attempt);
+
+      console.log(`Retry ${attempt + 1}/${maxRetries} after ${retryAfter}s`);
+
+      if (attempt < maxRetries - 1) {
+        await new Promise(resolve =>
+          setTimeout(resolve, retryAfter * 1000)
+        );
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+// Usage
+const { client } = await runtime.usePlugin("unreliable-api", config);
+const result = await fetchWithRetry(client, { id: "123" });
+```
+
+## Caching Layer
+
+Add caching to reduce API calls:
+
+```typescript
+import { LRUCache } from 'lru-cache';
+
+export default createPlugin({
+  id: "cached-api",
+  contract,
+  variables: z.object({
+    cacheMaxSize: z.number().default(1000),
+    cacheTtlMs: z.number().default(60000)
+  }),
+  secrets: z.object({ apiKey: z.string() }),
+
+  initialize: (config) => Effect.gen(function* () {
+    const cache = new LRUCache({
+      max: config.variables.cacheMaxSize,
+      ttl: config.variables.cacheTtlMs
+    });
+
+    const service = new ApiService(config.secrets.apiKey);
+
+    return { service, cache };
+  }),
+
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input }) => {
+      const cacheKey = `data:${input.id}`;
+
+      // Check cache
+      const cached = context.cache.get(cacheKey);
+      if (cached) {
+        console.log(`Cache hit: ${cacheKey}`);
+        return { data: cached };
+      }
+
+      // Fetch from API
+      console.log(`Cache miss: ${cacheKey}`);
+      const data = await Effect.runPromise(
+        context.service.getData(input.id)
+      );
+
+      // Store in cache
+      context.cache.set(cacheKey, data);
+
+      return { data };
+    })
+  })
+});
+```
+
+## Health Checks
+
+Implement health checks for monitoring:
+
+```typescript
+const contract = oc.router({
+  health: oc.route({ method: 'GET', path: '/health' })
+    .input(z.object({}))
+    .output(z.object({
+      status: z.enum(['healthy', 'degraded', 'unhealthy']),
+      checks: z.record(z.boolean()),
+      timestamp: z.number()
+    })),
+
+  // ... other procedures
+});
+
+export default createPlugin({
+  id: "monitored-api",
+  contract,
+  // ...
+
+  createRouter: (context, builder) => ({
+    health: builder.health.handler(async () => {
+      const checks: Record<string, boolean> = {};
+
+      // Check API connectivity
+      try {
+        await fetch('https://api.example.com/health');
+        checks.api = true;
+      } catch {
+        checks.api = false;
+      }
+
+      // Check cache
+      checks.cache = context.cache !== undefined;
+
+      // Check queue
+      try {
+        checks.queue = !(await Effect.runPromise(
+          Queue.isShutdown(context.queue)
+        ));
+      } catch {
+        checks.queue = false;
+      }
+
+      const allHealthy = Object.values(checks).every(Boolean);
+      const someHealthy = Object.values(checks).some(Boolean);
+
+      return {
+        status: allHealthy ? 'healthy' : someHealthy ? 'degraded' : 'unhealthy',
+        checks,
+        timestamp: Date.now()
+      };
+    }),
+
+    // ... other handlers
+  })
+});
+```
+
+## Graceful Shutdown
+
+Handle graceful shutdown with cleanup:
+
+```typescript
+const runtime = createPluginRuntime({
+  registry: await loadRegistry(),
+  secrets: await loadSecrets()
+});
+
+// Track active operations
+const activeOperations = new Set<Promise<any>>();
+
+async function executeWithTracking(operation: Promise<any>) {
+  activeOperations.add(operation);
+  try {
+    return await operation;
+  } finally {
+    activeOperations.delete(operation);
+  }
+}
+
+// Graceful shutdown handler
+async function shutdown() {
+  console.log('Shutting down gracefully...');
+
+  // Wait for active operations
+  console.log(`Waiting for ${activeOperations.size} operations...`);
+  await Promise.allSettled(activeOperations);
+
+  // Shutdown runtime
+  await runtime.shutdown();
+
+  console.log('Shutdown complete');
+  process.exit(0);
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+// Usage
+const { client } = await runtime.usePlugin("my-plugin", config);
+await executeWithTracking(client.getData({ id: "123" }));
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Event Broadcasting" href="/docs/recipes/event-broadcasting">
+    Real-time event broadcasting
+  </Card>
+  <Card title="Pipelines" href="/docs/recipes/pipelines">
+    Stream and batch processing
+  </Card>
+</Cards>

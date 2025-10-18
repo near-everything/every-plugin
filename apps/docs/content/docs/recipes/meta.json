@@ -1,6 +1,12 @@
 {
   "title": "Recipes",
   "pages": [
-    "index"
+    "index",
+    "event-broadcasting",
+    "serverless-streaming",
+    "scaling",
+    "queues",
+    "pipelines",
+    "patterns"
   ]
 }

@@ -1,0 +1,150 @@
+---
+title: Pipelines
+description: Stream processing and batch processing patterns
+---
+
+Chain multiple plugins for data transformation:
+
+```typescript
+// Source plugin streams raw data
+const { client: source } = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{SOURCE_API_KEY}}" }
+});
+
+// Transformer plugin processes data
+const { client: transformer } = await runtime.usePlugin("transformer", {
+  variables: { format: "json", validate: true }
+});
+
+// Distributor plugin sends to destinations
+const { client: distributor } = await runtime.usePlugin("distributor", {
+  secrets: { webhook: "{{WEBHOOK_URL}}" }
+});
+
+// Stream through pipeline
+const stream = await source.streamData({ query: "realtime" });
+
+for await (const item of stream) {
+  try {
+    // Transform
+    const transformed = await transformer.transform({
+      data: item
+    });
+
+    // Distribute
+    await distributor.send({
+      items: [transformed]
+    });
+  } catch (error) {
+    console.error("Pipeline error:", error);
+  }
+}
+```
+
+## Batch Processing
+
+Process items in batches for efficiency:
+
+```typescript
+async function processBatch(items: any[]) {
+  const { client } = await runtime.usePlugin("batch-processor", {
+    variables: { batchSize: 10 }
+  });
+
+  return await client.processBatch({ items });
+}
+
+// Stream with batching
+const stream = await source.streamData({ query: "large-dataset" });
+
+let batch: any[] = [];
+const results: any[] = [];
+
+for await (const item of stream) {
+  batch.push(item);
+
+  if (batch.length >= 10) {
+    console.log(`Processing batch of ${batch.length} items`);
+    const processed = await processBatch(batch);
+    results.push(...processed.items);
+    batch = [];
+  }
+}
+
+// Process remaining items
+if (batch.length > 0) {
+  const processed = await processBatch(batch);
+  results.push(...processed.items);
+}
+
+console.log(`Total processed: ${results.length}`);
+```
+
+## Multi-Tenant Plugin
+
+Support multiple tenants with isolated contexts:
+
+```typescript
+export default createPlugin({
+  id: "multi-tenant-api",
+  contract,
+  variables: z.object({
+    tenantId: z.string()
+  }),
+  secrets: z.object({
+    masterApiKey: z.string()
+  }),
+
+  initialize: (config) => Effect.gen(function* () {
+    // Create tenant-specific service
+    const service = new TenantService(
+      config.secrets.masterApiKey,
+      config.variables.tenantId
+    );
+
+    // Verify tenant access
+    yield* Effect.tryPromise({
+      try: () => service.verifyTenant(),
+      catch: () => new Error("Invalid tenant")
+    });
+
+    return { service, tenantId: config.variables.tenantId };
+  }),
+
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input }) => {
+      // All operations scoped to tenant
+      const data = await Effect.runPromise(
+        context.service.getData(input.id)
+      );
+
+      return {
+        data,
+        tenantId: context.tenantId
+      };
+    })
+  })
+});
+
+// Usage with different tenants
+const { client: tenant1 } = await runtime.usePlugin("multi-tenant-api", {
+  secrets: { masterApiKey: "{{MASTER_API_KEY}}" },
+  variables: { tenantId: "tenant-1" }
+});
+
+const { client: tenant2 } = await runtime.usePlugin("multi-tenant-api", {
+  secrets: { masterApiKey: "{{MASTER_API_KEY}}" },
+  variables: { tenantId: "tenant-2" }
+});
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Queues" href="/docs/recipes/queues">
+    Work distribution patterns
+  </Card>
+  <Card title="Patterns" href="/docs/recipes/patterns">
+    General patterns and best practices
+  </Card>
+</Cards>

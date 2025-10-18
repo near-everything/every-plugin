@@ -1,0 +1,190 @@
+---
+title: Event Broadcasting
+description: Real-time event broadcasting with MemoryPublisher pub/sub semantics
+---
+
+Create plugins that broadcast events to multiple clients using MemoryPublisher pub/sub semantics:
+
+```typescript
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import { oc, eventIterator, MemoryPublisher } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+
+// Define event types for broadcasting
+type BroadcastEvents = {
+  'notifications': {
+    id: string;
+    type: string;
+    message: string;
+    timestamp: number;
+  };
+};
+
+const NotificationSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  message: z.string(),
+  timestamp: z.number()
+});
+
+const contract = oc.router({
+  // Subscribe to real-time notifications
+  subscribeNotifications: oc
+    .route({ method: 'POST', path: '/subscribe/notifications' })
+    .input(z.object({
+      types: z.array(z.string()).optional(),
+      lastEventId: z.string().optional()
+    }))
+    .output(eventIterator(NotificationSchema)),
+
+  // Publish a notification manually
+  publishNotification: oc
+    .route({ method: 'POST', path: '/publish/notification' })
+    .input(z.object({
+      type: z.string(),
+      message: z.string()
+    }))
+    .output(z.object({ published: z.boolean() }))
+});
+
+export default createPlugin({
+  id: "notification-service",
+  contract,
+  variables: z.object({
+    enabled: z.boolean().default(true)
+  }),
+  secrets: z.object({ apiKey: z.string() }),
+
+  initialize: (config) => Effect.gen(function* () {
+    // Create publisher for real-time broadcasting
+    const publisher = new MemoryPublisher<BroadcastEvents>({
+      resumeRetentionSeconds: 60 * 2 // Support serverless resume for 2 minutes
+    });
+
+    // Start background producer (optional)
+    if (config.variables.enabled) {
+      yield* Effect.forkScoped(
+        Effect.gen(function* () {
+          while (true) {
+            // Simulate receiving notifications from external source
+            const notification = {
+              id: `notif-${Date.now()}`,
+              type: 'system',
+              message: `System update at ${new Date().toISOString()}`,
+              timestamp: Date.now()
+            };
+
+            // Publish to ALL subscribers (broadcast semantics)
+            yield* Effect.tryPromise(() =>
+              publisher.publish('notifications', notification)
+            ).pipe(
+              Effect.catchAll((error) => {
+                console.log('Notification publish failed:', error);
+                return Effect.void;
+              })
+            );
+
+            yield* Effect.sleep("30 seconds");
+          }
+        })
+      );
+    }
+
+    return { publisher };
+  }),
+
+  createRouter: (context, builder) => ({
+    subscribeNotifications: builder.subscribeNotifications.handler(async function* ({ input, signal }) {
+      // Subscribe to broadcast stream with resume support
+      const iterator = context.publisher.subscribe('notifications', {
+        signal,
+        lastEventId: input.lastEventId
+      });
+
+      for await (const event of iterator) {
+        // Filter by type if specified
+        if (input.types && !input.types.includes(event.type)) {
+          continue;
+        }
+        yield event;
+      }
+    }),
+
+    publishNotification: builder.publishNotification.handler(async ({ input }) => {
+      const notification = {
+        id: `manual-${Date.now()}`,
+        type: input.type,
+        message: input.message,
+        timestamp: Date.now()
+      };
+
+      await context.publisher.publish('notifications', notification);
+      return { published: true };
+    })
+  })
+});
+```
+
+**Key Benefits:**
+- **Broadcast Semantics**: All connected clients get the same events
+- **Resume Support**: Clients can reconnect after serverless timeouts using `lastEventId`
+- **Real-time**: Multiple clients streaming simultaneously
+- **Scalable**: Drop-in replacement with Redis publishers for multi-instance deployments
+
+## Client Usage
+
+```typescript
+// Subscribe to notifications
+const { client } = await runtime.usePlugin("notification-service", {
+  variables: { enabled: true }
+});
+
+const stream = await client.subscribeNotifications({
+  types: ['system', 'user'],
+  lastEventId: undefined // Start from latest
+});
+
+for await (const notification of stream) {
+  console.log('Received:', notification);
+}
+```
+
+## Background Broadcasting
+
+```typescript
+// Background producer with external data source
+yield* Effect.forkScoped(
+  Effect.gen(function* () {
+    while (true) {
+      // Fetch from external API
+      const externalData = yield* Effect.tryPromise(() =>
+        fetch('https://api.example.com/events')
+      );
+
+      // Publish to all subscribers
+      yield* Effect.tryPromise(() =>
+        publisher.publish('notifications', {
+          id: `external-${Date.now()}`,
+          type: 'external',
+          message: 'External event received',
+          timestamp: Date.now()
+        })
+      );
+
+      yield* Effect.sleep("30 seconds");
+    }
+  })
+);
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Serverless Streaming" href="/docs/recipes/serverless-streaming">
+    Serverless-ready event streams with resume support
+  </Card>
+  <Card title="Scaling" href="/docs/recipes/scaling">
+    Scale with Redis publishers
+  </Card>
+</Cards>

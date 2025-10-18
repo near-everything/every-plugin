@@ -1,0 +1,187 @@
+---
+title: Queues
+description: Work distribution patterns with queues vs publishers
+---
+
+Use queues for work distribution when each task should be processed exactly once:
+
+```typescript
+import { createPlugin } from "every-plugin";
+import { Effect, Queue } from "every-plugin/effect";
+import { oc } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+
+const contract = oc.router({
+  // Enqueue work to be processed exactly once
+  enqueueWork: oc
+    .route({ method: 'POST', path: '/enqueue' })
+    .input(z.object({
+      taskId: z.string(),
+      priority: z.number().default(1),
+      payload: z.any()
+    }))
+    .output(z.object({ enqueued: z.boolean() })),
+
+  // Get queue statistics
+  getQueueStats: oc
+    .route({ method: 'GET', path: '/stats' })
+    .output(z.object({
+      pending: z.number(),
+      processing: z.number(),
+      completed: z.number()
+    }))
+});
+
+export default createPlugin({
+  id: "work-processor",
+  contract,
+  variables: z.object({
+    workerCount: z.number().default(3),
+    maxConcurrency: z.number().default(10)
+  }),
+  secrets: {},
+
+  initialize: (config) => Effect.gen(function* () {
+    // Bounded queue for task distribution
+    const taskQueue = yield* Effect.acquireRelease(
+      Queue.bounded(config.variables.maxConcurrency),
+      (q) => Queue.shutdown(q)
+    );
+
+    // Statistics tracking
+    const stats = {
+      pending: 0,
+      processing: 0,
+      completed: 0
+    };
+
+    // Start multiple workers - each takes one task (work distribution)
+    for (let i = 0; i < config.variables.workerCount; i++) {
+      yield* Effect.forkScoped(
+        Effect.gen(function* () {
+          while (true) {
+            try {
+              stats.processing++;
+              // Take ONE task from queue (exactly once semantics)
+              const task = yield* Queue.take(taskQueue);
+              stats.pending--;
+
+              // Process task
+              yield* processTask(task);
+
+              stats.completed++;
+              stats.processing--;
+
+            } catch (error) {
+              console.error(`Worker ${i} error:`, error);
+              stats.processing--;
+            }
+          }
+        })
+      );
+    }
+
+    return { taskQueue, stats };
+  }),
+
+  createRouter: (context, builder) => ({
+    enqueueWork: builder.enqueueWork.handler(async ({ input }) => {
+      // Add to queue for distribution to ONE worker
+      await Effect.runPromise(
+        Queue.offer(context.taskQueue, {
+          id: input.taskId,
+          priority: input.priority,
+          payload: input.payload,
+          enqueuedAt: Date.now()
+        })
+      );
+
+      context.stats.pending++;
+      return { enqueued: true };
+    }),
+
+    getQueueStats: builder.getQueueStats.handler(async () => {
+      return {
+        pending: context.stats.pending,
+        processing: context.stats.processing,
+        completed: context.stats.completed
+      };
+    })
+  })
+});
+```
+
+## Queue Integration
+
+Integrate with job queues like BullMQ:
+
+```typescript
+import { Queue, Worker, Job } from 'bullmq';
+import { createPluginRuntime } from 'every-plugin/runtime';
+
+// Initialize runtime once
+const runtime = createPluginRuntime({
+  registry: await loadRegistry(),
+  secrets: await loadSecrets()
+});
+
+// Create queue
+const pluginQueue = new Queue('plugin-jobs', {
+  connection: { host: 'localhost', port: 6379 }
+});
+
+// Add jobs to queue
+await pluginQueue.add('process-data', {
+  pluginId: 'data-processor',
+  config: {
+    secrets: { apiKey: '{{API_KEY}}' },
+    variables: { format: 'json' }
+  },
+  input: { id: '123' }
+});
+
+// Worker to process jobs
+const worker = new Worker(
+  'plugin-jobs',
+  async (job: Job) => {
+    const { pluginId, config, input } = job.data;
+
+    console.log(`Processing job ${job.id} with ${pluginId}`);
+
+    try {
+      const { client } = await runtime.usePlugin(pluginId, config);
+      const result = await client.process(input);
+      return result;
+    } catch (error) {
+      console.error(`Job ${job.id} failed:`, error);
+      throw error;
+    }
+  },
+  { connection: { host: 'localhost', port: 6379 } }
+);
+
+// Cleanup on shutdown
+process.on('SIGTERM', async () => {
+  await worker.close();
+  await runtime.shutdown();
+  process.exit(0);
+});
+```
+
+## Queues vs Publishers
+
+| Pattern | Use Case | Semantics | Example |
+|---------|---------|-----------|---------|
+| **MemoryPublisher** | Broadcasting events to multiple clients | Pub/sub - all subscribers get events | Real-time notifications, activity feeds |
+| **Queue** | Distributing work to workers | Work distribution - each task processed once | Job processing, task queues |
+
+## Next Steps
+
+<Cards>
+  <Card title="Event Broadcasting" href="/docs/recipes/event-broadcasting">
+    Broadcasting patterns with publishers
+  </Card>
+  <Card title="Pipelines" href="/docs/recipes/pipelines">
+    Stream and batch processing
+  </Card>
+</Cards>
