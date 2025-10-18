@@ -250,9 +250,144 @@ export default createPlugin({
 
 The template keeps things simple. Here are patterns you can add when needed:
 
-### Background Processing with Queues
+### Background Processing Patterns
 
-For plugins that continuously poll or process data:
+Plugins often need to continuously process data or broadcast events to multiple clients. Here are the two main approaches:
+
+#### Event Broadcasting with MemoryPublisher (Default for Streaming)
+
+**When to Use**: Broadcasting events to multiple consumers (pub/sub), streaming to HTTP clients, serverless compatibility.
+
+MemoryPublisher provides **broadcast semantics** - all subscribers receive the same events. This is the correct pattern for plugins that mount onto HTTP servers where multiple clients stream data from the same plugin instance.
+
+```typescript
+import { Effect } from "every-plugin/effect";
+import { MemoryPublisher } from "every-plugin/orpc";
+
+// Define event channels and their payloads
+type BackgroundEvents = {
+  'background-updates': {
+    id: string;
+    index: number;
+    timestamp: number;
+  };
+};
+
+// In initialize
+initialize: (config) =>
+  Effect.gen(function* () {
+    const service = new YourService(/* ... */);
+
+    // Create publisher for broadcasting events (scoped resource)
+    const publisher = new MemoryPublisher<BackgroundEvents>({
+      resumeRetentionSeconds: 60 * 2, // Retain events for 2 minutes to support resume
+    });
+
+    // Start background producer (auto-cleanup with forkScoped)
+    yield* Effect.forkScoped(
+      Effect.gen(function* () {
+        let i = 0;
+        while (true) {
+          i++;
+          // Poll external API or generate events
+          const event = {
+            id: `bg-${i}`,
+            index: i,
+            timestamp: Date.now(),
+          };
+
+          // Publish to all subscribers
+          yield* Effect.tryPromise(() =>
+            publisher.publish('background-updates', event)
+          ).pipe(
+            Effect.catchAll((error) => {
+              console.log(`Publish failed for event ${i}:`, error);
+              return Effect.void;
+            })
+          );
+
+          // Wait before next poll
+          yield* Effect.sleep("30 seconds");
+        }
+      })
+    );
+
+    return { service, publisher };
+  }),
+
+// In createRouter - subscribe to broadcast stream
+createRouter: (context, builder) => {
+  const { service, publisher } = context;
+
+  return {
+    // ... other handlers
+
+    // Background streaming with resume support and event metadata access
+    listenBackground: builder.listenBackground.handler(async function* ({
+      input,
+      signal,
+      lastEventId
+    }) {
+      let count = 0;
+      const maxResults = input.maxResults;
+      const iterator = publisher.subscribe('background-updates', {
+        signal,
+        lastEventId
+      });
+
+      for await (const event of iterator) {
+        if (maxResults && count >= maxResults) break;
+
+        // Optional: Access SSE metadata with getEventMeta(event)
+        // Provides: { id: string, retry: number, comments: string[] }
+
+        yield event;
+        count++;
+      }
+    }),
+
+    // Manual event publishing endpoint
+    enqueueBackground: builder.enqueueBackground.handler(async ({ input }) => {
+      const event = {
+        id: input.id || `manual-${Date.now()}`,
+        index: -1,
+        timestamp: Date.now(),
+      };
+
+      await publisher.publish('background-updates', event);
+      return { ok: true };
+    })
+  };
+}
+```
+
+**Key Benefits of MemoryPublisher:**
+- **Broadcast Semantics**: All connected clients get the same events
+- **Serverless Resume**: `lastEventId` + `resumeRetentionSeconds` support reconnection after timeouts
+- **Effect Integration**: Uses `Effect.acquireRelease` for lifecycle management
+- **Distributed Ready**: Drop-in replacement with Redis publishers for multi-instance scaling
+
+**Scaling to Redis:**
+```typescript
+// Development: MemoryPublisher (single instance)
+import { MemoryPublisher } from '@orpc/experimental-publisher/memory';
+const publisher = new MemoryPublisher<Events>({ resumeRetentionSeconds: 120 });
+
+// Production: IORedisPublisher (multi-instance)
+import { IORedisPublisher } from '@orpc/experimental-publisher/ioredis';
+import Redis from 'ioredis';
+const redis = new Redis(process.env.REDIS_URL);
+const publisher = new IORedisPublisher<Events>(redis, {
+  resumeRetentionSeconds: 120,
+  namespace: 'my-plugin'
+});
+```
+
+#### Work Distribution with Queues (Alternative Pattern)
+
+**When to Use**: Work distribution where each task is consumed by exactly one worker, job processing, scheduled tasks.
+
+Queue provides **work distribution semantics** - each item added to the queue gets consumed by one worker. Use this for background task processing, not for streaming to multiple clients.
 
 ```typescript
 import { Effect, Queue } from "every-plugin/effect";
@@ -261,42 +396,41 @@ import { Effect, Queue } from "every-plugin/effect";
 initialize: (config) =>
   Effect.gen(function* () {
     const service = new YourService(/* ... */);
-    
-    // Create queue as scoped resource (auto-cleanup)
+
+    // Create queue for work distribution (scoped resource)
     const queue = yield* Effect.acquireRelease(
       Queue.bounded(1000),
       (q) => Queue.shutdown(q)
     );
-    
-    // Start background task (auto-cleanup with forkScoped)
+
+    // Start background worker (one consumer)
     yield* Effect.forkScoped(
       Effect.gen(function* () {
         while (true) {
-          // Poll external API
-          const data = yield* service.fetchLatest();
-          
-          // Add to queue
-          yield* Queue.offer(queue, data).pipe(
-            Effect.catchAll(() => Effect.void)
-          );
-          
-          // Wait before next poll
-          yield* Effect.sleep("30 seconds");
+          // Take one item from queue (work distribution)
+          const task = yield* Queue.take(queue);
+
+          // Process task (exactly once semantics)
+          yield* service.processTask(task);
+
+          yield* Effect.yieldNow(); // Allow interruption
         }
       })
     );
-    
+
     return { service, queue };
   }),
 
-// In createRouter - stream from queue
-const stream = builder.stream.handler(async function* ({ input }) {
-  while (true) {
-    const item = await Effect.runPromise(Queue.take(context.queue));
-    yield item;
-  }
+// In createRouter - enqueue work, not streaming
+const enqueueTask = builder.enqueueTask.handler(async ({ input }) => {
+  await Effect.runPromise(Queue.offer(context.queue, input.task));
+  return { queued: true };
 });
 ```
+
+**Key Differences:**
+- **MemoryPublisher**: Broadcast all events to all subscribers (streaming pub/sub)
+- **Queue**: Distribute work - each item processed by one worker (job processing)
 
 **Important:**
 - Use `Effect.acquireRelease` for queue cleanup

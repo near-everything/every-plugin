@@ -1,0 +1,120 @@
+diff --git a/node_modules/@orpc/shared/.bun-tag-86dbc69cfb062d21 b/.bun-tag-86dbc69cfb062d21
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index 59ee293a4ba5c24f30de4acdb1744ba4325ec054..ce4421c071a2654eb4e8eda63873432cf0aaf292 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -104,6 +104,15 @@ declare class SequentialIdGenerator {
+     generate(): string;
+ }
+ 
++/**
++ * Compares two sequential IDs.
++ * Returns:
++ *  - negative if `a` < `b`
++ *  - positive if `a` > `b`
++ *  - 0 if equal
++ */
++declare function compareSequentialIds(a: string, b: string): number;
++
+ type SetOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+ type IntersectPick<T, U> = Pick<T, keyof T & keyof U>;
+ type PromiseWithError<T, TError> = Promise<T> & {
+@@ -116,8 +125,7 @@ type PromiseWithError<T, TError> = Promise<T> & {
+  *
+  * - `throwableError` the error type that represent throwable errors should be `Error` or `null | undefined | {}` if you want more strict.
+  */
+-interface Registry {
+-}
++interface Registry {}
+ type ThrowableError = Registry extends {
+     throwableError: infer T;
+ } ? T : Error;
+@@ -331,5 +339,5 @@ declare function asyncIteratorToStream<T>(iterator: AsyncIterator<T>): ReadableS
+ 
+ declare function tryDecodeURIComponent(value: string): string;
+ 
+-export { AbortError, AsyncIdQueue, AsyncIteratorClass, EventPublisher, NullProtoObj, ORPC_NAME, ORPC_SHARED_PACKAGE_NAME, ORPC_SHARED_PACKAGE_VERSION, SequentialIdGenerator, asyncIteratorToStream, asyncIteratorWithSpan, clone, defer, fallback, findDeepMatches, get, getConstructor, getGlobalOtelConfig, intercept, isAsyncIteratorObject, isObject, isPropertyKey, isTypescriptObject, onError, onFinish, onStart, onSuccess, once, overlayProxy, parseEmptyableJSON, preventNativeAwait, readAsBuffer, replicateAsyncIterator, resolveMaybeOptionalOptions, runInSpanContext, runWithSpan, sequential, setGlobalOtelConfig, setSpanAttribute, setSpanError, splitInHalf, startSpan, streamToAsyncIteratorClass, stringifyJSON, toArray, toOtelException, toSpanAttributeValue, tryDecodeURIComponent, value };
++export { AbortError, AsyncIdQueue, AsyncIteratorClass, EventPublisher, NullProtoObj, ORPC_NAME, ORPC_SHARED_PACKAGE_NAME, ORPC_SHARED_PACKAGE_VERSION, SequentialIdGenerator, asyncIteratorToStream, asyncIteratorWithSpan, clone, compareSequentialIds, defer, fallback, findDeepMatches, get, getConstructor, getGlobalOtelConfig, intercept, isAsyncIteratorObject, isObject, isPropertyKey, isTypescriptObject, onError, onFinish, onStart, onSuccess, once, overlayProxy, parseEmptyableJSON, preventNativeAwait, readAsBuffer, replicateAsyncIterator, resolveMaybeOptionalOptions, runInSpanContext, runWithSpan, sequential, setGlobalOtelConfig, setSpanAttribute, setSpanError, splitInHalf, startSpan, streamToAsyncIteratorClass, stringifyJSON, toArray, toOtelException, toSpanAttributeValue, tryDecodeURIComponent, value };
+ export type { AnyFunction, AsyncIdQueueCloseOptions, AsyncIteratorClassCleanupFn, AsyncIteratorClassNextFn, AsyncIteratorWithSpanOptions, EventPublisherOptions, EventPublisherSubscribeIteratorOptions, InferAsyncIterableYield, InterceptableOptions, Interceptor, InterceptorOptions, IntersectPick, MaybeOptionalOptions, OmitChainMethodDeep, OnFinishState, OtelConfig, PromiseWithError, Registry, RunWithSpanOptions, Segment, SetOptional, SetSpanErrorOptions, ThrowableError, Value };
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 59ee293a4ba5c24f30de4acdb1744ba4325ec054..6f62025761252c162286c39a27c256808036eaf1 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -104,6 +104,15 @@ declare class SequentialIdGenerator {
+     generate(): string;
+ }
+ 
++/**
++ * Compares two sequential IDs.
++ * Returns:
++ *  - negative if `a` < `b`
++ *  - positive if `a` > `b`
++ *  - 0 if equal
++ */
++declare function compareSequentialIds(a: string, b: string): number;
++
+ type SetOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+ type IntersectPick<T, U> = Pick<T, keyof T & keyof U>;
+ type PromiseWithError<T, TError> = Promise<T> & {
+@@ -331,5 +340,5 @@ declare function asyncIteratorToStream<T>(iterator: AsyncIterator<T>): ReadableS
+ 
+ declare function tryDecodeURIComponent(value: string): string;
+ 
+-export { AbortError, AsyncIdQueue, AsyncIteratorClass, EventPublisher, NullProtoObj, ORPC_NAME, ORPC_SHARED_PACKAGE_NAME, ORPC_SHARED_PACKAGE_VERSION, SequentialIdGenerator, asyncIteratorToStream, asyncIteratorWithSpan, clone, defer, fallback, findDeepMatches, get, getConstructor, getGlobalOtelConfig, intercept, isAsyncIteratorObject, isObject, isPropertyKey, isTypescriptObject, onError, onFinish, onStart, onSuccess, once, overlayProxy, parseEmptyableJSON, preventNativeAwait, readAsBuffer, replicateAsyncIterator, resolveMaybeOptionalOptions, runInSpanContext, runWithSpan, sequential, setGlobalOtelConfig, setSpanAttribute, setSpanError, splitInHalf, startSpan, streamToAsyncIteratorClass, stringifyJSON, toArray, toOtelException, toSpanAttributeValue, tryDecodeURIComponent, value };
++export { AbortError, AsyncIdQueue, AsyncIteratorClass, EventPublisher, NullProtoObj, ORPC_NAME, ORPC_SHARED_PACKAGE_NAME, ORPC_SHARED_PACKAGE_VERSION, SequentialIdGenerator, asyncIteratorToStream, asyncIteratorWithSpan, clone, compareSequentialIds, defer, fallback, findDeepMatches, get, getConstructor, getGlobalOtelConfig, intercept, isAsyncIteratorObject, isObject, isPropertyKey, isTypescriptObject, onError, onFinish, onStart, onSuccess, once, overlayProxy, parseEmptyableJSON, preventNativeAwait, readAsBuffer, replicateAsyncIterator, resolveMaybeOptionalOptions, runInSpanContext, runWithSpan, sequential, setGlobalOtelConfig, setSpanAttribute, setSpanError, splitInHalf, startSpan, streamToAsyncIteratorClass, stringifyJSON, toArray, toOtelException, toSpanAttributeValue, tryDecodeURIComponent, value };
+ export type { AnyFunction, AsyncIdQueueCloseOptions, AsyncIteratorClassCleanupFn, AsyncIteratorClassNextFn, AsyncIteratorWithSpanOptions, EventPublisherOptions, EventPublisherSubscribeIteratorOptions, InferAsyncIterableYield, InterceptableOptions, Interceptor, InterceptorOptions, IntersectPick, MaybeOptionalOptions, OmitChainMethodDeep, OnFinishState, OtelConfig, PromiseWithError, Registry, RunWithSpanOptions, Segment, SetOptional, SetSpanErrorOptions, ThrowableError, Value };
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 7c84e647159d299f264e339a1b906adf9e67d26f..57399d88228ae44841e39259e877e2dc41e777ff 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -403,15 +403,15 @@ class EventPublisher {
+     if (typeof listenerOrOptions === "function") {
+       let listeners = this.#listenersMap.get(event);
+       if (!listeners) {
+-        this.#listenersMap.set(event, listeners = /* @__PURE__ */ new Set());
++        this.#listenersMap.set(event, listeners = []);
+       }
+-      listeners.add(listenerOrOptions);
+-      return () => {
+-        listeners.delete(listenerOrOptions);
+-        if (listeners.size === 0) {
++      listeners.push(listenerOrOptions);
++      return once(() => {
++        listeners.splice(listeners.indexOf(listenerOrOptions), 1);
++        if (listeners.length === 0) {
+           this.#listenersMap.delete(event);
+         }
+-      };
++      });
+     }
+     const signal = listenerOrOptions?.signal;
+     const maxBufferedEvents = listenerOrOptions?.maxBufferedEvents ?? this.#maxBufferedEvents;
+@@ -465,6 +465,20 @@ class SequentialIdGenerator {
+   }
+ }
+ 
++/**
++ * Compares two sequential IDs.
++ * Returns:
++ *  - negative if `a` < `b`
++ *  - positive if `a` > `b`
++ *  - 0 if equal
++ */
++function compareSequentialIds(a, b) {
++  if (a.length !== b.length) {
++    return a.length - b.length;
++  }
++  return a < b ? -1 : a > b ? 1 : 0;
++}
++
+ function onStart(callback) {
+   return async (options, ...rest) => {
+     await callback(options, ...rest);
+@@ -683,4 +697,4 @@ function tryDecodeURIComponent(value) {
+   }
+ }
+ 
+-export { AbortError, AsyncIdQueue, AsyncIteratorClass, EventPublisher, NullProtoObj, ORPC_NAME, ORPC_SHARED_PACKAGE_NAME, ORPC_SHARED_PACKAGE_VERSION, SequentialIdGenerator, asyncIteratorToStream, asyncIteratorWithSpan, clone, defer, fallback, findDeepMatches, get, getConstructor, getGlobalOtelConfig, intercept, isAsyncIteratorObject, isObject, isPropertyKey, isTypescriptObject, onError, onFinish, onStart, onSuccess, once, overlayProxy, parseEmptyableJSON, preventNativeAwait, readAsBuffer, replicateAsyncIterator, resolveMaybeOptionalOptions, runInSpanContext, runWithSpan, sequential, setGlobalOtelConfig, setSpanAttribute, setSpanError, splitInHalf, startSpan, streamToAsyncIteratorClass, stringifyJSON, toArray, toOtelException, toSpanAttributeValue, tryDecodeURIComponent, value };
++export { AbortError, AsyncIdQueue, AsyncIteratorClass, EventPublisher, NullProtoObj, ORPC_NAME, ORPC_SHARED_PACKAGE_NAME, ORPC_SHARED_PACKAGE_VERSION, SequentialIdGenerator, asyncIteratorToStream, asyncIteratorWithSpan, clone, compareSequentialIds, defer, fallback, findDeepMatches, get, getConstructor, getGlobalOtelConfig, intercept, isAsyncIteratorObject, isObject, isPropertyKey, isTypescriptObject, onError, onFinish, onStart, onSuccess, once, overlayProxy, parseEmptyableJSON, preventNativeAwait, readAsBuffer, replicateAsyncIterator, resolveMaybeOptionalOptions, runInSpanContext, runWithSpan, sequential, setGlobalOtelConfig, setSpanAttribute, setSpanError, splitInHalf, startSpan, streamToAsyncIteratorClass, stringifyJSON, toArray, toOtelException, toSpanAttributeValue, tryDecodeURIComponent, value };

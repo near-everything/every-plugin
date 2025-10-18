@@ -5,102 +5,136 @@ description: Advanced patterns and examples for every-plugin
 
 This guide provides advanced patterns and real-world examples for building sophisticated plugins.
 
-## Background Producer Pattern
+## Real-time Event Broadcasting
 
-Create plugins that continuously produce data in the background:
+Create plugins that broadcast events to multiple clients using MemoryPublisher pub/sub semantics:
 
 ```typescript
 import { createPlugin } from "every-plugin";
-import { Effect, Queue } from "every-plugin/effect";
-import { oc, eventIterator } from "every-plugin/orpc";
+import { Effect } from "every-plugin/effect";
+import { oc, eventIterator, MemoryPublisher } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 
-const EventSchema = z.object({
+// Define event types for broadcasting
+type BroadcastEvents = {
+  'notifications': {
+    id: string;
+    type: string;
+    message: string;
+    timestamp: number;
+  };
+};
+
+const NotificationSchema = z.object({
   id: z.string(),
-  timestamp: z.number(),
-  data: z.unknown()
+  type: z.string(),
+  message: z.string(),
+  timestamp: z.number()
 });
 
 const contract = oc.router({
-  listen: oc.route({ method: 'POST', path: '/listen' })
-    .input(z.object({ maxEvents: z.number().optional() }))
-    .output(eventIterator(EventSchema))
+  // Subscribe to real-time notifications
+  subscribeNotifications: oc
+    .route({ method: 'POST', path: '/subscribe/notifications' })
+    .input(z.object({
+      types: z.array(z.string()).optional(),
+      lastEventId: z.string().optional()
+    }))
+    .output(eventIterator(NotificationSchema)),
+
+  // Publish a notification manually
+  publishNotification: oc
+    .route({ method: 'POST', path: '/publish/notification' })
+    .input(z.object({
+      type: z.string(),
+      message: z.string()
+    }))
+    .output(z.object({ published: z.boolean() }))
 });
 
 export default createPlugin({
-  id: "background-producer",
+  id: "notification-service",
   contract,
   variables: z.object({
-    pollIntervalMs: z.number().default(1000),
-    maxEvents: z.number().optional()
+    enabled: z.boolean().default(true)
   }),
   secrets: z.object({ apiKey: z.string() }),
-  
-  initialize: (config) => Effect.gen(function* () {
-    // Create queue as scoped resource
-    const eventQueue = yield* Effect.acquireRelease(
-      Queue.bounded(1000),
-      (q) => Queue.shutdown(q)
-    );
-    
-    // Start background producer
-    yield* Effect.forkScoped(
-      Effect.gen(function* () {
-        let count = 0;
-        const maxEvents = config.variables.maxEvents;
-        
-        while (!maxEvents || count < maxEvents) {
-          // Fetch from external source
-          const event = yield* Effect.tryPromise(() =>
-            fetch('https://api.example.com/events/latest', {
-              headers: { Authorization: `Bearer ${config.secrets.apiKey}` }
-            }).then(r => r.json())
-          ).pipe(
-            Effect.catchAll(() => Effect.succeed(null))
-          );
-          
-          if (event) {
-            yield* Queue.offer(eventQueue, {
-              id: event.id,
-              timestamp: Date.now(),
-              data: event
-            }).pipe(
-              Effect.catchAll(() => Effect.void)
-            );
-            count++;
-          }
-          
-          // Wait before next poll
-          yield* Effect.sleep(`${config.variables.pollIntervalMs} millis`);
-        }
-      })
-    );
-    
-    return { eventQueue };
-  }),
-  
-  createRouter: (context, builder) => ({
-    listen: builder.listen.handler(async function* ({ input }) {
-      let count = 0;
-      const maxEvents = input.maxEvents;
 
-      while (!maxEvents || count < maxEvents) {
-        try {
-          // Take from queue (blocks until available)
-          const event = await Effect.runPromise(
-            Queue.take(context.eventQueue)
-          );
-          yield event;
-          count++;
-        } catch {
-          // Queue shutdown or error
-          break;
+  initialize: (config) => Effect.gen(function* () {
+    // Create publisher for real-time broadcasting
+    const publisher = new MemoryPublisher<BroadcastEvents>({
+      resumeRetentionSeconds: 60 * 2 // Support serverless resume for 2 minutes
+    });
+
+    // Start background producer (optional)
+    if (config.variables.enabled) {
+      yield* Effect.forkScoped(
+        Effect.gen(function* () {
+          while (true) {
+            // Simulate receiving notifications from external source
+            const notification = {
+              id: `notif-${Date.now()}`,
+              type: 'system',
+              message: `System update at ${new Date().toISOString()}`,
+              timestamp: Date.now()
+            };
+
+            // Publish to ALL subscribers (broadcast semantics)
+            yield* Effect.tryPromise(() =>
+              publisher.publish('notifications', notification)
+            ).pipe(
+              Effect.catchAll((error) => {
+                console.log('Notification publish failed:', error);
+                return Effect.void;
+              })
+            );
+
+            yield* Effect.sleep("30 seconds");
+          }
+        })
+      );
+    }
+
+    return { publisher };
+  }),
+
+  createRouter: (context, builder) => ({
+    subscribeNotifications: builder.subscribeNotifications.handler(async function* ({ input, signal }) {
+      // Subscribe to broadcast stream with resume support
+      const iterator = context.publisher.subscribe('notifications', {
+        signal,
+        lastEventId: input.lastEventId
+      });
+
+      for await (const event of iterator) {
+        // Filter by type if specified
+        if (input.types && !input.types.includes(event.type)) {
+          continue;
         }
+        yield event;
       }
+    }),
+
+    publishNotification: builder.publishNotification.handler(async ({ input }) => {
+      const notification = {
+        id: `manual-${Date.now()}`,
+        type: input.type,
+        message: input.message,
+        timestamp: Date.now()
+      };
+
+      await context.publisher.publish('notifications', notification);
+      return { published: true };
     })
   })
 });
 ```
+
+**Key Benefits:**
+- **Broadcast Semantics**: All connected clients get the same events
+- **Resume Support**: Clients can reconnect after serverless timeouts using `lastEventId`
+- **Real-time**: Multiple clients streaming simultaneously
+- **Scalable**: Drop-in replacement with Redis publishers for multi-instance deployments
 
 ## Stream Processing Pipeline
 
@@ -556,6 +590,424 @@ process.on('SIGINT', shutdown);
 const { client } = await runtime.usePlugin("my-plugin", config);
 await executeWithTracking(client.getData({ id: "123" }));
 ```
+
+## Serverless-Ready Event Streams
+
+Design event streams that can resume after serverless timeouts using `lastEventId` and `resumeRetentionSeconds`:
+
+```typescript
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import { oc, eventIterator, IORedisPublisher } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+
+type ActivityEvents = {
+  'user-activity': {
+    id: string;
+    userId: string;
+    action: string;
+    timestamp: number;
+    metadata: Record<string, any>;
+  };
+};
+
+const contract = oc.router({
+  streamActivity: oc
+    .route({ method: 'POST', path: '/stream/activity' })
+    .input(z.object({
+      userId: z.string().optional(),
+      lastEventId: z.string().optional(),
+      timeoutSec: z.number().default(300)
+    }))
+    .output(eventIterator(z.object({
+      id: z.string(),
+      userId: z.string(),
+      action: z.string(),
+      timestamp: z.number(),
+      metadata: z.record(z.any())
+    })))
+});
+
+export default createPlugin({
+  id: "user-activity-stream",
+  contract,
+  variables: z.object({
+    redisUrl: z.string().optional(), // For multi-instance scaling
+    resumeRetentionSeconds: z.number().default(300) // 5 minutes
+  }),
+  secrets: z.object({ activitySecret: z.string() }),
+
+  initialize: (config) => Effect.gen(function* () {
+    // Use Redis publisher for distributed deployments
+    let publisher: any;
+    if (config.variables.redisUrl) {
+      const Redis = require('ioredis');
+      const redis = new Redis(config.variables.redisUrl);
+      publisher = new IORedisPublisher<ActivityEvents>(redis, {
+        resumeRetentionSeconds: config.variables.resumeRetentionSeconds
+      });
+    } else {
+      // Fallback to in-memory for development
+      const { MemoryPublisher } = require('@orpc/experimental-publisher/memory');
+      publisher = new MemoryPublisher<ActivityEvents>({
+        resumeRetentionSeconds: config.variables.resumeRetentionSeconds
+      });
+    }
+
+    // Background activity simulator
+    yield* Effect.forkScoped(
+      Effect.gen(function* () {
+        let eventId = 0;
+        while (true) {
+          eventId++;
+          const activity = {
+            id: `activity-${eventId}`,
+            userId: `user-${eventId % 100}`,
+            action: ['login', 'click', 'purchase'][eventId % 3],
+            timestamp: Date.now(),
+            metadata: { sessionId: `session-${eventId}` }
+          };
+
+          yield* Effect.tryPromise(() =>
+            publisher.publish('user-activity', activity)
+          ).pipe(
+            Effect.catchAll((error) => {
+              console.log('Activity publish failed:', error);
+              return Effect.void;
+            })
+          );
+
+          yield* Effect.sleep("5 seconds");
+        }
+      })
+    );
+
+    return { publisher };
+  }),
+
+  createRouter: (context, builder) => ({
+    streamActivity: builder.streamActivity.handler(async function* ({ input, signal }) {
+      // Set up abort signal for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, input.timeoutSec * 1000);
+
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timeoutId);
+        controller.abort();
+      });
+
+      try {
+        const iterator = context.publisher.subscribe('user-activity', {
+          signal,
+          lastEventId: input.lastEventId
+        });
+
+        for await (const event of iterator) {
+          // Filter by user if specified
+          if (input.userId && event.userId !== input.userId) {
+            continue;
+          }
+
+          // Check if timeout exceeded
+          if (controller.signal.aborted) {
+            break;
+          }
+
+          yield event;
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    })
+  })
+});
+```
+
+**Client-side Resume Logic:**
+
+```typescript
+// Client maintains lastEventId for resuming
+let lastEventId: string | undefined;
+
+async function streamActivities(config: any) {
+  const { client } = await runtime.usePlugin("user-activity-stream");
+
+  while (true) {
+    try {
+      const stream = await client.streamActivity({
+        lastEventId, // Resume from last received event
+        timeoutSec: 300
+      });
+
+      for await (const event of stream) {
+        console.log('Activity:', event);
+        lastEventId = event.id; // Update last received
+
+        // Process event...
+        await processActivity(event);
+      }
+
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Stream timed out, resuming in 5 seconds...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        continue; // Retry with lastEventId
+      }
+
+      throw error; // Non-timeout error
+    }
+  }
+}
+```
+
+## Accessing Event Metadata
+
+Event streams can include optional metadata for debugging, monitoring, and advanced use cases. Use `getEventMeta()` to access Server-Sent Events metadata from streaming responses:
+
+```typescript
+import { getEventMeta } from "every-plugin/orpc";
+
+// In your streaming handler or consumer
+for await (const event of stream) {
+  // Access optional event metadata
+  const meta = getEventMeta(event);
+
+  // Metadata includes: id, retry, comments
+  if (meta) {
+    if (meta.id) console.log(`Event ID: ${meta.id}`);           // Correlation/tracking
+    if (meta.retry) console.log(`Retry delay: ${meta.retry}ms`); // Connection health
+    if (meta.comments?.length) console.log(`Comments: ${meta.comments}`);
+  }
+
+  // Process your event data
+  console.log('Event data:', event);
+}
+```
+
+**Metadata Fields:**
+- **`id`**: Unique event identifier for correlation tracking and resume tokens
+- **`retry`**: Milliseconds to wait before retrying if connection fails
+- **`comments`**: Array of comment strings, often used for SSE debugging information
+
+**Practical Use Cases:**
+
+*Monitoring Connection Health:*
+```typescript
+const stream = await client.streamEvents({ lastEventId });
+
+let lastEventTime = Date.now();
+for await (const event of stream) {
+  const meta = getEventMeta(event);
+
+  if (meta?.id) {
+    console.log(`[${new Date().toISOString()}] Event ${meta.id} received`);
+    lastEventTime = Date.now();
+  }
+
+  // Monitor for stale connections
+  const timeSinceLastEvent = Date.now() - lastEventTime;
+  if (timeSinceLastEvent > 30000) { // 30 seconds
+    console.warn('Stream appears stale, might need reconnection');
+  }
+
+  processEvent(event);
+}
+```
+
+*Debugging Stream Quality:*
+```typescript
+let retryCount = 0;
+const stream = await client.streamEvents();
+
+for await (const event of stream) {
+  const meta = getEventMeta(event);
+
+  // Track retry rates as connection quality indicator
+  if (meta?.retry && meta.retry > 1000) { // Slow retry suggests issues
+    retryCount++;
+    console.warn(`High retry delay detected: ${meta.retry}ms (count: ${retryCount})`);
+  }
+
+  // Log SSE comments for debugging
+  if (meta?.comments?.length) {
+    console.debug('SSE Comments:', meta.comments);
+  }
+}
+```
+
+**Note:** Metadata access is optional and primarily useful for debugging, monitoring, or advanced stream management. Most streaming use cases don't need to access these fields directly.
+
+## Scaling with Redis Publishers
+
+Deploy the same plugin across multiple instances using Redis publishers:
+
+```typescript
+import { IORedisPublisher } from 'every-plugin/orpc';
+import Redis from 'ioredis';
+
+// In production initialization
+initialize: (config) => Effect.gen(function* () {
+  // Connect to Redis for inter-instance coordination
+  const redis = new Redis(process.env.REDIS_URL);
+
+  // Redis publisher shares events across all instances
+  const publisher = new IORedisPublisher<BroadcastEvents>(redis, {
+    resumeRetentionSeconds: 60 * 2,
+    namespace: 'my-plugin' // Avoid conflicts with other plugins
+  });
+
+  // Background tasks run on ANY instance
+  // Events are broadcast to ALL connected clients regardless of instance
+  yield* Effect.forkScoped(
+    Effect.gen(function* () {
+      while (true) {
+        const event = yield* fetchFromExternalAPI();
+
+        // Publish to Redis - available to all instances
+        yield* Effect.tryPromise(() =>
+          publisher.publish('channel', event)
+        );
+
+        yield* Effect.sleep("30 seconds");
+      }
+    })
+  );
+
+  return { publisher, redis };
+}),
+
+// Clean up Redis on shutdown
+shutdown: (context) => Effect.gen(function* () {
+  yield* Effect.tryPromise({
+    try: () => context.redis.quit(),
+    catch: () => Effect.void
+  });
+})
+```
+
+**Benefits:**
+- **Horizontal Scaling**: Load balance across multiple server instances
+- **Fault Tolerance**: If one instance goes down, others continue streaming
+- **Shared State**: Events are consistent across all client connections
+
+## Work Distribution with Queues
+
+Use queues for work distribution when each task should be processed exactly once:
+
+```typescript
+import { createPlugin } from "every-plugin";
+import { Effect, Queue } from "every-plugin/effect";
+import { oc } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+
+const contract = oc.router({
+  // Enqueue work to be processed exactly once
+  enqueueWork: oc
+    .route({ method: 'POST', path: '/enqueue' })
+    .input(z.object({
+      taskId: z.string(),
+      priority: z.number().default(1),
+      payload: z.any()
+    }))
+    .output(z.object({ enqueued: z.boolean() })),
+
+  // Get queue statistics
+  getQueueStats: oc
+    .route({ method: 'GET', path: '/stats' })
+    .output(z.object({
+      pending: z.number(),
+      processing: z.number(),
+      completed: z.number()
+    }))
+});
+
+export default createPlugin({
+  id: "work-processor",
+  contract,
+  variables: z.object({
+    workerCount: z.number().default(3),
+    maxConcurrency: z.number().default(10)
+  }),
+  secrets: {},
+
+  initialize: (config) => Effect.gen(function* () {
+    // Bounded queue for task distribution
+    const taskQueue = yield* Effect.acquireRelease(
+      Queue.bounded(config.variables.maxConcurrency),
+      (q) => Queue.shutdown(q)
+    );
+
+    // Statistics tracking
+    const stats = {
+      pending: 0,
+      processing: 0,
+      completed: 0
+    };
+
+    // Start multiple workers - each takes one task (work distribution)
+    for (let i = 0; i < config.variables.workerCount; i++) {
+      yield* Effect.forkScoped(
+        Effect.gen(function* () {
+          while (true) {
+            try {
+              stats.processing++;
+              // Take ONE task from queue (exactly once semantics)
+              const task = yield* Queue.take(taskQueue);
+              stats.pending--;
+
+              // Process task
+              yield* processTask(task);
+
+              stats.completed++;
+              stats.processing--;
+
+            } catch (error) {
+              console.error(`Worker ${i} error:`, error);
+              stats.processing--;
+            }
+          }
+        })
+      );
+    }
+
+    return { taskQueue, stats };
+  }),
+
+  createRouter: (context, builder) => ({
+    enqueueWork: builder.enqueueWork.handler(async ({ input }) => {
+      // Add to queue for distribution to ONE worker
+      await Effect.runPromise(
+        Queue.offer(context.taskQueue, {
+          id: input.taskId,
+          priority: input.priority,
+          payload: input.payload,
+          enqueuedAt: Date.now()
+        })
+      );
+
+      context.stats.pending++;
+      return { enqueued: true };
+    }),
+
+    getQueueStats: builder.getQueueStats.handler(async () => {
+      return {
+        pending: context.stats.pending,
+        processing: context.stats.processing,
+        completed: context.stats.completed
+      };
+    })
+  })
+});
+```
+
+**When to Use Queues vs Publishers:**
+
+| Pattern | Use Case | Semantics | Example |
+|---------|---------|-----------|---------|
+| **MemoryPublisher** | Broadcasting events to multiple clients | Pub/sub - all subscribers get events | Real-time notifications, activity feeds |
+| **Queue** | Distributing work to workers | Work distribution - each task processed once | Job processing, task queues |
 
 ## Next Steps
 
