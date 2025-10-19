@@ -10,3 +10,10 @@ node_modules
 .tanstack
 # Local Netlify folder
 .netlify
+
+# alchemy
+.alchemy
+
+#cloudflare
+.wrangler
+

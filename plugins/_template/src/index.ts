@@ -37,7 +37,7 @@ export default createPlugin({
     apiKey: z.string().min(1, "API key is required"),
   }),
 
-  contract, // START HERE: define your contract in ./contract
+  contract, // START HERE: define your oRPC contract in ./contract
 
   initialize: (config) =>
     Effect.gen(function* () {
@@ -92,7 +92,9 @@ export default createPlugin({
 
   shutdown: () => Effect.void,
 
-  createRouter: (context, builder) => { // context: { service, publisher } from initialize
+  createRouter: (context, builder) => {
+    // context: { service, publisher } from initialize
+    // builder is pre-configured from oRPC: implement(contract).$context<TContext>()
     const { service, publisher } = context;
 
     return {
