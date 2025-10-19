@@ -15,7 +15,6 @@
   "private": true,
   "resolutions": {
     "effect": "3.18.1",
-    "zod": "4.1.5",
     "@orpc/contract": "1.8.6",
     "@orpc/server": "1.8.6",
     "@orpc/experimental-publisher": "^0.0.0",
@@ -38,6 +37,7 @@
     "db:migrate": "turbo -F server db:migrate"
   },
   "workspaces": [
+    "apps/docs",
     "packages/*",
     "templates/*"
   ]
