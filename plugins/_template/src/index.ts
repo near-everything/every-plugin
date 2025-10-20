@@ -1,7 +1,7 @@
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
-import { z } from "every-plugin/zod";
 import { getEventMeta, MemoryPublisher } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
 
 import { contract } from "./contract";
 import { TemplateService } from "./service";

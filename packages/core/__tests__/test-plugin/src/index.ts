@@ -3,10 +3,9 @@ import {
 	createPlugin,
 	PluginConfigurationError,
 } from "every-plugin";
-import { Effect, Queue } from "every-plugin/effect";
-import { type ContractRouterClient, eventIterator, getEventMeta, oc } from "every-plugin/orpc";
+import { Effect } from "every-plugin/effect";
+import { type ContractRouterClient, eventIterator, MemoryPublisher, oc } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
-import { MemoryPublisher } from '@orpc/experimental-publisher/memory';
 import { TestClient, testItemSchema } from "./client";
 
 // Define publisher event types

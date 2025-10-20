@@ -98,7 +98,7 @@ export interface Plugin<
 
 	// Plugin lifecycle
 	initialize(
-		config: { variables: z.infer<TVariables>; secrets: z.infer<TSecrets> }
+		config: { variables: z.input<TVariables>; secrets: z.input<TSecrets> }
 	): Effect.Effect<TContext, unknown, Scope.Scope>;
 
 	shutdown(): Effect.Effect<void, never>;

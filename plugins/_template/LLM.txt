@@ -370,11 +370,11 @@ createRouter: (context, builder) => {
 **Scaling to Redis:**
 ```typescript
 // Development: MemoryPublisher (single instance)
-import { MemoryPublisher } from '@orpc/experimental-publisher/memory';
+import { MemoryPublisher } from 'every-plugin/orpc';
 const publisher = new MemoryPublisher<Events>({ resumeRetentionSeconds: 120 });
 
 // Production: IORedisPublisher (multi-instance)
-import { IORedisPublisher } from '@orpc/experimental-publisher/ioredis';
+import { IORedisPublisher } from 'every-plugin/orpc';
 import Redis from 'ioredis';
 const redis = new Redis(process.env.REDIS_URL);
 const publisher = new IORedisPublisher<Events>(redis, {

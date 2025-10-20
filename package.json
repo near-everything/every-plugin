@@ -15,9 +15,8 @@
   "private": true,
   "resolutions": {
     "effect": "3.18.1",
-    "@orpc/contract": "1.8.6",
-    "@orpc/server": "1.8.6",
-    "@orpc/experimental-publisher": "^0.0.0",
+    "@orpc/contract": "1.10.0",
+    "@orpc/server": "1.10.0",
     "@module-federation/runtime-core": "0.19.1",
     "@module-federation/enhanced": "0.19.1",
     "@module-federation/node": "2.7.15"

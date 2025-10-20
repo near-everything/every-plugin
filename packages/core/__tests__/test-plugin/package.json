@@ -22,11 +22,5 @@
   "scripts": {
     "build": "rspack build && tsc -p tsconfig.build.json",
     "dev": "rspack serve"
-  },
-  "dependencies": {
-    "@orpc/shared": "^1.9.4"
-  },
-  "patchedDependencies": {
-    "@orpc/shared@1.9.4": "patches/@orpc%2Fshared@1.9.4.patch"
   }
 }
