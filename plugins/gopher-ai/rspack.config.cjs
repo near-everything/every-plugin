@@ -25,12 +25,13 @@ module.exports = withZephyr({
     onDeployComplete: (info) => {
       console.log("🚀 Deployment Complete!");
       console.log(`   URL: ${info.url}`);
-      console.log(`   Module: ${info.moduleName}`);
-      console.log(`   Build ID: ${info.buildId}`);
+      console.log(`   Module: ${info.snapshot.uid.app_name}`);
+      console.log(`   Build ID: ${info.snapshot.uid.build}`);
       console.log(`   Dependencies: ${info.federatedDependencies.length}`);
-      console.log(`   Duration: ${info.buildDuration}ms`);
-      console.log(`   Git: ${info.git.branch}@${info.git.commit}`);
-      console.log(`   CI: ${info.isCI ? "Yes" : "No"}`);
+      console.log(
+        `   Git: ${info.snapshot.git.branch}@${info.snapshot.git.commit}`
+      );
+      console.log(`   CI: ${info.buildStats.context.isCI ? "Yes" : "No"}`);
     },
   },
 })({
