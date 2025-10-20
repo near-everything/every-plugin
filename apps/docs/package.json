@@ -5,14 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && tsc --noEmit",
-    "start": "node .output/server/index.mjs"
+    "build": "vite build",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.12",
-    "@tanstack/react-router": "^1.132.31",
-    "@tanstack/react-router-devtools": "^1.132.31",
-    "@tanstack/react-start": "^1.132.32",
+    "@tanstack/react-router": "^1.133.13",
+    "@tanstack/react-router-devtools": "^1.133.13",
+    "@tanstack/react-start": "^1.133.13",
     "@types/mdx": "^2.0.13",
     "class-variance-authority": "^0.7.1",
     "framer-motion": "^12.23.22",
@@ -26,17 +26,24 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwind-merge": "^3.3.1",
-    "vite": "^7.1.8"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.13.13",
+    "@cloudflare/workers-types": "^4.20250805.0",
     "@netlify/vite-plugin-tanstack-start": "^1.0.2",
     "@tailwindcss/vite": "^4.1.14",
+    "@tanstack/nitro-v2-vite-plugin": "^1.133.17",
+    "@tanstack/router-plugin": "^1.133.13",
     "@types/node": "^24.6.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "alchemy": "^0.75.1",
     "tailwindcss": "^4.1.14",
     "typescript": "^5.9.3",
-    "vite-tsconfig-paths": "^5.1.4"
+    "vite": "^7.1.8",
+    "vite-tsconfig-paths": "^5.1.4",
+    "wrangler": "^4.43.0"
   }
 }

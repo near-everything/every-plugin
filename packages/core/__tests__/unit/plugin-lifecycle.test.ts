@@ -44,6 +44,7 @@ describe("Plugin Lifecycle Unit Tests", () => {
     );
     expect(initializedPlugin).toBeDefined();
     expect(initializedPlugin.config).toBeDefined();
+    // @ts-expect-error - can't infer secrets for initialized plugin... yet
     expect(initializedPlugin.config.secrets.apiKey).toBe("test-api-key-value");
   });
 

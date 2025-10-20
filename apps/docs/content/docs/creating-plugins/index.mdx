@@ -315,47 +315,74 @@ createRouter: (context, builder) => {
 
 ### Resource Management
 
-Use `Effect.acquireRelease` for long-lived resources:
+Use `Effect.acquireRelease` for long-lived resources like publishers and queues:
 
 ```typescript
+import { MemoryPublisher } from 'every-p@orpc/experimental-publisher/memory';
+
 initialize: (config) => Effect.gen(function* () {
-  // Resources are scoped to plugin lifetime
+  // Publishers are scoped to plugin lifetime
+  const publisher = new MemoryPublisher({
+    resumeRetentionSeconds: 60 * 2 // Retain events for 2 minutes
+  });
+
+  // Queues are also scoped resources
   const queue = yield* Effect.acquireRelease(
     Queue.bounded(1000),
     (q) => Queue.shutdown(q) // Cleanup on shutdown
   );
-  
-  return { queue };
+
+  return { publisher, queue };
 })
 ```
 
-### Background Tasks
+### Background Broadcasting
 
-Use `Effect.forkScoped` for background tasks:
+Use `Effect.forkScoped` with MemoryPublisher for background event broadcasting:
 
 ```typescript
+import { MemoryPublisher } from 'every-plugin/orpc';
+
+type BackgroundEvents = {
+  'updates': { id: string; index: number; timestamp: number };
+};
+
 initialize: (config) => Effect.gen(function* () {
-  const queue = yield* Effect.acquireRelease(
-    Queue.bounded(1000),
-    (q) => Queue.shutdown(q)
-  );
-  
-  // Background task runs until plugin shutdown
+  // Create publisher for broadcasting events
+  const publisher = new MemoryPublisher<BackgroundEvents>({
+    resumeRetentionSeconds: 60 * 2 // Support serverless resume
+  });
+
+  // Background producer (forked task)
   yield* Effect.forkScoped(
     Effect.gen(function* () {
       while (true) {
-        const item = yield* fetchFromAPI();
-        yield* Queue.offer(queue, item);
-        yield* Effect.sleep("1 second");
+        const event = {
+          id: `event-${Date.now()}`,
+          index: 0,
+          timestamp: Date.now()
+        };
+
+        // Publish to all subscribers
+        yield* Effect.tryPromise(() =>
+          publisher.publish('updates', event)
+        ).pipe(
+          Effect.catchAll((error) => {
+            console.log('Publish failed:', error);
+            return Effect.void;
+          })
+        );
+
+        yield* Effect.sleep("30 seconds");
       }
     })
   );
-  
-  return { queue };
+
+  return { publisher };
 })
 ```
 
-The background task is automatically interrupted when the plugin shuts down.
+The background producer runs until plugin shutdown and publishes events to all connected clients via broadcast semantics.
 
 ## Common Patterns
 

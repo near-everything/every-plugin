@@ -15,6 +15,13 @@ export const SearchResultSchema = z.object({
   score: z.number().min(0).max(1),
 });
 
+// Schema for background broadcast events (MemoryPublisher)
+export const BackgroundEventSchema = z.object({
+  id: z.string(),
+  index: z.number(),
+  timestamp: z.number(),
+});
+
 // oRPC Contract definition
 export const contract = oc.router({
   // Single item lookup by ID
@@ -44,6 +51,27 @@ export const contract = oc.router({
     .output(z.object({
       status: z.literal('ok'),
       timestamp: z.string().datetime(),
+    }))
+    .errors(CommonPluginErrors),
+
+  // Background streaming with resume support (MemoryPublisher)
+  listenBackground: oc
+    .route({ method: 'POST', path: '/listenBackground' })
+    .input(z.object({
+      maxResults: z.number().optional(),
+      lastEventId: z.string().optional(),
+    }))
+    .output(eventIterator(BackgroundEventSchema))
+    .errors(CommonPluginErrors),
+
+  // Manual background event publishing
+  enqueueBackground: oc
+    .route({ method: 'POST', path: '/enqueueBackground' })
+    .input(z.object({
+      id: z.string().optional(),
+    }))
+    .output(z.object({
+      ok: z.boolean(),
     }))
     .errors(CommonPluginErrors),
 });

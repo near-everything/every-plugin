@@ -3,559 +3,68 @@ title: Recipes
 description: Advanced patterns and examples for every-plugin
 ---
 
-This guide provides advanced patterns and real-world examples for building sophisticated plugins.
+This guide provides advanced patterns and real-world examples for building sophisticated plugins with every-plugin. Each recipe is self-contained and focuses on specific capabilities.
 
-## Background Producer Pattern
+## Core Patterns
 
-Create plugins that continuously produce data in the background:
+These recipes highlight every-plugin's unique features for real-time communication and scaling.
 
-```typescript
-import { createPlugin } from "every-plugin";
-import { Effect, Queue } from "every-plugin/effect";
-import { oc, eventIterator } from "every-plugin/orpc";
-import { z } from "every-plugin/zod";
+<Cards>
+  <Card title="Event Broadcasting" href="/docs/recipes/event-broadcasting">
+    Real-time event broadcasting with MemoryPublisher pub/sub semantics
+  </Card>
+  <Card title="Serverless Streaming" href="/docs/recipes/serverless-streaming">
+    Serverless-ready event streams with resume support and metadata access
+  </Card>
+  <Card title="Scaling" href="/docs/recipes/scaling">
+    Scale plugins across multiple instances with Redis publishers
+  </Card>
+</Cards>
 
-const EventSchema = z.object({
-  id: z.string(),
-  timestamp: z.number(),
-  data: z.unknown()
-});
+## Data Processing
 
-const contract = oc.router({
-  listen: oc.route({ method: 'POST', path: '/listen' })
-    .input(z.object({ maxEvents: z.number().optional() }))
-    .output(eventIterator(EventSchema))
-});
+Patterns for processing and transforming data with plugins.
 
-export default createPlugin({
-  id: "background-producer",
-  contract,
-  variables: z.object({
-    pollIntervalMs: z.number().default(1000),
-    maxEvents: z.number().optional()
-  }),
-  secrets: z.object({ apiKey: z.string() }),
-  
-  initialize: (config) => Effect.gen(function* () {
-    // Create queue as scoped resource
-    const eventQueue = yield* Effect.acquireRelease(
-      Queue.bounded(1000),
-      (q) => Queue.shutdown(q)
-    );
-    
-    // Start background producer
-    yield* Effect.forkScoped(
-      Effect.gen(function* () {
-        let count = 0;
-        const maxEvents = config.variables.maxEvents;
-        
-        while (!maxEvents || count < maxEvents) {
-          // Fetch from external source
-          const event = yield* Effect.tryPromise(() =>
-            fetch('https://api.example.com/events/latest', {
-              headers: { Authorization: `Bearer ${config.secrets.apiKey}` }
-            }).then(r => r.json())
-          ).pipe(
-            Effect.catchAll(() => Effect.succeed(null))
-          );
-          
-          if (event) {
-            yield* Queue.offer(eventQueue, {
-              id: event.id,
-              timestamp: Date.now(),
-              data: event
-            }).pipe(
-              Effect.catchAll(() => Effect.void)
-            );
-            count++;
-          }
-          
-          // Wait before next poll
-          yield* Effect.sleep(`${config.variables.pollIntervalMs} millis`);
-        }
-      })
-    );
-    
-    return { eventQueue };
-  }),
-  
-  createRouter: (context, builder) => ({
-    listen: builder.listen.handler(async function* ({ input }) {
-      let count = 0;
-      const maxEvents = input.maxEvents;
+<Cards>
+  <Card title="Queues" href="/docs/recipes/queues">
+    Work distribution patterns with queues vs publishers
+  </Card>
+  <Card title="Pipelines" href="/docs/recipes/pipelines">
+    Stream processing and batch processing patterns
+  </Card>
+</Cards>
 
-      while (!maxEvents || count < maxEvents) {
-        try {
-          // Take from queue (blocks until available)
-          const event = await Effect.runPromise(
-            Queue.take(context.eventQueue)
-          );
-          yield event;
-          count++;
-        } catch {
-          // Queue shutdown or error
-          break;
-        }
-      }
-    })
-  })
-});
-```
+## General Patterns
 
-## Stream Processing Pipeline
+Common patterns and best practices for plugin development.
 
-Chain multiple plugins for data transformation:
+<Cards>
+  <Card title="Patterns" href="/docs/recipes/patterns">
+    Rate limiting, retry logic, caching, health checks, and graceful shutdown
+  </Card>
+</Cards>
 
-```typescript
-// Source plugin streams raw data
-const { client: source } = await runtime.usePlugin("data-source", {
-  secrets: { apiKey: "{{SOURCE_API_KEY}}" }
-});
+## Key Concepts
 
-// Transformer plugin processes data
-const { client: transformer } = await runtime.usePlugin("transformer", {
-  variables: { format: "json", validate: true }
-});
+### MemoryPublisher vs Queues
 
-// Distributor plugin sends to destinations
-const { client: distributor } = await runtime.usePlugin("distributor", {
-  secrets: { webhook: "{{WEBHOOK_URL}}" }
-});
+| Pattern | Use Case | Semantics | Example |
+|---------|---------|-----------|---------|
+| **MemoryPublisher** | Broadcasting events to multiple clients | Pub/sub - all subscribers get events | Real-time notifications, activity feeds |
+| **Queue** | Distributing work to workers | Work distribution - each task processed once | Job processing, task queues |
 
-// Stream through pipeline
-const stream = await source.streamData({ query: "realtime" });
+### Event Streaming Features
 
-for await (const item of stream) {
-  try {
-    // Transform
-    const transformed = await transformer.transform({ 
-      data: item 
-    });
-    
-    // Distribute
-    await distributor.send({ 
-      items: [transformed] 
-    });
-  } catch (error) {
-    console.error("Pipeline error:", error);
-  }
-}
-```
+- **Resume Support**: Use `lastEventId` to resume streams after disconnections
+- **Broadcast Semantics**: All subscribers receive the same events
+- **Metadata Access**: Use `getEventMeta()` for debugging and monitoring
+- **Serverless Ready**: Automatic timeout handling with resume capabilities
 
-## Batch Processing
+### Scaling Options
 
-Process items in batches for efficiency:
-
-```typescript
-async function processBatch(items: any[]) {
-  const { client } = await runtime.usePlugin("batch-processor", {
-    variables: { batchSize: 10 }
-  });
-  
-  return await client.processBatch({ items });
-}
-
-// Stream with batching
-const stream = await source.streamData({ query: "large-dataset" });
-
-let batch: any[] = [];
-const results: any[] = [];
-
-for await (const item of stream) {
-  batch.push(item);
-  
-  if (batch.length >= 10) {
-    console.log(`Processing batch of ${batch.length} items`);
-    const processed = await processBatch(batch);
-    results.push(...processed.items);
-    batch = [];
-  }
-}
-
-// Process remaining items
-if (batch.length > 0) {
-  const processed = await processBatch(batch);
-  results.push(...processed.items);
-}
-
-console.log(`Total processed: ${results.length}`);
-```
-
-## Rate Limiting
-
-Implement rate limiting in plugin handlers:
-
-```typescript
-import { RateLimiter } from 'limiter';
-
-export default createPlugin({
-  id: "rate-limited-api",
-  contract,
-  variables: z.object({
-    requestsPerSecond: z.number().default(10)
-  }),
-  secrets: z.object({ apiKey: z.string() }),
-  
-  initialize: (config) => Effect.gen(function* () {
-    const limiter = new RateLimiter({
-      tokensPerInterval: config.variables.requestsPerSecond,
-      interval: 'second'
-    });
-    
-    const service = new ApiService(config.secrets.apiKey);
-    
-    return { service, limiter };
-  }),
-  
-  createRouter: (context, builder) => ({
-    getData: builder.getData.handler(async ({ input, errors }) => {
-      // Wait for rate limit token
-      const hasToken = await context.limiter.removeTokens(1);
-      
-      if (!hasToken) {
-        throw errors.RATE_LIMITED({
-          message: "Rate limit exceeded",
-          data: {
-            retryAfter: 1,
-            remainingRequests: 0,
-            limitType: 'requests' as const
-          }
-        });
-      }
-      
-      try {
-        const data = await Effect.runPromise(
-          context.service.getData(input.id)
-        );
-        return { data };
-      } catch (error) {
-        throw errors.SERVICE_UNAVAILABLE({
-          message: "Service unavailable",
-          data: { retryAfter: 5 }
-        });
-      }
-    })
-  })
-});
-```
-
-## Retry Logic
-
-Implement exponential backoff for retries:
-
-```typescript
-async function fetchWithRetry(
-  client: any,
-  input: any,
-  maxRetries = 3
-) {
-  let lastError: Error | null = null;
-  
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await client.getData(input);
-    } catch (error: any) {
-      lastError = error;
-      
-      // Don't retry on auth errors
-      if (error.code === "UNAUTHORIZED") {
-        throw error;
-      }
-      
-      // Extract retry-after from error
-      const retryAfter = error.data?.retryAfter || Math.pow(2, attempt);
-      
-      console.log(`Retry ${attempt + 1}/${maxRetries} after ${retryAfter}s`);
-      
-      if (attempt < maxRetries - 1) {
-        await new Promise(resolve => 
-          setTimeout(resolve, retryAfter * 1000)
-        );
-      }
-    }
-  }
-  
-  throw lastError;
-}
-
-// Usage
-const { client } = await runtime.usePlugin("unreliable-api", config);
-const result = await fetchWithRetry(client, { id: "123" });
-```
-
-## Caching Layer
-
-Add caching to reduce API calls:
-
-```typescript
-import { LRUCache } from 'lru-cache';
-
-export default createPlugin({
-  id: "cached-api",
-  contract,
-  variables: z.object({
-    cacheMaxSize: z.number().default(1000),
-    cacheTtlMs: z.number().default(60000)
-  }),
-  secrets: z.object({ apiKey: z.string() }),
-  
-  initialize: (config) => Effect.gen(function* () {
-    const cache = new LRUCache({
-      max: config.variables.cacheMaxSize,
-      ttl: config.variables.cacheTtlMs
-    });
-    
-    const service = new ApiService(config.secrets.apiKey);
-    
-    return { service, cache };
-  }),
-  
-  createRouter: (context, builder) => ({
-    getData: builder.getData.handler(async ({ input }) => {
-      const cacheKey = `data:${input.id}`;
-      
-      // Check cache
-      const cached = context.cache.get(cacheKey);
-      if (cached) {
-        console.log(`Cache hit: ${cacheKey}`);
-        return { data: cached };
-      }
-      
-      // Fetch from API
-      console.log(`Cache miss: ${cacheKey}`);
-      const data = await Effect.runPromise(
-        context.service.getData(input.id)
-      );
-      
-      // Store in cache
-      context.cache.set(cacheKey, data);
-      
-      return { data };
-    })
-  })
-});
-```
-
-## Queue Integration
-
-Integrate with job queues like BullMQ:
-
-```typescript
-import { Queue, Worker, Job } from 'bullmq';
-import { createPluginRuntime } from 'every-plugin/runtime';
-
-// Initialize runtime once
-const runtime = createPluginRuntime({
-  registry: await loadRegistry(),
-  secrets: await loadSecrets()
-});
-
-// Create queue
-const pluginQueue = new Queue('plugin-jobs', {
-  connection: { host: 'localhost', port: 6379 }
-});
-
-// Add jobs to queue
-await pluginQueue.add('process-data', {
-  pluginId: 'data-processor',
-  config: {
-    secrets: { apiKey: '{{API_KEY}}' },
-    variables: { format: 'json' }
-  },
-  input: { id: '123' }
-});
-
-// Worker to process jobs
-const worker = new Worker(
-  'plugin-jobs',
-  async (job: Job) => {
-    const { pluginId, config, input } = job.data;
-    
-    console.log(`Processing job ${job.id} with ${pluginId}`);
-    
-    try {
-      const { client } = await runtime.usePlugin(pluginId, config);
-      const result = await client.process(input);
-      return result;
-    } catch (error) {
-      console.error(`Job ${job.id} failed:`, error);
-      throw error;
-    }
-  },
-  { connection: { host: 'localhost', port: 6379 } }
-);
-
-// Cleanup on shutdown
-process.on('SIGTERM', async () => {
-  await worker.close();
-  await runtime.shutdown();
-  process.exit(0);
-});
-```
-
-## Multi-Tenant Plugin
-
-Support multiple tenants with isolated contexts:
-
-```typescript
-export default createPlugin({
-  id: "multi-tenant-api",
-  contract,
-  variables: z.object({
-    tenantId: z.string()
-  }),
-  secrets: z.object({
-    masterApiKey: z.string()
-  }),
-  
-  initialize: (config) => Effect.gen(function* () {
-    // Create tenant-specific service
-    const service = new TenantService(
-      config.secrets.masterApiKey,
-      config.variables.tenantId
-    );
-    
-    // Verify tenant access
-    yield* Effect.tryPromise({
-      try: () => service.verifyTenant(),
-      catch: () => new Error("Invalid tenant")
-    });
-    
-    return { service, tenantId: config.variables.tenantId };
-  }),
-  
-  createRouter: (context, builder) => ({
-    getData: builder.getData.handler(async ({ input }) => {
-      // All operations scoped to tenant
-      const data = await Effect.runPromise(
-        context.service.getData(input.id)
-      );
-      
-      return {
-        data,
-        tenantId: context.tenantId
-      };
-    })
-  })
-});
-
-// Usage with different tenants
-const { client: tenant1 } = await runtime.usePlugin("multi-tenant-api", {
-  secrets: { masterApiKey: "{{MASTER_API_KEY}}" },
-  variables: { tenantId: "tenant-1" }
-});
-
-const { client: tenant2 } = await runtime.usePlugin("multi-tenant-api", {
-  secrets: { masterApiKey: "{{MASTER_API_KEY}}" },
-  variables: { tenantId: "tenant-2" }
-});
-```
-
-## Health Checks
-
-Implement health checks for monitoring:
-
-```typescript
-const contract = oc.router({
-  health: oc.route({ method: 'GET', path: '/health' })
-    .input(z.object({}))
-    .output(z.object({
-      status: z.enum(['healthy', 'degraded', 'unhealthy']),
-      checks: z.record(z.boolean()),
-      timestamp: z.number()
-    })),
-  
-  // ... other procedures
-});
-
-export default createPlugin({
-  id: "monitored-api",
-  contract,
-  // ...
-  
-  createRouter: (context, builder) => ({
-    health: builder.health.handler(async () => {
-      const checks: Record<string, boolean> = {};
-      
-      // Check API connectivity
-      try {
-        await fetch('https://api.example.com/health');
-        checks.api = true;
-      } catch {
-        checks.api = false;
-      }
-      
-      // Check cache
-      checks.cache = context.cache !== undefined;
-      
-      // Check queue
-      try {
-        checks.queue = !(await Effect.runPromise(
-          Queue.isShutdown(context.queue)
-        ));
-      } catch {
-        checks.queue = false;
-      }
-      
-      const allHealthy = Object.values(checks).every(Boolean);
-      const someHealthy = Object.values(checks).some(Boolean);
-      
-      return {
-        status: allHealthy ? 'healthy' : someHealthy ? 'degraded' : 'unhealthy',
-        checks,
-        timestamp: Date.now()
-      };
-    }),
-    
-    // ... other handlers
-  })
-});
-```
-
-## Graceful Shutdown
-
-Handle graceful shutdown with cleanup:
-
-```typescript
-const runtime = createPluginRuntime({
-  registry: await loadRegistry(),
-  secrets: await loadSecrets()
-});
-
-// Track active operations
-const activeOperations = new Set<Promise<any>>();
-
-async function executeWithTracking(operation: Promise<any>) {
-  activeOperations.add(operation);
-  try {
-    return await operation;
-  } finally {
-    activeOperations.delete(operation);
-  }
-}
-
-// Graceful shutdown handler
-async function shutdown() {
-  console.log('Shutting down gracefully...');
-  
-  // Wait for active operations
-  console.log(`Waiting for ${activeOperations.size} operations...`);
-  await Promise.allSettled(activeOperations);
-  
-  // Shutdown runtime
-  await runtime.shutdown();
-  
-  console.log('Shutdown complete');
-  process.exit(0);
-}
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-
-// Usage
-const { client } = await runtime.usePlugin("my-plugin", config);
-await executeWithTracking(client.getData({ id: "123" }));
-```
+- **MemoryPublisher**: In-memory for single instance, development
+- **IORedisPublisher**: Redis-backed for multi-instance production
+- **Namespace Isolation**: Avoid conflicts between different plugins
 
 ## Next Steps
 

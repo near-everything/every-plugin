@@ -3,10 +3,19 @@ import {
 	createPlugin,
 	PluginConfigurationError,
 } from "every-plugin";
-import { Effect, Queue } from "every-plugin/effect";
-import { type ContractRouterClient, eventIterator, oc } from "every-plugin/orpc";
+import { Effect } from "every-plugin/effect";
+import { type ContractRouterClient, eventIterator, MemoryPublisher, oc } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 import { TestClient, testItemSchema } from "./client";
+
+// Define publisher event types
+type BackgroundEvents = {
+	'background-updates': {
+		id: string;
+		index: number;
+		timestamp: number;
+	};
+};
 
 // Schema for streaming events
 const streamEventSchema = z.object({
@@ -97,6 +106,7 @@ export const testContract = oc.router({
 		.route({ method: 'POST', path: '/listenBackground' })
 		.input(z.object({
 			maxResults: z.number().min(1).max(100).optional(),
+			lastEventId: z.string().optional(),
 		}))
 		.output(eventIterator(backgroundEventSchema))
 		.errors(CommonPluginErrors),
@@ -112,13 +122,7 @@ export const testContract = oc.router({
 		}))
 		.errors(CommonPluginErrors),
 
-	// Get current queue size for diagnostics
-	getQueueSize: oc
-		.route({ method: 'POST', path: '/getQueueSize' })
-		.output(z.object({
-			size: z.number(),
-		}))
-		.errors(CommonPluginErrors),
+
 
 	// Simple ping for testing client dispatch
 	ping: oc
@@ -173,11 +177,10 @@ export const TestPlugin = createPlugin({
 				catch: (error) => new Error(`Health check failed: ${error instanceof Error ? error.message : String(error)}`)
 			});
 
-			// Create background queue as a scoped resource
-			const backgroundQueue = yield* Effect.acquireRelease(
-				Queue.bounded<{ id: string; index: number; timestamp: number }>(1000),
-				(q) => Queue.shutdown(q)
-			);
+			// Create publisher for background events with resume support for serverless
+			const publisher = new MemoryPublisher<BackgroundEvents>({
+				resumeRetentionSeconds: 60 * 2, // Retain events for 2 minutes to support resume
+			});
 
 			// Start background producer if enabled
 			if (config.variables.backgroundEnabled) {
@@ -195,9 +198,11 @@ export const TestPlugin = createPlugin({
 								timestamp: Date.now(),
 							};
 
-							yield* Queue.offer(backgroundQueue, event).pipe(
+							yield* Effect.tryPromise(() =>
+								publisher.publish('background-updates', event)
+							).pipe(
 								Effect.catchAll((error) => {
-									console.log(`[TestPlugin] Queue offer failed for event ${i}:`, error);
+									console.log(`[TestPlugin] Publish failed for event ${i}:`, error);
 									return Effect.void;
 								})
 							);
@@ -214,11 +219,11 @@ export const TestPlugin = createPlugin({
 			// Return context object - this gets passed to createRouter
 			return {
 				client,
-				backgroundQueue
+				publisher
 			};
 		}),
 	createRouter: (context, builder) => {
-		const { client, backgroundQueue } = context;
+		const { client, publisher } = context;
 
 
 		return {
@@ -285,18 +290,17 @@ export const TestPlugin = createPlugin({
 				};
 			}),
 
-			listenBackground: builder.listenBackground.handler(async function* ({ input }) {
+			listenBackground: builder.listenBackground.handler(async function* ({ input, signal, lastEventId }) {
 				let count = 0;
 				const maxResults = input.maxResults;
+				const iterator = publisher.subscribe('background-updates', { signal, lastEventId });
 
-				while (!maxResults || count < maxResults) {
-					try {
-						const event = await Effect.runPromise(Queue.take(backgroundQueue));
-						yield event;
-						count++;
-					} catch {
-						break;
-					}
+				for await (const event of iterator) {
+					if (maxResults && count >= maxResults) break;
+
+					// Yield the payload directly (oRPC Publisher manages event metadata)
+					yield event;
+					count++;
 				}
 			}),
 
@@ -307,19 +311,11 @@ export const TestPlugin = createPlugin({
 					timestamp: Date.now(),
 				};
 
-				await Effect.runPromise(
-					Queue.offer(backgroundQueue, event).pipe(
-						Effect.catchAll(() => Effect.succeed(false))
-					)
-				);
-
+				await publisher.publish('background-updates', event);
 				return { ok: true };
 			}),
 
-			getQueueSize: builder.getQueueSize.handler(async () => {
-				const size = await Effect.runPromise(Queue.size(backgroundQueue));
-				return { size };
-			}),
+
 
 			ping: builder.ping.handler(async () => {
 				return { ok: true, timestamp: Date.now() };

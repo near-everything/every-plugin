@@ -83,7 +83,7 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 
 	initializePlugin<K extends keyof R>(
 		instance: PluginInstance<PluginOf<R[K]>>,
-		config: z.infer<PluginOf<R[K]>["configSchema"]>
+		config: z.input<PluginOf<R[K]>["configSchema"]>
 	): Promise<InitializedPlugin<PluginOf<R[K]>> & {
 		config: ConfigOf<R[K]>;
 	}> {
@@ -100,7 +100,7 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 
 	async usePlugin<K extends keyof R>(
 		pluginId: K,
-		config: z.infer<PluginOf<R[K]>["configSchema"]>
+		config: z.input<PluginOf<R[K]>["configSchema"]>
 	): Promise<EveryPlugin<PluginOf<R[K]>> & {
 		initialized: InitializedPlugin<PluginOf<R[K]>> & {
 			config: ConfigOf<R[K]>;
@@ -151,7 +151,7 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 
 	evictPlugin<K extends keyof R>(
 		pluginId: K,
-		config: z.infer<PluginOf<R[K]>["configSchema"]>
+		config: z.input<PluginOf<R[K]>["configSchema"]>
 	): Promise<void> {
 		const cacheKey = this.generateCacheKey(String(pluginId), config);
 

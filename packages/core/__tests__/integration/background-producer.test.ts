@@ -90,49 +90,110 @@ describe.sequential("Background Producer Integration Tests", () => {
       console.log(`✅ Collected ${eventArray.length} background events in real-time`);
       expect(eventArray.length).toBe(3);
 
-      // Verify sequential event IDs
+      // Verify event structure and sequential ordering (real-time broadcasting)
       for (let i = 0; i < eventArray.length; i++) {
         const event = eventArray[i];
-        expect(event.id).toBe(`bg-${i + 1}`);
-        expect(event.index).toBe(i + 1);
+        expect(event.id).toMatch(/^bg-\d+$/);
+        expect(event.index).toBeGreaterThan(0);
         expect(typeof event.timestamp).toBe("number");
+        expect(event.timestamp).toBeLessThanOrEqual(Date.now());
+
+        // Events should be sequential within this consumer's stream
+        if (i > 0) {
+          const prevId = parseInt(eventArray[i-1].id.replace('bg-', ''));
+          const currId = parseInt(event.id.replace('bg-', ''));
+          expect(currId).toBeGreaterThan(prevId);
+        }
       }
 
-      // Test manual enqueue and consumption
-      console.log("🎯 Testing manual event enqueue and consumption");
+      console.log("� background producer/consumer test completed successfully!");
 
-      const enqueuePromise = Effect.tryPromise(() =>
-        client.enqueueBackground({ id: "manual-test" })
+      console.log("🎉 background producer/consumer test completed successfully!");
+    }).pipe(Effect.timeout("15 seconds"))
+    , { timeout: 20000 });
+
+  it.effect("should handle multiple consumers simultaneously", () =>
+    Effect.gen(function* () {
+      console.log("🚀 Testing multiple consumers simultaneously");
+
+      const { client } = yield* Effect.promise(() =>
+        runtime.usePlugin("test-plugin", BACKGROUND_CONFIG)
       );
 
-      const manualStreamPromise = Effect.tryPromise(() =>
-        client.listenBackground({ maxResults: 1 })
+      // Test multiple consumers reading from same publisher
+      console.log("🔄 Starting multiple consumer streams");
+
+      const consumer1 = Effect.tryPromise(() =>
+        client.listenBackground({ maxResults: 3 })
       ).pipe(
         Effect.flatMap((streamResult) => {
           const stream = Stream.fromAsyncIterable(streamResult, (error) => error);
-          return stream.pipe(Stream.take(1), Stream.runCollect);
+          return stream.pipe(Stream.take(3), Stream.runCollect);
         })
       );
 
-      // Run enqueue and consume concurrently
-      const [enqueueResult, manualEvents] = yield* Effect.all([
-        enqueuePromise,
-        manualStreamPromise
-      ], { concurrency: "unbounded" }).pipe(
-        Effect.timeout("4 seconds")
+      const consumer2 = Effect.tryPromise(() =>
+        client.listenBackground({ maxResults: 2 })
+      ).pipe(
+        Effect.flatMap((streamResult) => {
+          const stream = Stream.fromAsyncIterable(streamResult, (error) => error);
+          return stream.pipe(Stream.take(2), Stream.runCollect);
+        })
       );
 
-      expect(enqueueResult.ok).toBe(true);
-      console.log("✅ Manual enqueue successful");
+      // Run both consumers concurrently
+      const [events1, events2] = yield* Effect.all([
+        consumer1,
+        consumer2
+      ], { concurrency: "unbounded" }).pipe(
+        Effect.timeout("8 seconds")
+      );
 
-      const manualEventArray = Array.from(manualEvents);
-      expect(manualEventArray.length).toBe(1);
-      const manualEvent = manualEventArray[0];
-      expect(manualEvent.id).toBe("manual-test");
-      expect(manualEvent.index).toBe(-1);
-      console.log("✅ Manual event consumed in real-time");
+      const array1 = Array.from(events1);
+      const array2 = Array.from(events2);
 
-      console.log("🎉 background producer/consumer test completed successfully!");
+      console.log(`✅ Consumer 1 received ${array1.length} events`);
+      console.log(`✅ Consumer 2 received ${array2.length} events`);
+
+      expect(array1.length).toBe(3);
+      expect(array2.length).toBe(2);
+
+      // Collect all received IDs to verify pub/sub behavior
+      const allIds = [...array1, ...array2].map(e => e.id);
+      const uniqueIds = new Set(allIds);
+      console.log(`📊 Total events: ${allIds.length}, Unique IDs: ${uniqueIds.size}`);
+
+      // Pub/sub broadcasts to all consumers - events SHOULD be duplicated
+      expect(uniqueIds.size).toBeLessThan(allIds.length);
+
+      // Verify overlap between consumers (proving broadcast behavior)
+      const consumer1Ids = new Set(array1.map(e => e.id));
+      const consumer2Ids = new Set(array2.map(e => e.id));
+      const overlap = [...consumer1Ids].filter(id => consumer2Ids.has(id));
+      expect(overlap.length).toBeGreaterThan(0);
+      console.log(`✅ Broadcast verified: ${overlap.length} events received by both consumers`);
+
+      // Each event should have correct structure
+      [...array1, ...array2].forEach(event => {
+        expect(event.id).toMatch(/^bg-\d+$/);
+        expect(event.index).toBeGreaterThan(0);
+        expect(typeof event.timestamp).toBe("number");
+        expect(event.timestamp).toBeLessThanOrEqual(Date.now());
+      });
+
+      // Verify each consumer individually has sequential events
+      // (We don't check ordering across consumers since they connect at different times)
+      const seqConsumer1Ids = array1.map(e => parseInt(e.id.replace('bg-', '')));
+      const seqConsumer2Ids = array2.map(e => parseInt(e.id.replace('bg-', '')));
+
+      for (let i = 0; i < seqConsumer1Ids.length - 1; i++) {
+        expect(seqConsumer1Ids[i + 1]).toBeGreaterThan(seqConsumer1Ids[i]);
+      }
+      for (let i = 0; i < seqConsumer2Ids.length - 1; i++) {
+        expect(seqConsumer2Ids[i + 1]).toBeGreaterThan(seqConsumer2Ids[i]);
+      }
+
+      console.log("🎉 Multiple consumers test completed!");
     }).pipe(Effect.timeout("15 seconds"))
     , { timeout: 20000 });
 });

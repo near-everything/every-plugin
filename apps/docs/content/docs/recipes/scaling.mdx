@@ -1,0 +1,182 @@
+---
+title: Scaling
+description: Scale plugins across multiple instances with Redis publishers
+---
+
+Deploy the same plugin across multiple instances using Redis publishers:
+
+```typescript
+import { IORedisPublisher } from 'every-plugin/orpc';
+import Redis from 'ioredis';
+
+// In production initialization
+initialize: (config) => Effect.gen(function* () {
+  // Connect to Redis for inter-instance coordination
+  const redis = new Redis(process.env.REDIS_URL);
+
+  // Redis publisher shares events across all instances
+  const publisher = new IORedisPublisher<BroadcastEvents>(redis, {
+    resumeRetentionSeconds: 60 * 2,
+    namespace: 'my-plugin' // Avoid conflicts with other plugins
+  });
+
+  // Background tasks run on ANY instance
+  // Events are broadcast to ALL connected clients regardless of instance
+  yield* Effect.forkScoped(
+    Effect.gen(function* () {
+      while (true) {
+        const event = yield* fetchFromExternalAPI();
+
+        // Publish to Redis - available to all instances
+        yield* Effect.tryPromise(() =>
+          publisher.publish('channel', event)
+        );
+
+        yield* Effect.sleep("30 seconds");
+      }
+    })
+  );
+
+  return { publisher, redis };
+}),
+
+// Clean up Redis on shutdown
+shutdown: (context) => Effect.gen(function* () {
+  yield* Effect.tryPromise({
+    try: () => context.redis.quit(),
+    catch: () => Effect.void
+  });
+})
+```
+
+**Benefits:**
+- **Horizontal Scaling**: Load balance across multiple server instances
+- **Fault Tolerance**: If one instance goes down, others continue streaming
+- **Shared State**: Events are consistent across all client connections
+
+## Production Setup
+
+```typescript
+export default createPlugin({
+  id: "production-ready-plugin",
+  contract,
+  variables: z.object({
+    redisUrl: z.string(),
+    redisNamespace: z.string().default('my-plugin'),
+    resumeRetentionSeconds: z.number().default(120)
+  }),
+  secrets: z.object({ apiKey: z.string() }),
+
+  initialize: (config) => Effect.gen(function* () {
+    // Production Redis connection
+    const redis = new Redis(config.variables.redisUrl, {
+      retryDelayOnFailover: 100,
+      enableReadyCheck: true,
+      maxRetriesPerRequest: 3,
+      lazyConnect: true
+    });
+
+    // Redis publisher with namespace isolation
+    const publisher = new IORedisPublisher<BroadcastEvents>(redis, {
+      resumeRetentionSeconds: config.variables.resumeRetentionSeconds,
+      namespace: config.variables.redisNamespace
+    });
+
+    // Health check Redis connection
+    yield* Effect.tryPromise({
+      try: () => redis.ping(),
+      catch: () => new Error("Redis connection failed")
+    });
+
+    // Background producer runs on all instances
+    yield* Effect.forkScoped(
+      Effect.gen(function* () {
+        while (true) {
+          try {
+            const events = yield* fetchFromExternalAPI();
+
+            for (const event of events) {
+              yield* Effect.tryPromise(() =>
+                publisher.publish('events', event)
+              );
+            }
+
+            yield* Effect.sleep("30 seconds");
+          } catch (error) {
+            console.error('Background producer error:', error);
+            yield* Effect.sleep("60 seconds"); // Back off on errors
+          }
+        }
+      })
+    );
+
+    return { publisher, redis };
+  }),
+
+  shutdown: (context) => Effect.gen(function* () {
+    // Graceful Redis cleanup
+    yield* Effect.tryPromise({
+      try: () => context.redis.quit(),
+      catch: () => Effect.void
+    });
+  })
+});
+```
+
+## Load Balancing
+
+```typescript
+// Multiple instances behind load balancer
+const instances = [
+  { host: 'instance-1:3000', weight: 1 },
+  { host: 'instance-2:3000', weight: 1 },
+  { host: 'instance-3:3000', weight: 1 }
+];
+
+// Each instance runs the same plugin
+// Redis coordinates events across all instances
+// Load balancer distributes client connections
+```
+
+## Monitoring
+
+```typescript
+// Monitor Redis connection health
+const contract = oc.router({
+  health: oc.route({ method: 'GET', path: '/health' })
+    .output(z.object({
+      status: z.enum(['healthy', 'degraded', 'unhealthy']),
+      redis: z.object({
+        connected: z.boolean(),
+        latency: z.number().optional()
+      })
+    }))
+});
+
+createRouter: (context, builder) => ({
+  health: builder.health.handler(async () => {
+    const redisHealthy = await Effect.runPromise(
+      context.redis.ping().then(() => true).catch(() => false)
+    );
+
+    return {
+      status: redisHealthy ? 'healthy' : 'unhealthy',
+      redis: {
+        connected: redisHealthy,
+        latency: redisHealthy ? await measureLatency() : undefined
+      }
+    };
+  })
+});
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Event Broadcasting" href="/docs/recipes/event-broadcasting">
+    Basic event broadcasting patterns
+  </Card>
+  <Card title="Queues" href="/docs/recipes/queues">
+    Work distribution patterns
+  </Card>
+</Cards>
