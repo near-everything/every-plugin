@@ -1,4 +1,4 @@
-import { createRouterClient } from "@orpc/server";
+import { createRouterClient, RouterClient } from "@orpc/server";
 import { Cause, Effect, Exit, Hash, ManagedRuntime, Option } from "effect";
 import type {
 	AnyPlugin,
@@ -85,7 +85,7 @@ export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
 		const initialized = await this.runPromise(cachedPlugin);
 
 		const router = initialized.plugin.createRouter(initialized.context);
-		const client = createRouterClient(router);
+		const client: RouterClient<typeof router> = createRouterClient(router);
 
 		return {
 			router,

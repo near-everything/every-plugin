@@ -1,5 +1,5 @@
 {
-	"name": "@examples/curatedotfun",
+	"name": "@examples/efizzybusybot",
 	"private": true,
 	"scripts": {
 		"start": "bun run main.ts",
@@ -16,7 +16,8 @@
 		"@effect/language-service": "^0.41.1",
 		"@types/bun": "^1.2.21",
 		"drizzle-kit": "^0.31.4",
-		"telegraf": "^4.16.3"
+		"telegraf": "^4.16.3",
+		"@curatedotfun/telegram": "workspace:*"
 	},
 	"peerDependencies": {
 		"typescript": "^5"
@@ -29,7 +30,7 @@
 		"@xenova/transformers": "^2.17.2",
 		"ai": "^5.0.59",
 		"drizzle-orm": "^0.44.5",
-		"every-plugin": "^0.3.0",
+		"every-plugin": "workspace:*",
 		"fast-check": "^4.3.0",
 		"hono": "^4.9.8",
 		"openai": "^6.0.0"

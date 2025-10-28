@@ -5,7 +5,7 @@ import { GopherAIClient } from "./client";
 import { contract } from "./contract";
 import { GopherAIService } from "./service";
 
-export const GopherAIPlugin = createPlugin({
+export default createPlugin({
   variables: z.object({
     baseUrl: z.string().url().optional().default("https://data.gopher-ai.com/api/v1"),
     timeout: z.number().optional().default(30000),

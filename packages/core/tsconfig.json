@@ -1,21 +1,26 @@
 {
-  "extends": "./tsconfig.build.json",
-  "compilerOptions": {
-    "noEmit": true,
-    "rootDir": ".",
-    "paths": {
-      "@/*": ["./src/*"],
-      "every-plugin": ["./src/index.ts"],
-      "every-plugin/*": ["./src/*"],
-      "every-plugin/effect": ["./src/effect.ts"],
-      "every-plugin/zod": ["./src/zod.ts"],
-      "every-plugin/orpc": ["./src/orpc.ts"],
-      "every-plugin/normalize": ["./src/runtime/services/normalize.ts"],
-      "every-plugin/testing": ["./src/testing/index.ts"],
-      "every-plugin/runtime": ["./src/runtime/index.ts"],
-    }
-  },
-  "files": ["tests/types.d.ts"],
-  "include": ["src/**/*", "tests/**/*", "package.json"],
-  "exclude": ["node_modules", "dist", "tests/fixtures/*/dist", "tests/fixtures/test-plugin/rspack.config.cjs"]
+	"extends": "./tsconfig.build.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"rootDir": ".",
+		"paths": {
+			"@/*": ["./src/*"],
+			"every-plugin": ["./src/index.ts"],
+			"every-plugin/*": ["./src/*"],
+			"every-plugin/effect": ["./src/effect.ts"],
+			"every-plugin/zod": ["./src/zod.ts"],
+			"every-plugin/orpc": ["./src/orpc.ts"],
+			"every-plugin/normalize": ["./src/runtime/services/normalize.ts"],
+			"every-plugin/testing": ["./src/testing/index.ts"],
+			"every-plugin/runtime": ["./src/runtime/index.ts"]
+		}
+	},
+	"files": ["tests/types.d.ts"],
+	"include": ["src/**/*", "tests/**/*", "package.json"],
+	"exclude": [
+		"node_modules",
+		"dist",
+		"tests/fixtures/*/dist",
+		"tests/fixtures/test-plugin/rspack.config.cjs"
+	]
 }

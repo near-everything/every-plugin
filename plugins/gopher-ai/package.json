@@ -1,38 +1,38 @@
 {
-  "name": "@curatedotfun/gopher-ai",
-  "version": "0.0.1",
-  "description": "Gopher AI plugin for verifiably scraped content",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "type": "module",
-  "peerDependencies": {
-    "every-plugin": "^0.3.0",
-    "typescript": "^5.6.0"
-  },
-  "devDependencies": {
-    "@effect/language-service": "^0.41.1",
-    "@module-federation/node": "^2.7.17",
-    "@rspack/cli": "^1.5.2",
-    "@rspack/core": "^1.5.2",
-    "@types/node": "^24.6.0",
-    "dotenv": "^17.2.2",
-    "every-plugin": "workspace:*",
-    "msw": "^2.3.0",
-    "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.2.4",
-    "zephyr-rspack-plugin": "link:zephyr-rspack-plugin"
-  },
-  "scripts": {
-    "build": "rspack build && tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.build.json --noEmit",
-    "dev": "rspack serve",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
-    "coverage": "vitest run --coverage"
-  },
-  "dependencies": {
-    "@better-fetch/fetch": "^1.1.18",
-    "@better-fetch/logger": "^1.1.18"
-  }
+	"name": "@curatedotfun/gopher-ai",
+	"version": "0.0.1",
+	"description": "Gopher AI plugin for verifiably scraped content",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"type": "module",
+	"peerDependencies": {
+		"every-plugin": "^0.3.0",
+		"typescript": "^5.6.0"
+	},
+	"devDependencies": {
+		"@effect/language-service": "^0.41.1",
+		"@module-federation/node": "^2.7.17",
+		"@rspack/cli": "^1.5.2",
+		"@rspack/core": "^1.5.2",
+		"@types/node": "^24.6.0",
+		"dotenv": "^17.2.2",
+		"every-plugin": "workspace:*",
+		"msw": "^2.3.0",
+		"vite-tsconfig-paths": "^5.1.4",
+		"vitest": "^3.2.4",
+		"zephyr-rspack-plugin": "link:zephyr-rspack-plugin"
+	},
+	"scripts": {
+		"build": "rspack build && tsc -p tsconfig.build.json",
+		"typecheck": "tsc -p tsconfig.build.json --noEmit",
+		"dev": "rspack serve",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:integration": "vitest run --config vitest.integration.config.ts",
+		"coverage": "vitest run --coverage"
+	},
+	"dependencies": {
+		"@better-fetch/fetch": "^1.1.18",
+		"@better-fetch/logger": "^1.1.18"
+	}
 }

@@ -181,7 +181,7 @@ import { contract } from "./contract";
 import { YourService } from "./service";
 
 export default createPlugin({
-  id: "@your-org/your-plugin",
+  // Note: Plugin identifier comes from registry key, not an 'id' field here
   
   variables: z.object({
     baseUrl: z.string().url(),

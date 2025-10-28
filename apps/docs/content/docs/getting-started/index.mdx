@@ -169,7 +169,7 @@ import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
 
 export default createPlugin({
-  id: "my-plugin",
+  // Plugin identifier comes from registry key, not an 'id' field here
   contract,
   variables: z.object({ baseUrl: z.string() }),
   secrets: z.object({ apiKey: z.string() }),
