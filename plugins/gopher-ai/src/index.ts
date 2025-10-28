@@ -4,13 +4,8 @@ import { z } from "every-plugin/zod";
 import { GopherAIClient } from "./client";
 import { contract } from "./contract";
 import { GopherAIService } from "./service";
-import {
-  handleError
-} from "./utils";
 
-export default createPlugin({
-  id: "@curatedotfun/gopher-ai",
-
+export const GopherAIPlugin = createPlugin({
   variables: z.object({
     baseUrl: z.string().url().optional().default("https://data.gopher-ai.com/api/v1"),
     timeout: z.number().optional().default(30000),
@@ -43,166 +38,126 @@ export default createPlugin({
     const { service } = context;
 
     // Core job operations
-    const submitSearchJob = builder.submitSearchJob.handler(async ({ input, errors }) => {
-      try {
-        const jobId = await Effect.runPromise(
-          service.client.submitSearchJob(
-            input.sourceType,
-            input.searchMethod,
-            input.query,
-            100,
-            input.nextCursor
-          )
-        );
-        return { jobId };
-      } catch (error) {
-        return handleError(error, errors);
-      }
+    const submitSearchJob = builder.submitSearchJob.handler(async ({ input }) => {
+      const jobId = await Effect.runPromise(
+        service.client.submitSearchJob(
+          input.sourceType,
+          input.searchMethod,
+          input.query,
+          100,
+          input.nextCursor
+        )
+      );
+      return { jobId };
     });
 
-    const checkJobStatus = builder.checkJobStatus.handler(async ({ input, errors }) => {
-      try {
-        const status = await Effect.runPromise(service.client.checkJobStatus(input.jobId));
-        return { status: status as 'submitted' | 'in progress' | 'done' | 'error' };
-      } catch (error) {
-        return handleError(error, errors);
-      }
+    const checkJobStatus = builder.checkJobStatus.handler(async ({ input }) => {
+      const status = await Effect.runPromise(service.client.checkJobStatus(input.jobId));
+      return { status: status as 'submitted' | 'in progress' | 'done' | 'error' };
     });
 
-    const getJobResults = builder.getJobResults.handler(async ({ input, errors }) => {
-      try {
-        const results = await Effect.runPromise(service.client.getJobResults(input.jobId));
-        return { items: results };
-      } catch (error) {
-        return handleError(error, errors);
-      }
+    const getJobResults = builder.getJobResults.handler(async ({ input }) => {
+      const results = await Effect.runPromise(service.client.getJobResults(input.jobId));
+      return { items: results };
     });
 
-    const getById = builder.getById.handler(async ({ input, errors }) => {
-      try {
-        const result = await Effect.runPromise(
-          service.getById(input.sourceType, input.id)
-        );
-        return { item: result };
-      } catch (error) {
-        return handleError(error, errors);
-      }
+    const getById = builder.getById.handler(async ({ input }) => {
+      const result = await Effect.runPromise(
+        service.getById(input.sourceType, input.id)
+      );
+      return { item: result };
     });
 
-    const getBulk = builder.getBulk.handler(async ({ input, errors }) => {
-      try {
-        const results = await Effect.runPromise(
-          service.getBulk(input.sourceType, input.ids)
-        );
-        return { items: results };
-      } catch (error) {
-        return handleError(error, errors);
-      }
+    const getBulk = builder.getBulk.handler(async ({ input }) => {
+      const results = await Effect.runPromise(
+        service.getBulk(input.sourceType, input.ids)
+      );
+      return { items: results };
     });
 
-    const getReplies = builder.getReplies.handler(async ({ input, errors }) => {
-      try {
-        const results = await Effect.runPromise(
-          service.getReplies(
-            input.sourceType,
-            input.conversationId,
-            input.maxResults || 20
-          )
-        );
-        return { replies: results };
-      } catch (error) {
-        return handleError(error, errors);
-      }
+    const getReplies = builder.getReplies.handler(async ({ input }) => {
+      const results = await Effect.runPromise(
+        service.getReplies(
+          input.sourceType,
+          input.conversationId,
+          input.maxResults || 20
+        )
+      );
+      return { replies: results };
     });
 
-    const similaritySearch = builder.similaritySearch.handler(async ({ input, errors }) => {
-      try {
-        const results = await Effect.runPromise(
-          service.similaritySearch(
-            input.query,
-            input.sources,
-            input.keywords,
-            input.keywordOperator,
-            input.maxResults
-          )
-        );
+    const similaritySearch = builder.similaritySearch.handler(async ({ input }) => {
+      const results = await Effect.runPromise(
+        service.similaritySearch(
+          input.query,
+          input.sources,
+          input.keywords,
+          input.keywordOperator,
+          input.maxResults
+        )
+      );
 
-        return { items: results };
-      } catch (error) {
-        return handleError(error, errors);
-      }
+      return { items: results };
     });
 
-    const hybridSearch = builder.hybridSearch.handler(async ({ input, errors }) => {
-      try {
-        const results = await Effect.runPromise(
-          service.hybridSearch(
-            input.similarityQuery,
-            input.textQuery,
-            input.sources,
-            input.keywords,
-            input.keywordOperator,
-            input.maxResults
-          )
-        );
+    const hybridSearch = builder.hybridSearch.handler(async ({ input }) => {
+      const results = await Effect.runPromise(
+        service.hybridSearch(
+          input.similarityQuery,
+          input.textQuery,
+          input.sources,
+          input.keywords,
+          input.keywordOperator,
+          input.maxResults
+        )
+      );
 
-        return { items: results };
-      } catch (error) {
-        return handleError(error, errors);
-      }
+      return { items: results };
     });
 
-    const getProfile = builder.getProfile.handler(async ({ input, errors }) => {
-      try {
-        const profileData = await Effect.runPromise(
-          service.getProfile(input.sourceType, input.username)
-        );
+    const getProfile = builder.getProfile.handler(async ({ input }) => {
+      const profileData = await Effect.runPromise(
+        service.getProfile(input.sourceType, input.username)
+      );
 
-        // Type guard for author field from metadata
-        const author = typeof profileData.metadata?.author === 'string'
-          ? profileData.metadata.author
-          : null;
+      // Type guard for author field from metadata
+      const author = typeof profileData.metadata?.author === 'string'
+        ? profileData.metadata.author
+        : null;
 
-        return {
-          profile: {
-            id: profileData.id,
-            username: input.username,
-            displayName: author || input.username,
-            bio: author || undefined,
-            followersCount: undefined,
-            followingCount: undefined,
-            tweetsCount: undefined,
-            verified: undefined,
-            profileImageUrl: undefined,
-            raw: profileData,
-          }
-        };
-      } catch (error) {
-        return handleError(error, errors);
-      }
+      return {
+        profile: {
+          id: profileData.id,
+          username: input.username,
+          displayName: author || input.username,
+          bio: author || undefined,
+          followersCount: undefined,
+          followingCount: undefined,
+          tweetsCount: undefined,
+          verified: undefined,
+          profileImageUrl: undefined,
+          raw: profileData,
+        }
+      };
     });
 
-    const getTrends = builder.getTrends.handler(async ({ input, errors }) => {
-      try {
-        const results = await Effect.runPromise(
-          service.getTrends(input.sourceType)
-        );
+    const getTrends = builder.getTrends.handler(async ({ input }) => {
+      const results = await Effect.runPromise(
+        service.getTrends(input.sourceType)
+      );
 
-        const trends = results.map((result) => ({
-          name: result.content,
-          query: typeof result.metadata?.username === 'string'
-            ? result.metadata.username
-            : undefined,
-          tweetVolume: typeof result.metadata?.likes === 'number'
-            ? result.metadata.likes
-            : undefined,
-          raw: result,
-        }));
+      const trends = results.map((result) => ({
+        name: result.content,
+        query: typeof result.metadata?.username === 'string'
+          ? result.metadata.username
+          : undefined,
+        tweetVolume: typeof result.metadata?.likes === 'number'
+          ? result.metadata.likes
+          : undefined,
+        raw: result,
+      }));
 
-        return { trends };
-      } catch (error) {
-        return handleError(error, errors);
-      }
+      return { trends };
     });
 
     const search = builder.search.handler(async function* ({ input }) {

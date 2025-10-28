@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { RPCHandler } from "@orpc/server/fetch";
-import type { PluginBinding } from "every-plugin";
 import { Effect, Layer, Logger, LogLevel, Stream } from "every-plugin/effect";
 import { createPluginRuntime, type EveryPlugin } from "every-plugin/runtime";
 import { Hono } from "hono";
@@ -17,7 +16,7 @@ import { processMessage } from "./worker";
 
 // Define typed registry bindings for the telegram plugin
 type TelegramBindings = {
-  "@curatedotfun/telegram": PluginBinding<typeof TelegramPlugin>;
+  "@curatedotfun/telegram": typeof TelegramPlugin;
 };
 
 // Environment configuration

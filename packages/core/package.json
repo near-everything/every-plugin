@@ -1,6 +1,6 @@
 {
   "name": "every-plugin",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -43,18 +43,17 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -b",
-    "test": "vitest run --config vitest.unit.config.ts",
-    "test:unit": "vitest run --config vitest.unit.config.ts",
-    "test:integration": "npm run test:build-plugin && vitest run --config vitest.integration.config.ts",
-    "test:all": "npm run test:unit && npm run test:integration",
-    "test:watch": "vitest --config vitest.unit.config.ts --watch",
-    "test:watch:integration": "vitest --config vitest.integration.config.ts --watch",
-    "test:ui": "vitest --ui",
-    "test:build-plugin": "cd __tests__/test-plugin && NODE_ENV=test npm run build"
+    "build": "tsc -b tsconfig.build.json",
+    "build:test": "cd tests/fixtures/test-plugin && bun run build",
+    "test": "vitest run --config vitest.config.ts",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test:integration": "bun run build:test && vitest run --config vitest.integration.config.ts",
+    "test:all": "bun run test:unit && bun run test:integration",
+    "test:watch": "vitest --config vitest.config.ts --watch",
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.6.0"
   },
   "devDependencies": {
     "@effect/language-service": "^0.38.4",
@@ -69,6 +68,7 @@
     "@vitest/ui": "3.2.4",
     "bun-types": "^1.3.0",
     "sirv": "^3.0.2",
+    "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4"
   },
   "dependencies": {
@@ -100,6 +100,6 @@
   },
   "homepage": "https://plugin.everything.dev",
   "workspaces": [
-    "./__tests__/test-plugin/*"
+    "tests/fixtures/*"
   ]
 }

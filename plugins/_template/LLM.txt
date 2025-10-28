@@ -246,6 +246,26 @@ export default createPlugin({
 - Use `Effect.runPromise` to execute Effects in handlers
 - Streaming handlers use `async function*` and `yield` items
 
+### Type Bindings for Host Apps
+
+The `createPlugin` function automatically creates a `binding` property with type information. Host apps can use this for autocomplete:
+
+```typescript
+import type { YourPlugin } from "@your-org/your-plugin";
+
+// Host app - module augmentation for type safety
+declare module "every-plugin" {
+  interface RegisteredPlugins {
+    "@your-org/your-plugin": typeof YourPlugin;
+  }
+}
+
+// Automatic autocomplete
+const { client } = await runtime.usePlugin("@your-org/your-plugin", config);
+```
+
+**Note:** You don't need to manually export types from your plugin. The `binding` property provides everything needed.
+
 ## Advanced Patterns
 
 The template keeps things simple. Here are patterns you can add when needed:

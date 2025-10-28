@@ -106,11 +106,10 @@ bun add -D @my-org/my-plugin
 
 ```typescript
 // Import type-only
-import type MyPlugin from "@my-org/my-plugin";
-import type { PluginBinding } from "every-plugin";
+import type { MyPlugin } from "@my-org/my-plugin";
 
 type AppBindings = {
-  "my-plugin": PluginBinding<typeof MyPlugin>;
+  "my-plugin": typeof MyPlugin;
 };
 ```
 

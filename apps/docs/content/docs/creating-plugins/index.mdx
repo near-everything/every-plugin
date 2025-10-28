@@ -576,11 +576,10 @@ export default createPlugin({
 });
 
 // Consumers can import the type
-import type MyPlugin from "@my-org/my-plugin";
-import type { PluginBinding } from "every-plugin";
+import type { MyPlugin } from "@my-org/my-plugin";
 
 type AppBindings = {
-  "my-plugin": PluginBinding<typeof MyPlugin>;
+  "my-plugin": typeof MyPlugin;
 };
 ```
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import type { PluginBinding } from "every-plugin";
 import { Effect, Stream } from "every-plugin/effect";
 import { createPluginRuntime } from "every-plugin/runtime";
 import type GopherAIPlugin from '../../plugins/gopher-ai/src';
@@ -20,7 +19,7 @@ const BASE_QUERY = "@curatedotfun";
 
 // Typed registry bindings using generated types
 type IRegistry = {
-  "@curatedotfun/gopher-ai": PluginBinding<typeof GopherAIPlugin>
+  "@curatedotfun/gopher-ai": typeof GopherAIPlugin
 };
 
 export const runtime = createPluginRuntime<IRegistry>({

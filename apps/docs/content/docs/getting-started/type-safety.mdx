@@ -69,11 +69,10 @@ const result = await client.getData({ id: "123" });
 // ❌ No IDE autocomplete
 
 // With bindings - same safety + autocomplete
-import type { PluginBinding } from "every-plugin";
 import type MyPlugin from "@my-org/my-plugin";
 
 type AppBindings = {
-  "my-plugin": PluginBinding<typeof MyPlugin>;
+  "my-plugin": typeof MyPlugin;
 };
 
 const runtime = createPluginRuntime<AppBindings>({...});
@@ -107,18 +106,19 @@ This installs the plugin package ONLY for its TypeScript types. The actual plugi
 ### Define Bindings
 
 ```typescript
-import type { PluginBinding } from "every-plugin";
-import type DataSource from "@my-org/data-source-plugin";
+import type { DataSource } from "@my-org/data-source-plugin";
 
-type AppBindings = {
-  "data-source": PluginBinding<typeof DataSource>;
-};
+declare module "every-plugin" {
+  interface RegisteredPlugins {
+    "data-source": typeof DataSource;
+  }
+}
 ```
 
 ### Apply to Runtime
 
 ```typescript
-const runtime = createPluginRuntime<AppBindings>({
+const runtime = createPluginRuntime({
   registry: {
     "data-source": {
       remoteUrl: "https://cdn.example.com/v1/data-source/remoteEntry.js",
@@ -135,14 +135,30 @@ const { client } = await runtime.usePlugin("data-source", config);
 
 ## Type Extraction
 
-Due to this paradigm, accessing a plugin's types can be difficult. 
-To assist the `EveryPlugin` type offers a way to infer the types of a plugin from the provided runtime.
+Extract types directly from the binding for external API usage:
+
+```typescript
+import type {
+  PluginConfigInput,
+  PluginRouterType,
+  PluginClientType,
+  PluginContextType
+} from "every-plugin";
+
+// Extract types from binding
+type Config = PluginConfigInput<RegisteredPlugins["data-source"]>;
+type Router = PluginRouterType<RegisteredPlugins["data-source"]>;
+type Client = PluginClientType<RegisteredPlugins["data-source"]>;
+type Context = PluginContextType<RegisteredPlugins["data-source"]>;
+```
+
+Or use the `EveryPlugin` type utility:
 
 ```typescript
 import type { EveryPlugin } from "every-plugin";
 
 // Extract the full plugin type from your runtime
-type DataSourcePlugin = EveryPlugin.Infer<typeof runtime, "data-source">;
+type DataSourcePlugin = EveryPlugin.Infer<"data-source">;
 ```
 
 This is useful for:

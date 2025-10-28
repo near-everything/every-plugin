@@ -37,6 +37,8 @@
   },
   "workspaces": [
     "packages/*",
-    "templates/*"
+    "templates/*",
+    "plugins/*",
+    "packages/core/tests/fixtures/*"
   ]
 }

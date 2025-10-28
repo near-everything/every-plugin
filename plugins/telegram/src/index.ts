@@ -12,9 +12,7 @@ import { TelegramService } from "./service";
  * - Webhook: Receives updates via HTTP webhook
  *
  */
-export default createPlugin({
-  id: "@curatedotfun/telegram",
-
+export const TelegramPlugin = createPlugin({
   variables: z.object({
     domain: z.string().optional(), // Optional - if not provided, use polling mode
     timeout: z.number().default(30000),

@@ -1,24 +1,22 @@
+import { createRouterClient } from "@orpc/server";
 import { Cause, Effect, Exit, Hash, ManagedRuntime, Option } from "effect";
-import type { z } from "zod";
-import { createPluginClient, getPluginRouter } from "../client/index";
 import type {
 	AnyPlugin,
-	ConfigOf,
-	EveryPlugin,
 	InitializedPlugin,
 	LoadedPlugin,
+	PluginConfigInput,
 	PluginInstance,
-	PluginOf,
 	PluginRegistry,
-	RegistryBindings,
-	RuntimeOptions,
-	SecretsConfig
+	PluginRuntimeConfig,
+	RegisteredPlugin,
+	RegisteredPlugins,
+	UsePluginResult
 } from "../types";
 import { PluginRuntimeError } from "./errors";
 import { PluginService } from "./services/plugin.service";
 
-export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
-	private pluginCache = new Map<string, Effect.Effect<EveryPlugin<AnyPlugin>, PluginRuntimeError>>();
+export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
+	private pluginCache = new Map<string, Effect.Effect<InitializedPlugin<AnyPlugin>, PluginRuntimeError>>();
 
 	constructor(
 		private runtime: ManagedRuntime.ManagedRuntime<PluginService, never>,
@@ -30,23 +28,22 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 		return `${pluginId}:${configHash}`;
 	}
 
-	private validatePluginId<K extends keyof R>(pluginId: K): Effect.Effect<string, PluginRuntimeError> {
-		const pluginIdStr = pluginId as string;
-
-		if (!(pluginIdStr in this.registry)) {
+	private validatePluginId(
+		pluginId: string
+	): Effect.Effect<string, PluginRuntimeError> {
+		if (!(pluginId in this.registry)) {
 			return Effect.fail(new PluginRuntimeError({
-				pluginId: pluginIdStr,
+				pluginId: String(pluginId),
 				operation: "validate-plugin-id",
-				cause: new Error(`Plugin ID '${pluginIdStr}' not found in registry`),
+				cause: new Error(`Plugin ID '${String(pluginId)}' not found in registry.`),
 				retryable: false,
 			}));
 		}
-
-		return Effect.succeed(pluginIdStr);
+		return Effect.succeed(String(pluginId));
 	}
 
-	private async runPromise<A, E, Req extends PluginService | never = PluginService>(
-		effect: Effect.Effect<A, E, Req>
+	private async runPromise<A, E>(
+		effect: Effect.Effect<A, E, PluginService>
 	): Promise<A> {
 		const exit = await this.runtime.runPromiseExit(effect);
 
@@ -61,52 +58,11 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 		return exit.value;
 	}
 
-	loadPlugin<K extends keyof R>(pluginId: K): Promise<LoadedPlugin<PluginOf<R[K]>>> {
-		const effect = Effect.gen(this, function* () {
-			const pluginService = yield* PluginService;
-			const validatedId = yield* this.validatePluginId(pluginId);
-			const result = yield* pluginService.loadPlugin(validatedId);
-			return result as LoadedPlugin<PluginOf<R[K]>>;
-		});
-		return this.runPromise(effect);
-	}
-
-	instantiatePlugin<K extends keyof R>(pluginId: K, loadedPlugin: LoadedPlugin<PluginOf<R[K]>>): Promise<PluginInstance<PluginOf<R[K]>>> {
-		const effect = Effect.gen(this, function* () {
-			const pluginService = yield* PluginService;
-			const pluginIdStr = pluginId as string;
-			const result = yield* pluginService.instantiatePlugin(pluginIdStr, loadedPlugin);
-			return result as PluginInstance<PluginOf<R[K]>>;
-		});
-		return this.runPromise(effect);
-	}
-
-	initializePlugin<K extends keyof R>(
-		instance: PluginInstance<PluginOf<R[K]>>,
-		config: z.input<PluginOf<R[K]>["configSchema"]>
-	): Promise<InitializedPlugin<PluginOf<R[K]>> & {
-		config: ConfigOf<R[K]>;
-	}> {
-		const effect = Effect.gen(this, function* () {
-			const pluginService = yield* PluginService;
-			const result = yield* pluginService.initializePlugin(
-				instance as PluginInstance<AnyPlugin>,
-				config
-			);
-			return result as InitializedPlugin<PluginOf<R[K]>>;
-		});
-		return this.runPromise(effect);
-	}
-
-	async usePlugin<K extends keyof R>(
+	async usePlugin<K extends keyof RegisteredPlugins & string>(
 		pluginId: K,
-		config: z.input<PluginOf<R[K]>["configSchema"]>
-	): Promise<EveryPlugin<PluginOf<R[K]>> & {
-		initialized: InitializedPlugin<PluginOf<R[K]>> & {
-			config: ConfigOf<R[K]>;
-		};
-	}> {
-		const cacheKey = this.generateCacheKey(String(pluginId), config);
+		config: PluginConfigInput<R[K]>
+	): Promise<UsePluginResult<K>> {
+		const cacheKey = this.generateCacheKey(pluginId, config);
 
 		let cachedPlugin = this.pluginCache.get(cacheKey);
 		if (!cachedPlugin) {
@@ -116,32 +72,62 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 
 				// Load → Instantiate → Initialize
 				const ctor = yield* pluginService.loadPlugin(validatedId);
-				const instance = yield* pluginService.instantiatePlugin(String(pluginId), ctor);
-				const _initialized = yield* pluginService.initializePlugin(instance, config);
+				const instance = yield* pluginService.instantiatePlugin(pluginId, ctor);
+				const initialized = yield* pluginService.initializePlugin(instance, config);
 
-				type PluginType = PluginOf<R[K]>;
-				const initialized = _initialized as InitializedPlugin<PluginType>;
-				const client = createPluginClient(initialized);
-				const router = getPluginRouter(initialized);
-
-				return {
-					client,
-					router,
-					metadata: initialized.metadata,
-					initialized
-				} as EveryPlugin<PluginType>;
-			}).pipe(
-				Effect.provide(this.runtime)
-			);
+				return initialized;
+			}).pipe(Effect.provide(this.runtime));
 
 			cachedPlugin = Effect.cached(operation).pipe(Effect.flatten);
 			this.pluginCache.set(cacheKey, cachedPlugin);
 		}
 
-		return this.runPromise(cachedPlugin as Effect.Effect<EveryPlugin<PluginOf<R[K]>>, PluginRuntimeError, never>);
+		const initialized = await this.runPromise(cachedPlugin);
+
+		const router = initialized.plugin.createRouter(initialized.context);
+		const client = createRouterClient(router);
+
+		return {
+			router,
+			client,
+			metadata: initialized.metadata,
+			initialized
+		} as UsePluginResult<K>;
 	}
 
-	shutdown(): Promise<void> {
+	async loadPlugin<K extends keyof RegisteredPlugins & string>(
+		pluginId: K
+	): Promise<LoadedPlugin<RegisteredPlugin<K>>> {
+		const effect = Effect.gen(function* () {
+			const pluginService = yield* PluginService;
+			return yield* pluginService.loadPlugin(pluginId);
+		});
+		return this.runPromise(effect) as Promise<LoadedPlugin<RegisteredPlugin<K>>>;
+	}
+
+	async instantiatePlugin<K extends keyof RegisteredPlugins & string>(
+		pluginId: K,
+		loadedPlugin: LoadedPlugin<RegisteredPlugin<K>>
+	): Promise<PluginInstance<RegisteredPlugin<K>>> {
+		const effect = Effect.gen(function* () {
+			const pluginService = yield* PluginService;
+			return yield* pluginService.instantiatePlugin(pluginId, loadedPlugin);
+		});
+		return this.runPromise(effect) as Promise<PluginInstance<RegisteredPlugin<K>>>;
+	}
+
+	async initializePlugin<T extends AnyPlugin>(
+		instance: PluginInstance<T>,
+		config: any
+	): Promise<InitializedPlugin<T>> {
+		const effect = Effect.gen(function* () {
+			const pluginService = yield* PluginService;
+			return yield* pluginService.initializePlugin(instance, config);
+		});
+		return this.runPromise(effect);
+	}
+
+	async shutdown(): Promise<void> {
 		const effect = Effect.gen(function* () {
 			const pluginService = yield* PluginService;
 			yield* pluginService.cleanup();
@@ -149,11 +135,11 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 		return this.runPromise(effect);
 	}
 
-	evictPlugin<K extends keyof R>(
+	async evictPlugin<K extends keyof RegisteredPlugins & string>(
 		pluginId: K,
-		config: z.input<PluginOf<R[K]>["configSchema"]>
+		config: PluginConfigInput<RegisteredPlugins[K]>
 	): Promise<void> {
-		const cacheKey = this.generateCacheKey(String(pluginId), config);
+		const cacheKey = this.generateCacheKey(pluginId, config);
 
 		const effect = Effect.gen(this, function* () {
 			const pluginService = yield* PluginService;
@@ -162,38 +148,56 @@ export class PluginRuntime<R extends RegistryBindings = RegistryBindings> {
 			if (cachedPlugin) {
 				this.pluginCache.delete(cacheKey);
 
-				const pluginResult = yield* cachedPlugin.pipe(Effect.catchAll(() => Effect.succeed(null)));
+				const pluginResult = yield* cachedPlugin.pipe(
+					Effect.catchAll(() => Effect.succeed(null))
+				);
 
-				if (pluginResult?.initialized) {
-					yield* pluginService.shutdownPlugin(pluginResult.initialized).pipe(
+				if (pluginResult) {
+					yield* pluginService.shutdownPlugin(pluginResult).pipe(
 						Effect.catchAll(() => Effect.void)
 					);
 				}
 			}
-		}).pipe(
-			Effect.catchAll(() => Effect.void)
-		);
+		}).pipe(Effect.catchAll(() => Effect.void));
 
 		return this.runPromise(effect);
 	}
 }
 
-export function createPluginRuntime<R extends RegistryBindings = RegistryBindings>(
-	config: { registry: PluginRegistry; secrets?: SecretsConfig; options?: RuntimeOptions }
-): PluginRuntime<R> {
+/**
+ * Normalizes a remote URL to ensure it points to remoteEntry.js
+ * If the URL doesn't end with a file extension, appends /remoteEntry.js
+ */
+function normalizeRemoteUrl(url: string): string {
+	if (url.endsWith('.js')) return url; // Already a file
+	return `${url.endsWith('/') ? url.slice(0, -1) : url}/remoteEntry.js`;
+}
+
+export function createPluginRuntime(
+	config: PluginRuntimeConfig
+): PluginRuntime {
 	const secrets = config.secrets || {};
 
-	const layer = PluginService.Live(config.registry, secrets);
+	// Normalize all remote URLs in the registry
+	const normalizedRegistry = Object.fromEntries(
+		Object.entries(config.registry).map(([pluginId, entry]) => [
+			pluginId,
+			{
+				...entry,
+				remoteUrl: normalizeRemoteUrl(entry.remoteUrl)
+			}
+		])
+	) as PluginRegistry;
 
+	const layer = PluginService.Live(normalizedRegistry, secrets);
 	const runtime = ManagedRuntime.make(layer);
 
-	return new PluginRuntime<R>(runtime, config.registry);
+	return new PluginRuntime(runtime, normalizedRegistry);
 }
 
 export type {
-	ConfigOf,
-	EveryPlugin,
 	InitializedPlugin,
-	PluginOf,
-	RegistryBindings
+	PluginConfigInput,
+	PluginRouterType,
+	RegisteredPlugins
 } from "../types";

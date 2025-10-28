@@ -6,7 +6,6 @@ import { z } from "every-plugin/zod";
 import { contract } from "./contract";
 import { TemplateService } from "./service";
 
-// Define event channels for background broadcasting
 type BackgroundEvents = {
   'background-updates': {
     id: string;
@@ -23,9 +22,7 @@ type BackgroundEvents = {
  * - Implement single fetch and streaming procedures
  * - Handle errors with CommonPluginErrors
  */
-export default createPlugin({
-  id: "@every-plugin/template",
-
+export const TemplatePlugin = createPlugin({
   variables: z.object({
     baseUrl: z.url().default("https://api.example.com"),
     timeout: z.number().min(1000).max(60000).default(10000),

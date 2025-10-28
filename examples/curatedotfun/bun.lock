@@ -378,7 +378,7 @@
 
     "events": ["events@3.3.0", "", {}, "sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q=="],
 
-    "every-plugin": ["every-plugin@0.3.0", "", { "dependencies": { "@better-fetch/fetch": "^1.1.18", "@module-federation/enhanced": "^0.19.1", "@module-federation/node": "^2.7.15", "@module-federation/runtime-core": "^0.19.1", "@orpc/contract": "1.8.6", "@orpc/server": "1.8.6", "effect": "3.18.1", "zod": "4.1.5" }, "peerDependencies": { "typescript": "^5.0.0" } }, "sha512-hc4/8QxyVMPiTq5ZXISaPIixgfi+vOVu0zGBrHufFsOrfFVVkxWiNVekIr3B+z0sSFRI5SQwDL+08AbASV1BQQ=="],
+    "every-plugin": ["every-plugin@0.3.0", "", { "dependencies": { "@better-fetch/fetch": "^1.1.18", "@module-federation/enhanced": "^0.19.1", "@module-federation/node": "^2.7.15", "@module-federation/runtime-core": "^0.19.1", "@orpc/contract": "1.8.6", "@orpc/server": "1.8.6", "effect": "3.18.1", "zod": "4.1.5" }, "peerDependencies": { "typescript": "^5.6.0" } }, "sha512-hc4/8QxyVMPiTq5ZXISaPIixgfi+vOVu0zGBrHufFsOrfFVVkxWiNVekIr3B+z0sSFRI5SQwDL+08AbASV1BQQ=="],
 
     "expand-template": ["expand-template@2.0.3", "", {}, "sha512-XYfuKMvj4O35f/pOXLObndIRvyQ+/+6AhODh+OKWj9S9498pHHn/IMszH+gt0fBCRWMNfk1ZSp5x3AifmnI2vg=="],
 

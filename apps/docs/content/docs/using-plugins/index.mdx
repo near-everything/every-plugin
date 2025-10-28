@@ -277,11 +277,10 @@ const [result1, result2, result3] = await Promise.all([
 For enhanced IDE support, use type bindings:
 
 ```typescript
-import type { PluginBinding } from "every-plugin";
 import type DataSource from "@my-org/data-source-plugin";
 
 type AppBindings = {
-  "data-source": PluginBinding<typeof DataSource>;
+  "data-source": typeof DataSource;
 };
 
 const runtime = createPluginRuntime<AppBindings>({

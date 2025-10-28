@@ -7,7 +7,7 @@
   "type": "module",
   "peerDependencies": {
     "every-plugin": "^0.3.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.6.0"
   },
   "devDependencies": {
     "@effect/language-service": "^0.41.1",
@@ -16,18 +16,19 @@
     "@rspack/core": "^1.5.2",
     "@types/node": "^24.6.0",
     "dotenv": "^17.2.2",
-    "every-plugin": "^0.3.0",
+    "every-plugin": "workspace:*",
     "msw": "^2.3.0",
+    "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4",
     "zephyr-rspack-plugin": "link:zephyr-rspack-plugin"
   },
   "scripts": {
     "build": "rspack build && tsc -p tsconfig.build.json",
-    "type-check": "tsc -p tsconfig.build.json --noEmit",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "dev": "rspack serve",
     "test": "vitest run",
-    "test:integration": "vitest --config vitest.integration.config.ts",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
