@@ -1,0 +1,219 @@
+---
+title: Upgrading
+description: Migration guides for major version changes
+---
+
+This guide covers breaking changes and migration steps for upgrading between major versions of every-plugin.
+
+## v0.3 → v0.4
+
+Version 0.4.0 introduces improved type safety and better organization patterns for applications using multiple plugins or entry points.
+
+### What's New
+
+- 🏗️ **Module Augmentation** - Declare plugins for full type safety
+- 📂 **Multi-Plugin Pattern** - Shared plugin instances across files
+- 🔧 **Type Inference** - `EveryPlugin.Infer<K>` for extracting plugin types
+- 🔗 **Plugin Bindings** - Automatic type safety via static binding property
+
+### Module Augmentation for Type Safety
+
+Register your plugins for IDE autocomplete and compile-time type checking:
+
+```typescript
+// In types.ts or main.ts
+import type DataSource from "@org/data-source";
+import type Transformer from "@org/transformer";
+
+declare module "every-plugin" {
+  interface RegisteredPlugins {
+    "data-source": typeof DataSource;
+    "transformer": typeof Transformer;
+  }
+}
+
+// Now you get full type safety!
+const { client } = await runtime.usePlugin("data-source", config);
+// client has autocomplete, config is type-checked, etc.
+```
+
+### Multi-Plugin Pattern (plugins.ts)
+
+For applications with multiple entry points (main process + workers):
+
+```typescript
+// plugins.ts - Single source of truth for plugin instances
+import type DataSource from "@org/data-source";
+import { createPluginRuntime } from "every-plugin/runtime";
+
+declare module "every-plugin" {
+  interface RegisteredPlugins {
+    "data-source": typeof DataSource;
+  }
+}
+
+export const runtime = createPluginRuntime({
+  registry: {
+    "data-source": {
+      remoteUrl: "https://cdn.example.com/remoteEntry.js",
+      version: "1.0.0"
+    }
+  },
+  secrets: {
+    API_KEY: process.env.API_KEY!
+  }
+});
+
+// Initialize plugin once at module load
+const dataSource = await runtime.usePlugin("data-source", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
+
+export const plugins = {
+  dataSource
+};
+```
+
+**Usage in main.ts:**
+```typescript
+import { plugins, runtime } from "./plugins";
+
+const { client } = plugins.dataSource;  // Already initialized
+const results = await client.processData({ input: data });
+```
+
+**Usage in workers:**
+```typescript
+import { plugins } from "./plugins";
+
+const { client } = plugins.dataSource;  // Same instance as main.ts
+const result = await client.workerTask(task.data);
+```
+
+### Type Inference with EveryPlugin.Infer
+
+Extract complete plugin types for reuse:
+
+```typescript
+import type { EveryPlugin } from "every-plugin";
+
+// Extract the full plugin type - client + router + metadata
+type DataSourcePlugin = EveryPlugin.Infer<"data-source">;
+
+function processPlugin(plugin: DataSourcePlugin) {
+  // client, router, metadata all fully typed
+  console.log(`Using ${plugin.metadata.id}`);
+  const results = await plugin.client.getData({ id: "123" });
+  return results;
+}
+```
+
+### Automatic Plugin Bindings
+
+Plugins now expose type binding information automatically:
+
+```typescript
+import DataSource from "@org/data-source";
+
+// Access binding for type operations
+type Binding = typeof DataSource.binding;
+// { contract, variables, secrets, config, context }
+```
+
+### Migration Steps
+
+#### 1. Add Module Augmentation
+
+In your main application file or a dedicated `types.ts`:
+
+```typescript
+import type DataSource from "@org/data-source";
+import type Transformer from "@org/transformer";
+
+declare module "every-plugin" {
+  interface RegisteredPlugins {
+    "data-source": typeof DataSource;
+    "transformer": typeof Transformer;
+  }
+}
+```
+
+#### 2. (Optional) Create plugins.ts
+
+If you have multiple entry points, create a shared `plugins.ts`:
+
+```typescript
+import type DataSource from "@org/data-source";
+import { createPluginRuntime } from "every-plugin/runtime";
+
+declare module "every-plugin" {
+  interface RegisteredPlugins {
+    "data-source": typeof DataSource;
+  }
+}
+
+export const runtime = createPluginRuntime({...});
+
+// Initialize once
+const dataSource = await runtime.usePlugin("data-source", config);
+export const plugins = { dataSource };
+```
+
+#### 3. Update Imports
+
+Modernize your plugin usage:
+
+```typescript
+// Before (v0.3 - still works!)
+const runtime = createPluginRuntime({...});
+const { client } = await runtime.usePlugin("my-plugin", config);
+
+// After (v0.4 - better type safety!)
+import { plugins } from "./plugins";
+const { client } = plugins.myPlugin;  // Fully typed!
+```
+
+#### 4. Use Type Inference
+
+Where you need plugin types for utilities:
+
+```typescript
+import type { EveryPlugin } from "every-plugin";
+
+type PluginType = EveryPlugin.Infer<"my-plugin">;
+
+function withPlugin(plugin: PluginType) {
+  // Full type safety
+}
+```
+
+### Compatibility
+
+**⚠️ Fully backward compatible!** All existing code continues to work:
+
+```typescript
+// This still works in v0.4 - no breaking changes
+const runtime = createPluginRuntime({...});
+const { client } = await runtime.usePlugin("my-plugin", config);
+```
+
+However, you won't get the improved type safety without module augmentation.
+
+### Examples
+
+See these examples showcasing the v0.4 patterns:
+- **[efizzybusybot](../../examples/efizzybusybot)** - Multi-plugin pattern with workers
+- **[curatedotfun](../../examples/curatedotfun)** - Module augmentation and shared plugins
+
+### Benefits
+
+✅ **IDE Autocomplete** - Full IntelliSense for plugin clients, routers, metadata  
+✅ **Compile-Time Safety** - Catch config typos and incorrect method usage  
+✅ **Better Organization** - Shared plugin instances across main + workers  
+✅ **Easier Testing** - Type-safe utilities and mocks  
+✅ **Zero Runtime Cost** - All improvements are compile-time only
+
+---
+
+*More upgrade guides will be added as new versions are released.*

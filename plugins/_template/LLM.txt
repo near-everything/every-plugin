@@ -597,6 +597,9 @@ const stream = builder.stream.handler(async function* ({ input }) => {
 - Type `catch` parameters as `unknown` and handle safely
 
 ### Resource Management
+- **Application Architecture**: Create a dedicated `plugins.ts` for multi-file apps (main + workers)
+- Include module augmentation with `declare module "every-plugin"` for full type safety across your codebase
+- Initialize plugins once at module load, export via `plugins` object for reuse everywhere
 - Use `Effect.acquireRelease` for resources that need cleanup
 - Use `Effect.forkScoped` for background tasks (auto-cleanup)
 - Use `Queue.bounded` instead of unbounded queues

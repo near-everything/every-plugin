@@ -49,6 +49,67 @@ const results = await client.search({ query: "typescript", limit: 20 });
 console.log(`Found ${results.items.length} items`);
 ```
 
+## Organizing Runtime for Multi-File Applications
+
+For applications with multiple entry points (main process + workers, multiple services, etc.), create a dedicated runtime module to share plugin instances:
+
+```typescript
+// plugins.ts - Single source of truth for plugin initialization
+import type MyPlugin from "@org/my-plugin";
+import { createPluginRuntime } from "every-plugin/runtime";
+
+// Module augmentation for type safety across your app
+declare module "every-plugin" {
+  interface RegisteredPlugins {
+    "@org/my-plugin": typeof MyPlugin;
+  }
+}
+
+export const runtime = createPluginRuntime({
+  registry: {
+    "@org/my-plugin": {
+      remoteUrl: "https://cdn.example.com/plugins/my/remoteEntry.js",
+      version: "1.0.0"
+    }
+  },
+  secrets: {
+    API_KEY: process.env.API_KEY!
+  }
+});
+
+// Initialize plugin once at module load
+const myPlugin = await runtime.usePlugin("@org/my-plugin", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { timeout: 30000 }
+});
+
+export const plugins = {
+  myPlugin
+};
+```
+
+**Usage in main.ts:**
+```typescript
+import { plugins } from "./plugins";
+
+const { client } = plugins.myPlugin;  // Already initialized
+const results = await client.processData({ input: "data" });
+```
+
+**Usage in workers:**
+```typescript
+import { plugins } from "./plugins";
+
+const { client } = plugins.myPlugin;  // Same instance as main.ts
+const result = await client.workerTask(task.data);
+```
+
+**Benefits:**
+- ✅ Plugin initialized once, reused everywhere
+- ✅ Type safety via module augmentation
+- ✅ No duplicate initialization in workers
+- ✅ Clean separation of setup from business logic
+
 ### Access Patterns
 
 `usePlugin()` returns an `EveryPlugin` object with multiple access patterns:
@@ -314,26 +375,25 @@ const result = await runtime.usePlugin("data-source", config);
 logPluginUsage(result);
 ```
 
-## Worker Integration
+## Worker & Multi-Process Integration
 
-Integrate with job processing systems like BullMQ:
+For complex applications, integrate with job processing systems. Combine with the shared runtime pattern for best results:
 
 ```typescript
-import { Worker, Job } from "bullmq";
+// main.ts
+import { Worker, Queue } from "bullmq";
+import { plugins } from "./plugins";
 
-const runtime = createPluginRuntime({
-  registry: await loadRegistry(),
-  secrets: await loadSecrets()
-});
+const queue = new Queue('plugin-jobs', { connection: redisConnection });
 
 const worker = new Worker(
   'plugin-jobs',
   async (job: Job) => {
-    const { pluginId, config, input } = job.data;
-    
+    const { taskData } = job.data;
+
     try {
-      const { client } = await runtime.usePlugin(pluginId, config);
-      return await client.process(input);
+      const { client } = plugins.myPlugin;  // Shared, pre-initialized plugin
+      return await client.process(taskData);
     } catch (error) {
       console.error(`Job ${job.id} failed:`, error);
       throw error;
@@ -342,7 +402,10 @@ const worker = new Worker(
   { connection: redisConnection }
 );
 
-// Cleanup on shutdown
+// Queue job from main process
+await queue.add('process', { taskData: { id: "123" } });
+
+// Cleanup
 process.on('SIGTERM', async () => {
   await worker.close();
   await runtime.shutdown();
