@@ -1,12 +1,14 @@
-import { createRouterClient, RouterClient } from "@orpc/server";
+import { createRouterClient } from "@orpc/server";
 import { Cause, Effect, Exit, Hash, ManagedRuntime, Option } from "effect";
 import type {
 	AnyPlugin,
 	InitializedPlugin,
 	LoadedPlugin,
+	PluginClientType,
 	PluginConfigInput,
 	PluginInstance,
 	PluginRegistry,
+	PluginRouterType,
 	PluginRuntimeConfig,
 	RegisteredPlugin,
 	RegisteredPlugins,
@@ -83,15 +85,14 @@ export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
 		}
 
 		const initialized = await this.runPromise(cachedPlugin);
-
 		const router = initialized.plugin.createRouter(initialized.context);
-		const client: RouterClient<typeof router> = createRouterClient(router);
+		const client = createRouterClient(router);
 
 		return {
-			router,
-			client,
+			router: router as PluginRouterType<R[K]>,
+			client: client as PluginClientType<R[K]>,
 			metadata: initialized.metadata,
-			initialized
+			initialized: initialized as InitializedPlugin<RegisteredPlugin<K>>
 		} as UsePluginResult<K>;
 	}
 
@@ -194,10 +195,3 @@ export function createPluginRuntime(
 
 	return new PluginRuntime(runtime, normalizedRegistry);
 }
-
-export type {
-	InitializedPlugin,
-	PluginConfigInput,
-	PluginRouterType,
-	RegisteredPlugins
-} from "../types";

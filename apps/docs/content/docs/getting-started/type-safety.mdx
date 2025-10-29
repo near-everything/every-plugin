@@ -142,14 +142,16 @@ import type {
   PluginConfigInput,
   PluginRouterType,
   PluginClientType,
-  PluginContextType
+  PluginContext,
+  PluginContract
 } from "every-plugin";
 
 // Extract types from binding
 type Config = PluginConfigInput<RegisteredPlugins["data-source"]>;
 type Router = PluginRouterType<RegisteredPlugins["data-source"]>;
 type Client = PluginClientType<RegisteredPlugins["data-source"]>;
-type Context = PluginContextType<RegisteredPlugins["data-source"]>;
+type Context = PluginContext<RegisteredPlugins["data-source"]>;
+type Contract = PluginContract<RegisteredPlugins["data-source"]>
 ```
 
 Or use the `EveryPlugin` type utility:

@@ -23,66 +23,44 @@ export interface RegisteredPlugins { }
 export type AnyPlugin = Plugin<AnyContractRouter, AnySchema, AnySchema, any>;
 
 /**
- * Extract binding from plugin constructor's static property
- */
-type ExtractBinding<T> = T extends { binding: infer B }
-  ? B
-  : never;
-
-/**
  * Extract plugin type from registered plugins by key
  */
 export type RegisteredPlugin<K extends keyof RegisteredPlugins> =
-  ExtractBinding<RegisteredPlugins[K]> extends {
+  RegisteredPlugins[K] extends { binding: infer B }
+  ? B extends {
     contract: infer C extends AnyContractRouter;
     variables: infer V extends AnySchema;
     secrets: infer S extends AnySchema;
     context: infer TContext extends Context;
   }
   ? Plugin<C, V, S, TContext>
+  : never
   : never;
 
-/**
- * Extract config input type from plugin binding
- */
-export type PluginConfigInput<T> = ExtractBinding<T> extends {
-  variables: infer V extends AnySchema;
-  secrets: infer S extends AnySchema;
-}
-  ? {
-    variables: InferSchemaInput<V>;
-    secrets: InferSchemaInput<S>;
-  }
-  : never;
 
 /**
  * Extract router type from plugin binding
  */
-export type PluginRouterType<T> = ExtractBinding<T> extends {
-  contract: infer C extends AnyContractRouter;
-  context: infer TContext extends Context;
-}
-  ? Router<C, TContext>
-  : never;
+export type PluginRouterType<T> = Router<PluginContract<T>, PluginContext<T>>;
 
 /**
  * Extract client type from plugin binding
  */
-export type PluginClientType<T> = ExtractBinding<T> extends {
-  contract: infer C extends AnyContractRouter;
-  context: infer TContext extends Context;
-}
-  ? RouterClient<Router<C, TContext>>
-  : never;
+export type PluginClientType<T> = RouterClient<Router<PluginContract<T>, PluginContext<T>>>;
+
+export type PluginContract<T> = T extends { binding: { contract: infer C extends AnyContractRouter } } ? C : never;
+export type PluginVariables<T> = T extends { binding: { variables: infer V extends AnySchema } } ? V : never;
+export type PluginSecrets<T> = T extends { binding: { secrets: infer S extends AnySchema } } ? S : never;
+export type PluginContext<T> = T extends { binding: { context: infer C extends Context } } ? C : never;
 
 /**
- * Extract context type from plugin binding
+ * Extract config input type from plugin binding
  */
-export type PluginContextType<T> = ExtractBinding<T> extends {
-  context: infer C;
-}
-  ? C
-  : never;
+export type PluginConfigInput<T> = {
+  variables: InferSchemaInput<PluginVariables<T>>;
+  secrets: InferSchemaInput<PluginSecrets<T>>;
+};
+
 
 /**
  * Extract context type from plugin instance
@@ -147,25 +125,28 @@ export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
 /**
  * Helper type to detect type errors when looking up RegisteredPlugins
  */
-type VerifyPluginBinding<K extends keyof RegisteredPlugins> = ExtractBinding<RegisteredPlugins[K]> extends {
-  contract: AnyContractRouter;
-  variables: AnySchema;
-  secrets: AnySchema;
-  context: Context;
-}
+type VerifyPluginBinding<K extends keyof RegisteredPlugins> =
+  RegisteredPlugins[K] extends { binding: infer B }
+  ? B extends {
+    contract: AnyContractRouter;
+    variables: AnySchema;
+    secrets: AnySchema;
+    context: Context;
+  }
   ? true
-  : `❌ Plugin "${K & string}" is not properly registered. Ensure it extends plugin binding layout { contract, variables, secrets, context }.`;
+  : `❌ Plugin "${K & string}" is not properly registered. Ensure it extends plugin binding layout { contract, variables, secrets, context }.`
+  : `❌ Plugin "${K & string}" is not properly registered. Missing binding property.`;
 
-/**
+  /**
  * Result of runtime.usePlugin() call
  */
 export type UsePluginResult<K extends keyof RegisteredPlugins> = VerifyPluginBinding<K> extends true
   ? {
-      readonly client: PluginClientType<RegisteredPlugins[K]>;
-      readonly router: PluginRouterType<RegisteredPlugins[K]>;
-      readonly metadata: PluginMetadata;
-      readonly initialized: InitializedPlugin<RegisteredPlugin<K>>;
-    }
+    readonly client: PluginClientType<RegisteredPlugins[K]>;
+    readonly router: PluginRouterType<RegisteredPlugins[K]>;
+    readonly metadata: PluginMetadata;
+    readonly initialized: InitializedPlugin<RegisteredPlugin<K>>;
+  }
   : VerifyPluginBinding<K>;
 
 /**
