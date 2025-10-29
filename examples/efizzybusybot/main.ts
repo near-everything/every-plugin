@@ -5,8 +5,8 @@ import { Effect, Layer, Logger, LogLevel, Stream } from "every-plugin/effect";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
+import { plugins } from "./plugins";
 import { router } from "./routers";
-import { plugins } from "./runtime";
 import { DatabaseService } from "./services/db.service";
 import { EmbeddingsService } from "./services/embeddings.service";
 import { LoggerService } from "./services/logger.service";
@@ -64,7 +64,7 @@ const createAndProcessTelegramMessages = () =>
     }
 
     const { client } = plugins.telegram;
-     const messageStream = yield* Effect.promise(() => 
+    const messageStream = yield* Effect.promise(() =>
       client.listen({ messageTypes: ['text'] })
     );
 

@@ -160,21 +160,7 @@ const dataSource = await runtime.usePlugin("data-source", config);
 export const plugins = { dataSource };
 ```
 
-#### 3. Update Imports
-
-Modernize your plugin usage:
-
-```typescript
-// Before (v0.3 - still works!)
-const runtime = createPluginRuntime({...});
-const { client } = await runtime.usePlugin("my-plugin", config);
-
-// After (v0.4 - better type safety!)
-import { plugins } from "./plugins";
-const { client } = plugins.myPlugin;  // Fully typed!
-```
-
-#### 4. Use Type Inference
+#### 3. Use Type Inference
 
 Where you need plugin types for utilities:
 
@@ -187,32 +173,6 @@ function withPlugin(plugin: PluginType) {
   // Full type safety
 }
 ```
-
-### Compatibility
-
-**⚠️ Fully backward compatible!** All existing code continues to work:
-
-```typescript
-// This still works in v0.4 - no breaking changes
-const runtime = createPluginRuntime({...});
-const { client } = await runtime.usePlugin("my-plugin", config);
-```
-
-However, you won't get the improved type safety without module augmentation.
-
-### Examples
-
-See these examples showcasing the v0.4 patterns:
-- **[efizzybusybot](../../examples/efizzybusybot)** - Multi-plugin pattern with workers
-- **[curatedotfun](../../examples/curatedotfun)** - Module augmentation and shared plugins
-
-### Benefits
-
-✅ **IDE Autocomplete** - Full IntelliSense for plugin clients, routers, metadata  
-✅ **Compile-Time Safety** - Catch config typos and incorrect method usage  
-✅ **Better Organization** - Shared plugin instances across main + workers  
-✅ **Easier Testing** - Type-safe utilities and mocks  
-✅ **Zero Runtime Cost** - All improvements are compile-time only
 
 ---
 

@@ -1,5 +1,5 @@
 import { publicProcedure } from "../lib/orpc";
-import { plugins } from "../runtime";
+import { plugins } from "../plugins";
 
 
 // Compose app router with plugin routers

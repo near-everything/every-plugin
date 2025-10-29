@@ -2,7 +2,7 @@
 
 import { Duration, Effect, Logger, LogLevel } from "every-plugin/effect";
 import type { GopherResult } from "../../../plugins/gopher-ai/src/contract";
-import { plugins } from "../runtime";
+import { plugins } from "../plugins";
 import { DatabaseService } from "../services/db.service";
 
 // Worker ID for tracking which worker is processing tasks

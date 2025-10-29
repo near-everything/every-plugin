@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
-import { Effect, Stream, Logger, LogLevel } from "every-plugin/effect";
-import { plugins, runtime } from "./runtime";
+import { Effect, Logger, LogLevel, Stream } from "every-plugin/effect";
 import type { GopherResult } from "../../plugins/gopher-ai/src/contract";
+import { plugins, runtime } from "./plugins";
 import type { NewItem } from "./schemas/database";
 import { DatabaseService } from "./services/db.service";
 
@@ -71,7 +71,7 @@ const processItem = (item: GopherResult, itemNumber: number) =>
     // Console output for monitoring
     const tweetId = item.id;
     const timestamp = item.created_at || item.updated_at || new Date().toISOString();
-    const username =(item.author_username) || 'unknown';
+    const username = (item.author_username) || 'unknown';
     const curator = dbItem.curatorUsername ? ` (curator: ${dbItem.curatorUsername})` : '';
 
     console.log(`${itemNumber}. @${username} (${tweetId}) - ${timestamp}${curator}`);
