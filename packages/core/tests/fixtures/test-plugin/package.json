@@ -1,0 +1,27 @@
+{
+	"name": "test-plugin",
+	"version": "0.0.1",
+	"description": "Test plugin for every-plugin testing",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"type": "module",
+	"private": true,
+	"peerDependencies": {
+		"every-plugin": "workspace:*",
+		"typescript": "^5.6.0"
+	},
+	"devDependencies": {
+		"@module-federation/enhanced": "^0.18.3",
+		"@module-federation/node": "^2.7.15",
+		"@module-federation/runtime-core": "^0.18.3",
+		"@rspack/cli": "latest",
+		"@rspack/core": "latest",
+		"@types/node": "^20.0.0",
+		"typescript": "^5.6.0",
+		"every-plugin": "workspace:*"
+	},
+	"scripts": {
+		"build": "rspack build && tsc",
+		"dev": "rspack serve"
+	}
+}

@@ -51,10 +51,11 @@ export class GopherAIService {
 
   getById(sourceType: SourceType, id: string) {
     return this.query(sourceType, "getbyid", id, 1, (results) => {
-      if (results.length === 0) {
+      const item = results[0];
+      if (!item) {
         throw new ApiError(`Item not found: ${id}`, 404, "Get by ID");
       }
-      return results[0];
+      return item;
     });
   }
 
@@ -84,10 +85,11 @@ export class GopherAIService {
 
   getProfile(sourceType: SourceType, username: string) {
     return this.query(sourceType, "searchbyprofile", username, 1, (results) => {
-      if (results.length === 0) {
+      const profile = results[0];
+      if (!profile) {
         throw new ApiError(`Profile not found: ${username}`, 404, "Get profile");
       }
-      return results[0];
+      return profile;
     });
   }
 
@@ -251,8 +253,8 @@ export class GopherAIService {
 
         // Update mostRecentId from gap items
         const gapIds = gapResult.map(item => BigInt(item.id)).sort((a, b) => (b < a ? -1 : 1));
-        if (gapIds.length > 0 && (!mostRecentId || gapIds[0] > BigInt(mostRecentId))) {
-          mostRecentId = gapIds[0].toString();
+        if (gapIds.length > 0 && (!mostRecentId || gapIds[0]! > BigInt(mostRecentId))) {
+          mostRecentId = gapIds[0]!.toString();
         }
       } else {
         console.log(`[GAP CHECK] No new items found`);

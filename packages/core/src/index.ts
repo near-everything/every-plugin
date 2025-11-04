@@ -7,14 +7,13 @@ export { getNormalizedRemoteName } from "./runtime/services/normalize";
 
 export type {
 	AnyPlugin,
-	ConfigOf,
 	EveryPlugin,
 	InitializedPlugin,
 	LoadedPlugin,
-	PluginInstance,
-	PluginOf,
+	PluginClientType, PluginConfigInput, PluginContext, PluginContract, PluginInstance,
+	PluginMetadata,
 	PluginRegistry,
-	PluginRuntimeConfig,
-	RegistryBindings,
+	PluginRouterType,
+	PluginRuntimeConfig, PluginSecrets, PluginVariables, RegisteredPlugins,
 	SecretsConfig
 } from "./types";

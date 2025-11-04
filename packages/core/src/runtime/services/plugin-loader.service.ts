@@ -1,3 +1,4 @@
+import type { InferSchemaInput, InferSchemaOutput } from "@orpc/contract";
 import { Context, Effect, Scope } from "effect";
 import type { z } from "zod";
 import type {
@@ -27,7 +28,7 @@ export class RegistryService extends Effect.Service<RegistryService>()("Registry
 					Effect.mapError(() =>
 						new PluginRuntimeError({
 							pluginId,
-							operation: "load-plugin",
+							operation: "validate-plugin-id",
 							cause: new Error(`Plugin ${pluginId} not found in registry`),
 							retryable: false,
 						}),
@@ -93,19 +94,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 						),
 					);
 
-					// Validate plugin ID matches
-					if (instance.id !== pluginId) {
-						return yield* Effect.fail(
-							new PluginRuntimeError({
-								pluginId,
-								operation: "validate-plugin-id",
-								cause: new Error(
-									`Plugin ID mismatch: expected ${pluginId}, got ${instance.id}`,
-								),
-								retryable: false,
-							}),
-						);
-					}
+					(instance.id as string) = pluginId;
 
 					return {
 						plugin: instance,
@@ -115,15 +104,15 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 
 			initializePlugin: <T extends AnyPlugin>(
 				pluginInstance: PluginInstance<T>,
-				config: { variables: unknown; secrets: unknown },
+				config: { variables: InferSchemaInput<T["configSchema"]["variables"]>; secrets: InferSchemaInput<T["configSchema"]["secrets"]> },
 			) =>
 				Effect.gen(function* () {
 					const { plugin } = pluginInstance;
 
 					// Validate and hydrate config
-					const validatedConfig = yield* validate(
-						plugin.configSchema,
-						config,
+					const validatedVariables = yield* validate(
+						plugin.configSchema.variables as z.ZodSchema<InferSchemaOutput<T["configSchema"]["variables"]>>,
+						config.variables,
 						plugin.id,
 						"config",
 					).pipe(
@@ -137,13 +126,32 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 						),
 					);
 
-					const hydratedConfig = yield* secretsService.hydrateSecrets(
-						validatedConfig
+					// Validate secrets
+					const validatedSecrets = yield* validate(
+						plugin.configSchema.secrets as z.ZodSchema<InferSchemaOutput<T["configSchema"]["secrets"]>>,
+						config.secrets,
+						plugin.id,
+						"config",
+					).pipe(
+						Effect.mapError((validationError) =>
+							new PluginRuntimeError({
+								pluginId: plugin.id,
+								operation: "validate-secrets",
+								cause: validationError.zodError,
+								retryable: false,
+							}),
+						),
 					);
 
-					const _config = yield* validate(
-						plugin.configSchema,
-						hydratedConfig,
+					// Hydrate secrets in variables
+					const hydratedConfig = yield* secretsService.hydrateSecrets({
+						variables: validatedVariables,
+						secrets: validatedSecrets,
+					});
+
+					const _variables = yield* validate(
+						plugin.configSchema.variables as z.ZodSchema<InferSchemaOutput<T["configSchema"]["variables"]>>,
+						hydratedConfig.variables,
 						plugin.id,
 						"config",
 					).pipe(
@@ -161,7 +169,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 					const scope = yield* Scope.make();
 
 					// Initialize plugin within the scope
-					const context = yield* plugin.initialize(_config).pipe(
+					const context = yield* plugin.initialize({ variables: _variables, secrets: hydratedConfig.secrets }).pipe(
 						Effect.provideService(Scope.Scope, scope),
 						Effect.mapError((error) =>
 							toPluginRuntimeError(error, plugin.id, undefined, "initialize-plugin", false),
@@ -171,7 +179,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 					return {
 						plugin,
 						metadata: pluginInstance.metadata,
-						config: _config as z.infer<T["configSchema"]>,
+						config: { variables: _variables, secrets: hydratedConfig.secrets },
 						context,
 						scope,
 					} satisfies InitializedPlugin<T>;

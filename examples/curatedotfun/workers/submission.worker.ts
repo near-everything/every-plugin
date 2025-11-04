@@ -2,7 +2,7 @@
 
 import { Duration, Effect, Logger, LogLevel } from "every-plugin/effect";
 import type { GopherResult } from "../../../plugins/gopher-ai/src/contract";
-import { runtime } from "../main";
+import { plugins } from "../plugins";
 import { DatabaseService } from "../services/db.service";
 
 // Worker ID for tracking which worker is processing tasks
@@ -100,14 +100,7 @@ const analyzeContent = (content: CuratedContent) => {
 const processSubmissionTask = (task: any) =>
   Effect.gen(function* () {
     const db = yield* DatabaseService;
-
-    // Get the client directly from runtime
-    const { client } = yield* Effect.tryPromise(() =>
-      runtime.usePlugin("@curatedotfun/gopher-ai", {
-        secrets: { apiKey: "{{GOPHERAI_API_KEY}}" },
-        variables: { baseUrl: "https://data.gopher-ai.com/api/v1", timeout: 30000 }
-      })
-    );
+    const { client } = plugins.gopherAi;
 
     console.log(`🔄 Processing submission task ${task.id} for item ${task.itemId}`);
 
@@ -141,13 +134,12 @@ const processSubmissionTask = (task: any) =>
       console.log(`🔍 Fetching original post for ID: ${item.conversationId}`);
 
       // First, get the original post being curated
-      const originalPostResult = yield* Effect.tryPromise({
-        try: () => client.getById({
+      const originalPostResult = yield* Effect.promise(() =>
+        client.getById({
           id: item.conversationId!,
           sourceType: 'twitter' as const
-        }),
-        catch: (error) => error as Error
-      }).pipe(
+        })
+      ).pipe(
         Effect.catchAll((error: unknown) => {
           console.error(`Failed to fetch original post: ${error}`);
           return Effect.succeed({ item: null });
@@ -173,14 +165,13 @@ const processSubmissionTask = (task: any) =>
         // Now get all replies to understand the full conversation
         console.log(`🔍 Fetching replies for conversation ID: ${item.conversationId}`);
 
-        const repliesResult = yield* Effect.tryPromise({
-          try: () => client.getReplies({
+        const repliesResult = yield* Effect.promise(() =>
+          client.getReplies({
             conversationId: item.conversationId!,
             sourceType: 'twitter' as const,
             maxResults: 50
-          }),
-          catch: (error) => error as Error
-        }).pipe(
+          })
+        ).pipe(
           Effect.catchAll((error: unknown) => {
             console.error(`Failed to fetch replies: ${error}`);
             return Effect.succeed({ replies: [] });

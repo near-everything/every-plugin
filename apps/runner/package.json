@@ -2,7 +2,7 @@
 	"name": "@every-plugin/job-scheduler",
 	"scripts": {
 		"dev": "bun run --hot src/main.ts",
-		"type-check": "tsc --noEmit",
+		"typecheck": "tsc --noEmit",
 		"build": "bun build src/main.ts --outdir ./dist --target bun",
 		"start": "bun ./dist/main.js",
 		"generate:openapi": "bun run scripts/generate-openapi.ts"
@@ -33,7 +33,7 @@
 		"zod": "^4.1.5"
 	},
 	"peerDependencies": {
-		"typescript": "^5.0.0"
+		"typescript": "^5.6.0"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",

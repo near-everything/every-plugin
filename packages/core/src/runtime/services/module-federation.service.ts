@@ -145,14 +145,41 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 								throw new Error(`No container returned for ${modulePath}`);
 							}
 
+							// Support multiple export patterns: direct function, default export, named exports
 							const Constructor =
 								typeof container === "function"
-									? container
-									: container.default;
+									? container  // Direct function export
+									: container.default
+									? container.default  // Default export
+									: Object.values(container).find(  // Named export fallback
+											(exp) => typeof exp === "function" && exp.prototype?.constructor === exp
+										);
 
 							if (!Constructor || typeof Constructor !== "function") {
+								const containerInfo = typeof container === "object"
+									? `Available exports: ${Object.keys(container).join(', ')}`
+									: `Container type: ${typeof container}`;
+
 								throw new Error(
-									`No valid constructor found. Container type: ${typeof container}`,
+									`No valid plugin constructor found for '${pluginId}'.\n` +
+									`Supported patterns:\n` +
+									`  - export const YourPlugin = createPlugin({...})\n` +
+									`  - export default createPlugin({...})\n` +
+									`${containerInfo}`,
+								);
+							}
+
+							// Validate it looks like a plugin constructor (has binding property)
+							if (!(Constructor as any).binding) {
+								const containerInfo = typeof container === "object"
+									? `Found exports: ${Object.keys(container).join(', ')}`
+									: `Container type: ${typeof container}`;
+
+								throw new Error(
+									`Invalid plugin constructor for '${pluginId}'. ` +
+									`The exported value must be created with createPlugin(). ` +
+									`Found a function but it's missing the required 'binding' property.\n` +
+									`${containerInfo}`,
 								);
 							}
 

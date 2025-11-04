@@ -1,4 +1,4 @@
-import type { AnyContractRouter } from "@orpc/contract";
+import type { AnyContractRouter, AnySchema, InferSchemaOutput } from "@orpc/contract";
 import type { Context, Implementer, Router } from "@orpc/server";
 import { implement } from "@orpc/server";
 import { Effect, type Scope } from "effect";
@@ -8,29 +8,29 @@ import { z } from "zod";
 /**
  * Helper type that correctly constructs the config schema type
  */
-export type PluginConfigFor<V extends z.ZodTypeAny, S extends z.ZodTypeAny> =
-	z.ZodObject<{ variables: V; secrets: S }>;
+export type PluginConfigFor<V extends AnySchema, S extends AnySchema> = {
+	variables: V;
+	secrets: S;
+};
 
 /**
  * Loaded plugin with static binding property
  */
 export interface LoadedPluginWithBinding<
 	TContract extends AnyContractRouter,
-	TVariables extends z.ZodTypeAny,
-	TSecrets extends z.ZodTypeAny,
+	TVariables extends AnySchema,
+	TSecrets extends AnySchema,
 	TContext extends Context = Record<never, never>
 > {
 	new(): Plugin<TContract, TVariables, TSecrets, TContext>;
 	binding: {
 		contract: TContract;
+		variables: TVariables;
+		secrets: TSecrets;
 		config: PluginConfigFor<TVariables, TSecrets>;
+		context: TContext;
 	};
 }
-
-/**
- * Utility type to extract binding from plugin constructor
- */
-export type PluginBinding<T> = T extends { binding: infer B } ? B : never;
 
 /**
  * Common error schemas that all plugins can use
@@ -81,15 +81,15 @@ export const CommonPluginErrors = {
 			action: z.string().optional(),
 		})
 	}
-};
+} as const;
 
 /**
  * Plugin interface
  */
 export interface Plugin<
 	TContract extends AnyContractRouter,
-	TVariables extends z.ZodTypeAny,
-	TSecrets extends z.ZodTypeAny,
+	TVariables extends AnySchema,
+	TSecrets extends AnySchema,
 	TContext extends Context = Record<never, never>
 > {
 	readonly id: string;
@@ -98,7 +98,7 @@ export interface Plugin<
 
 	// Plugin lifecycle
 	initialize(
-		config: { variables: z.infer<TVariables>; secrets: z.infer<TSecrets> }
+		config: { variables: InferSchemaOutput<TVariables>; secrets: InferSchemaOutput<TSecrets> }
 	): Effect.Effect<TContext, unknown, Scope.Scope>;
 
 	shutdown(): Effect.Effect<void, never>;
@@ -107,28 +107,25 @@ export interface Plugin<
 	 * Creates the strongly-typed oRPC router for this plugin.
 	 * The router's procedure types are inferred directly from the contract.
 	 * @param context The initialized plugin context
-	 * @returns A router with procedures matching the plugin's contract and composed context
+	 * @returns A router with procedures matching the plugin's contract
 	 */
-	createRouter<THostContext extends Context = Record<never, never>>(
-		context?: TContext
-	): Router<TContract, TContext & THostContext>;
+	createRouter(context: TContext): Router<TContract, TContext>;
 }
 
 /**
  * Factory function to create plugins
  */
 export function createPlugin<
-	V extends z.ZodTypeAny,
-	S extends z.ZodTypeAny,
+	V extends AnySchema,
+	S extends AnySchema,
 	TContract extends AnyContractRouter,
 	TContext extends Context = Record<never, never>
 >(config: {
-	id: string;
 	variables: V;
 	secrets: S;
 	contract: TContract;
 	initialize?: (
-		config: { variables: z.infer<V>; secrets: z.infer<S> }
+		config: { variables: InferSchemaOutput<V>; secrets: InferSchemaOutput<S> }
 	) => Effect.Effect<TContext, Error, Scope.Scope>;
 	createRouter: (
 		context: TContext,
@@ -136,20 +133,21 @@ export function createPlugin<
 	) => Router<TContract, TContext & Record<never, never>>;
 	shutdown?: (ctx: TContext) => Effect.Effect<void, Error, never>;
 }) {
-	const configSchema = z.object({
+	const configSchema: PluginConfigFor<V, S> = {
 		variables: config.variables,
 		secrets: config.secrets
-	});
+	};
 
 	class CreatedPlugin implements Plugin<TContract, V, S, TContext> {
-		readonly id = config.id;
+		/** set during instantiation - registry key */
+		id!: string;
 		readonly contract = config.contract;
 		readonly configSchema = configSchema;
 
 		private _context: TContext | null = null;
 
 		initialize(
-			pluginConfig: { variables: z.infer<V>; secrets: z.infer<S> }
+			pluginConfig: { variables: InferSchemaOutput<V>; secrets: InferSchemaOutput<S> }
 		): Effect.Effect<TContext, unknown, Scope.Scope> {
 			const init = config.initialize ?? (() => Effect.succeed({} as TContext));
 
@@ -171,13 +169,10 @@ export function createPlugin<
 			});
 		}
 
-		createRouter<THostContext extends Context = Record<never, never>>(
-			context: TContext
-		): Router<TContract, TContext & THostContext> {
-			const builder = implement(config.contract).$context<TContext & THostContext>();
+		createRouter(context: TContext): Router<TContract, TContext> {
+			const builder = implement(config.contract).$context<TContext>();
 			const router = config.createRouter(context, builder);
-			return router;
-			// return router as Router<TContract, TContext & THostContext>;
+			return router as Router<TContract, TContext>;
 		}
 	}
 
@@ -185,13 +180,19 @@ export function createPlugin<
 		new(): Plugin<TContract, V, S, TContext>;
 		binding: {
 			contract: TContract;
+			variables: V;
+			secrets: S;
 			config: PluginConfigFor<V, S>;
+			context: TContext;
 		};
 	};
 
 	PluginConstructor.binding = {
 		contract: config.contract,
-		config: configSchema
+		variables: config.variables,
+		secrets: config.secrets,
+		config: configSchema,
+		context: {} as TContext
 	};
 
 	return PluginConstructor as LoadedPluginWithBinding<TContract, V, S, TContext>;

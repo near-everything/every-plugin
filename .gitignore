@@ -5,3 +5,8 @@ node_modules
 .env.*
 dist
 .netlify
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo

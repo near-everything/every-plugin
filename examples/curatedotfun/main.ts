@@ -1,10 +1,8 @@
 #!/usr/bin/env bun
 
-import type { PluginBinding } from "every-plugin";
-import { Effect, Stream } from "every-plugin/effect";
-import { createPluginRuntime } from "every-plugin/runtime";
-import type GopherAIPlugin from '../../plugins/gopher-ai/src';
+import { Effect, Logger, LogLevel, Stream } from "every-plugin/effect";
 import type { GopherResult } from "../../plugins/gopher-ai/src/contract";
+import { plugins, runtime } from "./plugins";
 import type { NewItem } from "./schemas/database";
 import { DatabaseService } from "./services/db.service";
 
@@ -17,23 +15,6 @@ type StreamState = {
 
 // Configuration constants
 const BASE_QUERY = "@curatedotfun";
-
-// Typed registry bindings using generated types
-type IRegistry = {
-  "@curatedotfun/gopher-ai": PluginBinding<typeof GopherAIPlugin>
-};
-
-export const runtime = createPluginRuntime<IRegistry>({
-  registry: {
-    "@curatedotfun/gopher-ai": {
-      remoteUrl: "https://elliot-braem-159-curatedotfun-gopher-ai-every-plu-bf7adf22c-ze.zephyrcloud.app/remoteEntry.js",
-    }
-  },
-  secrets: {
-    GOPHERAI_API_KEY: Bun.env.GOPHERAI_API_KEY || "your-masa-api-key-here"
-  }
-});
-
 
 // Helper to extract curator username from content mentioning @curatedotfun
 const extractCuratorUsername = (item: GopherResult): string | undefined => {
@@ -90,7 +71,7 @@ const processItem = (item: GopherResult, itemNumber: number) =>
     // Console output for monitoring
     const tweetId = item.id;
     const timestamp = item.created_at || item.updated_at || new Date().toISOString();
-    const username =(item.author_username) || 'unknown';
+    const username = (item.author_username) || 'unknown';
     const curator = dbItem.curatorUsername ? ` (curator: ${dbItem.curatorUsername})` : '';
 
     console.log(`${itemNumber}. @${username} (${tweetId}) - ${timestamp}${curator}`);
@@ -121,87 +102,86 @@ const loadState = () =>
     };
   });
 
-// Main streaming program with database integration
-const main = Effect.gen(function* () {
-  console.log('🚀 Starting Twitter streaming with database storage...\n');
+// Stream creation and processing function
+const createAndProcessGopherStream = () =>
+  Effect.gen(function* () {
+    const db = yield* DatabaseService;
+    const { client } = plugins.gopherAi;
 
-  // Get the client directly
-  const { client } = yield* Effect.tryPromise(() =>
-    runtime.usePlugin("@curatedotfun/gopher-ai", {
-      secrets: { apiKey: "{{GOPHERAI_API_KEY}}" },
-      variables: { baseUrl: "https://data.gopher-ai.com/api/v1", timeout: 30000 }
-    })
-  );
+    // Load initial state from database
+    const initialState = yield* loadState();
 
-  // Load initial state from database
-  const initialState = yield* loadState();
+    if (initialState) {
+      console.log(`📂 Resuming from saved state (${initialState.totalProcessed || 0} items total)`);
+    } else {
+      console.log('📂 Starting fresh historical backfill');
+    }
 
-  if (initialState) {
-    console.log(`📂 Resuming from saved state (${initialState.totalProcessed || 0} items total)`);
-  } else {
-    console.log('📂 Starting fresh historical backfill');
-  }
-
-  // Get async iterable directly
-  const streamResult = yield* Effect.tryPromise(() =>
-    client.search({
-      query: BASE_QUERY,
-      sourceType: 'twitter',
-      sinceId: initialState?.mostRecentId ?? undefined,
-      enableLive: true
-    })
-  );
-
-  // Convert to Effect Stream and process
-  const stream = Stream.fromAsyncIterable(streamResult, (error) => error);
-
-  let itemCount = 0;
-  let currentMostRecentId = initialState?.mostRecentId;
-  let currentOldestSeenId = initialState?.oldestSeenId;
-
-  yield* stream.pipe(
-    Stream.tap((item) =>
-      Effect.gen(function* () {
-        itemCount++;
-        yield* processItem(item, itemCount);
-        
-        // Update mostRecentId (for live mode cursor)
-        const itemId = BigInt(item.id);
-        if (!currentMostRecentId || itemId > BigInt(currentMostRecentId)) {
-          currentMostRecentId = item.id;
-        }
-
-        // Update oldestSeenId (for backfill cursor)
-        if (!currentOldestSeenId || itemId < BigInt(currentOldestSeenId)) {
-          currentOldestSeenId = item.id;
-        }
-        
-        // Periodically save state every 10 items
-        if (itemCount % 10 === 0) {
-          yield* saveState({
-            mostRecentId: currentMostRecentId,
-            oldestSeenId: currentOldestSeenId,
-            totalProcessed: (initialState?.totalProcessed || 0) + itemCount
-          });
-          console.log(`💾 State saved (${itemCount} items in this session)`);
-        }
+    // Create stream
+    const streamResult = yield* Effect.promise(() =>
+      client.search({
+        query: BASE_QUERY,
+        sourceType: 'twitter',
+        sinceId: initialState?.mostRecentId ?? undefined,
+        enableLive: true
       })
-    ),
-    Stream.runDrain
-  );
+    );
 
-  // Save final state before shutdown
-  yield* saveState({
-    mostRecentId: currentMostRecentId,
-    oldestSeenId: currentOldestSeenId,
-    totalProcessed: (initialState?.totalProcessed || 0) + itemCount
+    let itemCount = 0;
+    let currentMostRecentId = initialState?.mostRecentId;
+    let currentOldestSeenId = initialState?.oldestSeenId;
+
+    yield* Stream.fromAsyncIterable(streamResult, (error) => error).pipe(
+      Stream.tap((item) =>
+        Effect.gen(function* () {
+          itemCount++;
+          yield* processItem(item, itemCount);
+
+          // Update mostRecentId (for live mode cursor)
+          const itemId = BigInt(item.id);
+          if (!currentMostRecentId || itemId > BigInt(currentMostRecentId)) {
+            currentMostRecentId = item.id;
+          }
+
+          // Update oldestSeenId (for backfill cursor)
+          if (!currentOldestSeenId || itemId < BigInt(currentOldestSeenId)) {
+            currentOldestSeenId = item.id;
+          }
+
+          // Periodically save state every 10 items
+          if (itemCount % 10 === 0) {
+            yield* saveState({
+              mostRecentId: currentMostRecentId,
+              oldestSeenId: currentOldestSeenId,
+              totalProcessed: (initialState?.totalProcessed || 0) + itemCount
+            });
+            console.log(`💾 State saved (${itemCount} items in this session)`);
+          }
+        })
+      ),
+      Stream.runDrain
+    );
+
+    // Save final state before shutdown
+    yield* saveState({
+      mostRecentId: currentMostRecentId,
+      oldestSeenId: currentOldestSeenId,
+      totalProcessed: (initialState?.totalProcessed || 0) + itemCount
+    });
+    console.log(`\n💾 Final state saved (${itemCount} items processed)`);
   });
-  console.log(`\n💾 Final state saved (${itemCount} items processed)`);
 
-  yield* Effect.tryPromise(() => runtime.shutdown());
+// Main program
+const program = Effect.gen(function* () {
+  console.log('🚀 Starting Twitter streaming with database storage...\n');
+  yield* createAndProcessGopherStream();
+  yield* Effect.sync(() => runtime.shutdown());
 });
 
 // Run the program with database service
 await Effect.runPromise(
-  main.pipe(Effect.provide(DatabaseService.Default))
+  program.pipe(
+    Effect.provide(DatabaseService.Default),
+    Effect.provide(Logger.minimumLogLevel(LogLevel.Info))
+  )
 );

@@ -1,64 +1,77 @@
-import type { AnyContractRouter, ContractRouter } from "@orpc/contract";
+import type { AnyContractRouter, AnySchema, InferSchemaInput, InferSchemaOutput } from "@orpc/contract";
 import type { Context, Router, RouterClient } from "@orpc/server";
 import type { Scope } from "effect";
-import type { z } from "zod";
-import type { Plugin, PluginConfigFor } from "./plugin";
-import type { PluginRuntime } from "./runtime";
+import type { Plugin } from "./plugin";
+
+/**
+ * Registry bindings interface - populated via module augmentation
+ * @example
+ * ```typescript
+ * declare module "every-plugin" {
+ *   interface RegisteredPlugins {
+ *     "my-plugin": typeof MyPlugin;
+ *   }
+ * }
+ * ```
+ */
+// biome-ignore lint/suspicious/noEmptyInterface: required for module augmentation pattern
+export interface RegisteredPlugins { }
 
 /**
  * Base type for any plugin instance.
- * This is the foundation that enables type inference across the entire plugin system.
- * Uses 'any' for context to allow plugins with custom context types.
  */
-export type AnyPlugin = Plugin<AnyContractRouter, z.ZodTypeAny, z.ZodTypeAny, any>;
+export type AnyPlugin = Plugin<AnyContractRouter, AnySchema, AnySchema, any>;
 
 /**
- * Registry bindings define the compile-time shape of available plugins.
- * This is a type-only construct that enables full IDE autocomplete and type safety
- * without requiring runtime plugin imports.
+ * Extract plugin type from registered plugins by key
  */
-export type RegistryBindings = Record<string, {
-  contract: AnyContractRouter;
-  config: PluginConfigFor<z.ZodTypeAny, z.ZodTypeAny>;
-}>;
-
-/**
- * Extracts the Plugin type from a binding definition.
- * This enables type inference: Binding → Plugin → Router → Client
- */
-export type PluginOf<B> =
-  B extends { contract: infer C; config: infer Conf }
-  ? Conf extends PluginConfigFor<infer V, infer S>
-  ? C extends AnyContractRouter
-  ? Plugin<C, V, S, Context>
-  : never
+export type RegisteredPlugin<K extends keyof RegisteredPlugins> =
+  RegisteredPlugins[K] extends { binding: infer B }
+  ? B extends {
+    contract: infer C extends AnyContractRouter;
+    variables: infer V extends AnySchema;
+    secrets: infer S extends AnySchema;
+    context: infer TContext extends Context;
+  }
+  ? Plugin<C, V, S, TContext>
   : never
   : never;
 
-/**
- * Extracts the config type from a binding definition.
- * This provides strongly-typed configuration based on the plugin's zod schema.
- */
-export type ConfigOf<B> = z.infer<PluginOf<B>["configSchema"]>;
 
 /**
- * The actual router type returned by plugins (with procedures implemented)
- * Supports host context composition via THostContext type parameter
+ * Extract router type from plugin binding
  */
-export type PluginRouter<
-  T extends AnyPlugin,
-  THostContext extends Context = Record<never, never>
-> = Router<T["contract"], ContextOf<T> & THostContext>;
+export type PluginRouterType<T> = Router<PluginContract<T>, PluginContext<T>>;
 
 /**
- * Extracts the context type from a plugin.
- * This is used for typing the router client context parameter.
+ * Extract client type from plugin binding
  */
-export type ContextOf<T extends AnyPlugin> = T extends Plugin<AnyContractRouter, z.ZodTypeAny, z.ZodTypeAny, infer TContext> ? TContext : never;
+export type PluginClientType<T> = RouterClient<Router<PluginContract<T>, PluginContext<T>>>;
+
+export type PluginContract<T> = T extends { binding: { contract: infer C extends AnyContractRouter } } ? C : never;
+export type PluginVariables<T> = T extends { binding: { variables: infer V extends AnySchema } } ? V : never;
+export type PluginSecrets<T> = T extends { binding: { secrets: infer S extends AnySchema } } ? S : never;
+export type PluginContext<T> = T extends { binding: { context: infer C extends Context } } ? C : never;
+
+/**
+ * Extract config input type from plugin binding
+ */
+export type PluginConfigInput<T> = {
+  variables: InferSchemaInput<PluginVariables<T>>;
+  secrets: InferSchemaInput<PluginSecrets<T>>;
+};
+
+
+/**
+ * Extract context type from plugin instance
+ */
+export type ContextOf<T extends AnyPlugin> =
+  T extends Plugin<AnyContractRouter, AnySchema, AnySchema, infer TContext>
+  ? TContext
+  : never;
 
 /**
  * Runtime registry configuration.
- * Maps plugin IDs to their remote URLs and metadata.
  */
 export type PluginRegistry = Record<string, PluginMetadata>;
 
@@ -71,8 +84,7 @@ export interface SecretsConfig {
 }
 
 /**
- * Shared metadata for plugin lifecycle stages.
- * Contains information about the plugin that persists across different stages.
+ * Plugin metadata
  */
 export type PluginMetadata = {
   readonly remoteUrl: string;
@@ -81,7 +93,7 @@ export type PluginMetadata = {
 };
 
 /**
- * Loaded plugin with metadata.
+ * Loaded plugin
  */
 export interface LoadedPlugin<T extends AnyPlugin = AnyPlugin> {
   readonly ctor: new () => T;
@@ -89,7 +101,7 @@ export interface LoadedPlugin<T extends AnyPlugin = AnyPlugin> {
 }
 
 /**
- * Instantiated plugin with metadata.
+ * Instantiated plugin
  */
 export interface PluginInstance<T extends AnyPlugin = AnyPlugin> {
   readonly plugin: T;
@@ -97,51 +109,56 @@ export interface PluginInstance<T extends AnyPlugin = AnyPlugin> {
 }
 
 /**
- * Fully initialized plugin ready for use.
- * Contains the plugin instance, validated config, execution context, and scope.
+ * Fully initialized plugin ready for use
  */
 export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
   readonly plugin: T;
   readonly metadata: PluginMetadata;
-  readonly config: z.infer<T["configSchema"]>;
+  readonly config: {
+    variables: InferSchemaOutput<T["configSchema"]["variables"]>;
+    secrets: InferSchemaOutput<T["configSchema"]["secrets"]>;
+  };
   readonly context: ContextOf<T>;
   readonly scope: Scope.CloseableScope;
 }
 
 /**
- * Runtime options for plugin execution and resource management.
+ * Helper type to detect type errors when looking up RegisteredPlugins
  */
-export interface RuntimeOptions {
-  // TODO: BELOW ARE ALL HYPOTHETICAL, HAVE NOT BEEN IMPLEMENTED.
+type VerifyPluginBinding<K extends keyof RegisteredPlugins> =
+  RegisteredPlugins[K] extends { binding: infer B }
+  ? B extends {
+    contract: AnyContractRouter;
+    variables: AnySchema;
+    secrets: AnySchema;
+    context: Context;
+  }
+  ? true
+  : `❌ Plugin "${K & string}" is not properly registered. Ensure it extends plugin binding layout { contract, variables, secrets, context }.`
+  : `❌ Plugin "${K & string}" is not properly registered. Missing binding property.`;
 
-
-  /** Resource isolation level for plugins */
-  isolation?: "strict" | "shared" | "none";
-  /** Memory limit per plugin instance */
-  memoryLimit?: string;
-  /** Maximum concurrent plugin operations */
-  concurrency?: number;
-  /** Resource timeout for plugin operations */
-  resourceTimeout?: string;
-  /** Enable debug logging */
-  debug?: boolean;
-  /** Enable metrics collection */
-  metrics?: boolean;
-}
+  /**
+ * Result of runtime.usePlugin() call
+ */
+export type UsePluginResult<K extends keyof RegisteredPlugins> = VerifyPluginBinding<K> extends true
+  ? {
+    readonly client: PluginClientType<RegisteredPlugins[K]>;
+    readonly router: PluginRouterType<RegisteredPlugins[K]>;
+    readonly metadata: PluginMetadata;
+    readonly initialized: InitializedPlugin<RegisteredPlugin<K>>;
+  }
+  : VerifyPluginBinding<K>;
 
 /**
- * Enhanced plugin result containing client, router, and metadata.
- * Router is typed as ContractRouter for encapsulation, but runtime compatible with oRPC routers.
- * Supports host context composition through THostContext type parameter.
+ * Runtime options
  */
-export interface EveryPlugin<
-  T extends AnyPlugin = AnyPlugin,
-  THostContext extends Context = Record<never, never>
-> {
-  readonly client: RouterClient<PluginRouter<T, THostContext>, THostContext>;
-  readonly router: PluginRouter<T, THostContext>;
-  readonly metadata: PluginMetadata;
-  readonly initialized: InitializedPlugin<T>;
+export interface RuntimeOptions {
+  isolation?: "strict" | "shared" | "none";
+  memoryLimit?: string;
+  concurrency?: number;
+  resourceTimeout?: string;
+  debug?: boolean;
+  metrics?: boolean;
 }
 
 /**
@@ -149,29 +166,22 @@ export interface EveryPlugin<
  */
 export namespace EveryPlugin {
   /**
-   * Extract the typed plugin result from a runtime instance.
+   * Extract plugin runtime instance type from registered plugins.
    * Provides full type safety for plugin clients, routers, and metadata.
-   * 
+   *
    * @example
    * ```ts
-   * const runtime = createPluginRuntime<MyBindings>({...});
-   * let plugin: EveryPlugin.Infer<typeof runtime, "my-plugin">;
-   * plugin = await runtime.usePlugin("my-plugin", config);
+   * type Plugin = EveryPlugin.Infer<"my-plugin">;
+   * const plugin: Plugin = await runtime.usePlugin("my-plugin", config);
    * ```
    */
-  export type Infer<
-    T extends PluginRuntime<any>,
-    K extends T extends PluginRuntime<infer R> ? keyof R : never
-  > = T extends PluginRuntime<infer R>
-    ? EveryPlugin<PluginOf<R[K]>>
-    : never;
+  export type Infer<K extends keyof RegisteredPlugins> = UsePluginResult<K>;
 }
 
 /**
- * Runtime configuration for the plugin system.
- * The generic R parameter enables compile-time type safety when provided.
+ * Plugin runtime configuration
  */
-export interface PluginRuntimeConfig<R extends RegistryBindings = RegistryBindings> {
+export interface PluginRuntimeConfig<R extends RegisteredPlugins = RegisteredPlugins> {
   registry: PluginRegistry;
   secrets?: SecretsConfig;
   options?: RuntimeOptions;

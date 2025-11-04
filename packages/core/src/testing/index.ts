@@ -1,5 +1,4 @@
 import { Layer, ManagedRuntime } from "effect";
-import type { PluginBinding } from "../plugin";
 import { PluginRuntime } from "../runtime";
 import {
 	PluginLifecycleService,
@@ -10,13 +9,23 @@ import {
 	SecretsConfigTag,
 	SecretsService
 } from "../runtime/services";
-import type { PluginRuntimeConfig, RegistryBindings } from "../types";
+import type { PluginRuntimeConfig, RegisteredPlugins } from "../types";
 import { createMockModuleFederationServiceLayer, type PluginMap } from "./mocks/module-federation.service";
 
 /**
- * Automatically infer RegistryBindings from a map of locally available plugins.
- * Eliminates the need for manual binding definitions when using createLocalPluginRuntime.
- * 
+ * Validates that all plugin map keys exist in RegisteredPlugins.
+ * This ensures proper type inference for client methods.
+ */
+type ValidatePluginMap<T extends PluginMap> = {
+	[K in keyof T]: K extends keyof RegisteredPlugins
+		? T[K]
+		: `❌ Plugin key "${K & string}" not registered in RegisteredPlugins. Add it to your types.d.ts file.`;
+};
+
+/**
+ * Simplified type inference for local plugin maps.
+ * Just use the constructor types directly.
+ *
  * @example
  * ```ts
  * const pluginMap = { "my-plugin": MyPlugin } as const;
@@ -24,14 +33,14 @@ import { createMockModuleFederationServiceLayer, type PluginMap } from "./mocks/
  * ```
  */
 export type InferBindingsFromMap<T extends PluginMap> = {
-	[K in keyof T]: PluginBinding<T[K]>
-} & RegistryBindings;
+	[K in keyof T]: T[K]
+} & RegisteredPlugins;
 
 /**
  * Creates a test layer with mock ModuleFederationService for unit testing.
  * This mirrors PluginService.Live() but uses mock ModuleFederationService.
  */
-export const createTestLayer = <R extends RegistryBindings = RegistryBindings>(
+export const createTestLayer = <R extends RegisteredPlugins = RegisteredPlugins>(
 	config: PluginRuntimeConfig<R>,
 	pluginMap: PluginMap
 ) => {
@@ -61,33 +70,33 @@ export const createTestLayer = <R extends RegistryBindings = RegistryBindings>(
 
 /**
  * Creates a plugin runtime for locally available plugins (non-remote).
- * Automatically infers type bindings from the plugin map, eliminating 
+ * Automatically infers type bindings from the plugin map, eliminating
  * the need for manual RegistryBindings definitions.
- * 
+ *
  * Ideal for:
  * - Unit and integration tests
  * - Local development and debugging
  * - Monorepo setups where all plugins are in the same workspace
- * 
+ *
  * For production with remote Module Federation plugins, use createPluginRuntime().
- * 
+ *
  * @example
  * ```ts
  * const pluginMap = { "my-plugin": MyPlugin } as const;
  * const runtime = createLocalPluginRuntime({ registry, secrets }, pluginMap);
- * 
+ *
  * // Types are automatically inferred - no manual bindings needed!
  * const plugin = await runtime.usePlugin("my-plugin", config);
  * ```
  */
-export function createLocalPluginRuntime<T extends PluginMap>(
+export function createLocalPluginRuntime<TMap extends PluginMap & ValidatePluginMap<TMap>>(
 	config: PluginRuntimeConfig,
-	pluginMap: T
-): PluginRuntime<InferBindingsFromMap<T>> {
+	pluginMap: TMap
+): PluginRuntime<InferBindingsFromMap<TMap>> {
 	const layer = createTestLayer(config, pluginMap);
 	const runtime = ManagedRuntime.make(layer);
 
-	return new PluginRuntime(runtime, config.registry) as PluginRuntime<InferBindingsFromMap<T>>;
+	return new PluginRuntime<InferBindingsFromMap<TMap>>(runtime, config.registry);
 }
 
 /**
@@ -96,5 +105,5 @@ export function createLocalPluginRuntime<T extends PluginMap>(
 export const createTestPluginRuntime = createLocalPluginRuntime;
 
 // Re-export useful types for tests
-export type { PluginRegistry, RegistryBindings } from "../types";
+export type { EveryPlugin, PluginRegistry, RegisteredPlugins } from "../types";
 export type { PluginMap, PluginRuntimeConfig };

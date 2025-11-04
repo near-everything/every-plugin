@@ -24,6 +24,11 @@
 		// Some stricter flags (disabled by default)
 		"noUnusedLocals": false,
 		"noUnusedParameters": false,
-		"noPropertyAccessFromIndexSignature": false
+		"noPropertyAccessFromIndexSignature": false,
+
+		// Path aliases for workspace plugins
+		"paths": {
+			"@curatedotfun/gopher-ai": ["../../plugins/gopher-ai/src"]
+		}
 	}
 }

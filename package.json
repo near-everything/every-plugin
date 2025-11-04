@@ -1,42 +1,45 @@
 {
-  "name": "run-every-app",
-  "devDependencies": {
-    "@biomejs/biome": "^2.2.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.1.2",
-    "turbo": "^2.5.4"
-  },
-  "lint-staged": {
-    "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
-      "biome check --write ."
-    ]
-  },
-  "packageManager": "bun@1.2.20",
-  "private": true,
-  "resolutions": {
-    "effect": "3.18.1",
-    "@orpc/contract": "1.10.0",
-    "@orpc/server": "1.10.0",
-    "@module-federation/runtime-core": "0.19.1",
-    "@module-federation/enhanced": "0.19.1",
-    "@module-federation/node": "2.7.15"
-  },
-  "scripts": {
-    "check": "biome check --write .",
-    "prepare": "husky",
-    "dev": "turbo dev",
-    "build": "turbo build",
-    "check-types": "turbo check-types",
-    "dev:native": "turbo -F native dev",
-    "dev:web": "turbo -F web dev",
-    "dev:server": "turbo -F server dev",
-    "db:push": "turbo -F server db:push",
-    "db:studio": "turbo -F server db:studio",
-    "db:generate": "turbo -F server db:generate",
-    "db:migrate": "turbo -F server db:migrate"
-  },
-  "workspaces": [
-    "packages/*",
-    "templates/*"
-  ]
+	"name": "run-every-app",
+	"devDependencies": {
+		"@biomejs/biome": "^2.2.0",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.1.2",
+		"turbo": "^2.5.4"
+	},
+	"lint-staged": {
+		"*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
+			"biome check --write ."
+		]
+	},
+	"packageManager": "bun@1.2.20",
+	"private": true,
+	"resolutions": {
+		"effect": "3.18.1",
+		"@orpc/contract": "1.10.0",
+		"@orpc/server": "1.10.0",
+		"@module-federation/runtime-core": "0.19.1",
+		"@module-federation/enhanced": "0.19.1",
+		"@module-federation/node": "2.7.15"
+	},
+	"scripts": {
+		"fmt": "biome check --write .",
+		"prepare": "husky",
+		"dev": "turbo dev",
+		"build": "turbo build",
+		"check-types": "turbo check-types",
+		"dev:native": "turbo -F native dev",
+		"dev:web": "turbo -F web dev",
+		"dev:server": "turbo -F server dev",
+		"db:push": "turbo -F server db:push",
+		"db:studio": "turbo -F server db:studio",
+		"db:generate": "turbo -F server db:generate",
+		"db:migrate": "turbo -F server db:migrate"
+	},
+	"workspaces": [
+		"packages/*",
+		"templates/*",
+		"plugins/*",
+		"examples/*",
+		"packages/core/tests/fixtures/*"
+	]
 }

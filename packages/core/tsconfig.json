@@ -1,41 +1,26 @@
 {
+	"extends": "./tsconfig.build.json",
 	"compilerOptions": {
-		"composite": true,
-		"declaration": true,
-		"declarationMap": true,
-		"outDir": "./dist",
-		"rootDir": "./src",
-		// Environment setup & latest features
-		"lib": ["ESNext"],
-		"target": "ESNext",
-		"module": "ESNext",
-		"moduleDetection": "force",
-		"jsx": "react-jsx",
-		"allowJs": true,
-
-		"moduleResolution": "bundler",
+		"noEmit": true,
+		"rootDir": ".",
 		"paths": {
-			"@/*": ["./src/*"]
-		},
-
-		// Best practices
-		"strict": true,
-		"skipLibCheck": true,
-		"noFallthroughCasesInSwitch": true,
-		"noUncheckedIndexedAccess": true,
-		"noImplicitOverride": true,
-
-		// Some stricter flags (disabled by default)
-		"noUnusedLocals": false,
-		"noUnusedParameters": false,
-		"noPropertyAccessFromIndexSignature": false,
-
-		"plugins": [
-			{
-        "name": "@effect/language-service"
-      }
-		]
+			"@/*": ["./src/*"],
+			"every-plugin": ["./src/index.ts"],
+			"every-plugin/*": ["./src/*"],
+			"every-plugin/effect": ["./src/effect.ts"],
+			"every-plugin/zod": ["./src/zod.ts"],
+			"every-plugin/orpc": ["./src/orpc.ts"],
+			"every-plugin/normalize": ["./src/runtime/services/normalize.ts"],
+			"every-plugin/testing": ["./src/testing/index.ts"],
+			"every-plugin/runtime": ["./src/runtime/index.ts"]
+		}
 	},
-	"include": ["src/**/*"],
-	"exclude": ["node_modules", "dist", "src/**/*.config.cjs", "src/**/*.config.js"]
+	"files": ["tests/types.d.ts"],
+	"include": ["src/**/*", "tests/**/*", "package.json"],
+	"exclude": [
+		"node_modules",
+		"dist",
+		"tests/fixtures/*/dist",
+		"tests/fixtures/test-plugin/rspack.config.cjs"
+	]
 }
