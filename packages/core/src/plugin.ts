@@ -2,8 +2,6 @@ import type { AnyContractRouter, AnySchema, InferSchemaOutput } from "@orpc/cont
 import type { Context, Implementer, Router } from "@orpc/server";
 import { implement } from "@orpc/server";
 import { Effect, type Scope } from "effect";
-import { z } from "zod";
-
 
 /**
  * Helper type that correctly constructs the config schema type
@@ -27,61 +25,9 @@ export interface LoadedPluginWithBinding<
 		contract: TContract;
 		variables: TVariables;
 		secrets: TSecrets;
-		config: PluginConfigFor<TVariables, TSecrets>;
 		context: TContext;
 	};
 }
-
-/**
- * Common error schemas that all plugins can use
- * These provide consistent error handling across the plugin ecosystem
- */
-export const CommonPluginErrors = {
-	UNAUTHORIZED: {
-		data: z.object({
-			apiKeyProvided: z.boolean(),
-			provider: z.string().optional(),
-			authType: z.enum(['apiKey', 'oauth', 'token']).optional(),
-		})
-	},
-	RATE_LIMITED: {
-		data: z.object({
-			retryAfter: z.number().int().min(1),
-			remainingRequests: z.number().int().min(0).optional(),
-			resetTime: z.string().datetime().optional(),
-			limitType: z.enum(['requests', 'tokens', 'bandwidth']).optional(),
-		})
-	},
-	SERVICE_UNAVAILABLE: {
-		data: z.object({
-			retryAfter: z.number().int().optional(),
-			maintenanceWindow: z.boolean().default(false),
-			estimatedUptime: z.string().datetime().optional(),
-		})
-	},
-	BAD_REQUEST: {
-		data: z.object({
-			invalidFields: z.array(z.string()).optional(),
-			validationErrors: z.array(z.object({
-				field: z.string(),
-				message: z.string(),
-				code: z.string().optional(),
-			})).optional(),
-		})
-	},
-	NOT_FOUND: {
-		data: z.object({
-			resource: z.string().optional(),
-			resourceId: z.string().optional(),
-		})
-	},
-	FORBIDDEN: {
-		data: z.object({
-			requiredPermissions: z.array(z.string()).optional(),
-			action: z.string().optional(),
-		})
-	}
-} as const;
 
 /**
  * Plugin interface
@@ -182,7 +128,6 @@ export function createPlugin<
 			contract: TContract;
 			variables: V;
 			secrets: S;
-			config: PluginConfigFor<V, S>;
 			context: TContext;
 		};
 	};
@@ -191,7 +136,6 @@ export function createPlugin<
 		contract: config.contract,
 		variables: config.variables,
 		secrets: config.secrets,
-		config: configSchema,
 		context: {} as TContext
 	};
 

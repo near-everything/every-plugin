@@ -1,7 +1,6 @@
 import {
 	CommonPluginErrors,
 	createPlugin,
-	PluginConfigurationError,
 } from "every-plugin";
 import { Effect } from "every-plugin/effect";
 import { eventIterator, MemoryPublisher, oc } from "every-plugin/orpc";
@@ -151,10 +150,7 @@ export const TestPlugin = createPlugin({
 		Effect.gen(function* () {
 			// Business logic validation - config structure is guaranteed by schema
 			if (config.secrets.apiKey === "invalid-key") {
-				yield* Effect.fail(new PluginConfigurationError({
-					message: "Invalid API key format",
-					retryable: false
-				}));
+				yield* Effect.fail(new Error("Invalid API key format"));
 			}
 
 			// Initialize client

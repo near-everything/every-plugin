@@ -462,33 +462,26 @@ const enqueueTask = builder.enqueueTask.handler(async ({ input }) => {
 Transform external errors to CommonPluginErrors:
 
 ```typescript
-import { PluginConfigurationError } from "every-plugin";
-
 getById(id: string) {
   return Effect.tryPromise({
     try: async () => {
       const response = await fetch(`${this.baseUrl}/items/${id}`);
-      
+
       if (response.status === 401) {
-        throw new PluginConfigurationError({
-          message: "Invalid API credentials",
-          retryable: false
-        });
+        throw new Error("Invalid API credentials");
       }
-      
+
       if (response.status === 429) {
         throw new Error("Rate limited");
       }
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      
+
       return await response.json();
     },
     catch: (error: unknown) => {
-      // Re-throw configuration errors
-      if (error instanceof PluginConfigurationError) throw error;
       return new Error(`Fetch failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
@@ -500,7 +493,7 @@ const getById = builder.getById.handler(async ({ input, errors }) => {
     const item = await Effect.runPromise(service.getById(input.id));
     return { item };
   } catch (error) {
-    if (error instanceof PluginConfigurationError) {
+    if (error instanceof Error && error.message.includes('Invalid API credentials')) {
       throw errors.UNAUTHORIZED({
         message: error.message,
         data: { apiKeyProvided: true }

@@ -37,6 +37,10 @@
 			"types": "./dist/orpc.d.ts",
 			"default": "./dist/orpc.js"
 		},
+		"./errors": {
+			"types": "./dist/errors.d.ts",
+			"default": "./dist/errors.js"
+		},
 		"./package.json": "./package.json"
 	},
 	"files": [
