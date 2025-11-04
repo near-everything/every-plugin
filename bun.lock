@@ -85,7 +85,7 @@
     },
     "packages/core": {
       "name": "every-plugin",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "dependencies": {
         "@better-fetch/fetch": "^1.1.18",
         "@module-federation/enhanced": "^0.19.1",

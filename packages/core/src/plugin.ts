@@ -109,7 +109,7 @@ export interface Plugin<
 	 * @param context The initialized plugin context
 	 * @returns A router with procedures matching the plugin's contract
 	 */
-	createRouter(context: TContext): Router<TContract, TContext>;
+	createRouter(context: TContext): Router<TContract, any>;
 }
 
 /**
@@ -129,8 +129,8 @@ export function createPlugin<
 	) => Effect.Effect<TContext, Error, Scope.Scope>;
 	createRouter: (
 		context: TContext,
-		builder: Implementer<TContract, TContext & Record<never, never>, TContext & Record<never, never>>
-	) => Router<TContract, TContext & Record<never, never>>;
+		builder: Implementer<TContract, TContext, TContext>
+	) => Router<TContract, any>;
 	shutdown?: (ctx: TContext) => Effect.Effect<void, Error, never>;
 }) {
 	const configSchema: PluginConfigFor<V, S> = {
@@ -169,10 +169,10 @@ export function createPlugin<
 			});
 		}
 
-		createRouter(context: TContext): Router<TContract, TContext> {
+		createRouter(context: TContext): Router<TContract, any> {
 			const builder = implement(config.contract).$context<TContext>();
 			const router = config.createRouter(context, builder);
-			return router as Router<TContract, TContext>;
+			return router as Router<TContract, any>;
 		}
 	}
 

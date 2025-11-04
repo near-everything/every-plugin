@@ -20,7 +20,7 @@ export interface RegisteredPlugins { }
 /**
  * Base type for any plugin instance.
  */
-export type AnyPlugin = Plugin<AnyContractRouter, AnySchema, AnySchema, any>;
+export type AnyPlugin = Plugin<AnyContractRouter, AnySchema, AnySchema, any>; 
 
 /**
  * Extract plugin type from registered plugins by key
@@ -41,12 +41,12 @@ export type RegisteredPlugin<K extends keyof RegisteredPlugins> =
 /**
  * Extract router type from plugin binding
  */
-export type PluginRouterType<T> = Router<PluginContract<T>, PluginContext<T>>;
+export type PluginRouterType<T> = Router<PluginContract<T>, any>;
 
 /**
  * Extract client type from plugin binding
  */
-export type PluginClientType<T> = RouterClient<Router<PluginContract<T>, PluginContext<T>>>;
+export type PluginClientType<T> = RouterClient<Router<PluginContract<T>, any>>;
 
 export type PluginContract<T> = T extends { binding: { contract: infer C extends AnyContractRouter } } ? C : never;
 export type PluginVariables<T> = T extends { binding: { variables: infer V extends AnySchema } } ? V : never;

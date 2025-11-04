@@ -66,7 +66,9 @@ export default createPlugin({
       .input(QuerySchema)
       .output(eventIterator(ItemSchema))
   }),
-  createRouter: (context) => { /* implement contract */ }
+  createRouter: (context, builder) => {
+    // builder is pre-configured: implement(contract).$context<TContext>()
+  }
 });
 
 const { client } = await runtime.usePlugin("plugin-id", config);
