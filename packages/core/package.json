@@ -1,6 +1,6 @@
 {
 	"name": "every-plugin",
-	"version": "0.4.3",
+	"version": "0.4.4",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"exports": {
@@ -11,10 +11,6 @@
 		"./runtime": {
 			"types": "./dist/runtime/index.d.ts",
 			"default": "./dist/runtime/index.js"
-		},
-		"./client": {
-			"types": "./dist/client/index.d.ts",
-			"default": "./dist/client/index.js"
 		},
 		"./testing": {
 			"types": "./dist/testing/index.d.ts",

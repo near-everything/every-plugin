@@ -31,7 +31,7 @@ const createModuleFederationInstance = Effect.cached(
 								singleton: true,
 								requiredVersion: `^${pkg.version}`,
 								eager: true,
-								strictVersion: true,
+								strictVersion: false, // Allow bidirectional version compatibility
 							},
 						},
 						effect: {
@@ -40,7 +40,7 @@ const createModuleFederationInstance = Effect.cached(
 								singleton: true,
 								requiredVersion: "^3.18.0", // Allow any 3.18.x patch version
 								eager: true,
-								strictVersion: true, // Enforce major/minor compatibility
+								strictVersion: false, // Allow version flexibility for compatibility
 							},
 						},
 						zod: {
@@ -49,7 +49,7 @@ const createModuleFederationInstance = Effect.cached(
 								singleton: true,
 								requiredVersion: "^4.1.0", // Allow any 4.1.x patch version
 								eager: true,
-								strictVersion: true,
+								strictVersion: false, // Allow version flexibility for compatibility
 							},
 						},
 						"@orpc/contract": {
@@ -58,7 +58,7 @@ const createModuleFederationInstance = Effect.cached(
 								singleton: true,
 								requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
 								eager: true,
-								strictVersion: true,
+								strictVersion: false, // Allow version flexibility for compatibility
 							},
 						},
 						"@orpc/server": {
@@ -67,7 +67,7 @@ const createModuleFederationInstance = Effect.cached(
 								singleton: true,
 								requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
 								eager: true,
-								strictVersion: true,
+								strictVersion: false, // Allow version flexibility for compatibility
 							},
 						}
 					},

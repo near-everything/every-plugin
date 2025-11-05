@@ -7,7 +7,7 @@ This guide explains how to build plugins for the every-plugin framework. The tem
 Every plugin consists of three core files:
 
 1. **contract.ts** - Defines the plugin's public API using oRPC
-2. **service.ts** - Plain class that wraps your external API  
+2. **service.ts** - Plain class that wraps your external API
 3. **index.ts** - Wires everything together with createPlugin
 
 ```
