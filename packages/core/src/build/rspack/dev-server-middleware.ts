@@ -2,8 +2,18 @@ import type { PluginInfo } from './utils';
 
 export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, devConfig: any, port: number) {
   let handlers: { rpc: any, api: any } = { rpc: null, api: null };
+  let cleanup: (() => Promise<void>) | null = null;
+
+  const performCleanup = async () => {
+    if (cleanup) {
+      await cleanup();
+      cleanup = null;
+    }
+  };
 
   (async () => {
+    await performCleanup();
+
     try {
       const { createPluginRuntime } = await import('every-plugin');
       const { RPCHandler } = await import('@orpc/server/fetch');
@@ -23,6 +33,20 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       });
 
       const loaded = await runtime.usePlugin(pluginId, devConfig?.config);
+
+      cleanup = async () => {
+        if (loaded && typeof (loaded as any).dispose === 'function') {
+          await (loaded as any).dispose();
+        }
+        if (runtime && typeof (runtime as any).cleanup === 'function') {
+          await (runtime as any).cleanup();
+        }
+        handlers.rpc = null;
+        handlers.api = null;
+        if (devServer.app.locals.handlers) {
+          devServer.app.locals.handlers = null;
+        }
+      };
 
       // @ts-expect-error no type
       handlers.rpc = new RPCHandler(loaded.router, {
@@ -56,12 +80,25 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       console.log(`│  💚 Health: http://localhost:${port}/`);
       console.log(`╰─────────────────────────────────────────────`);
 
-      // Store handlers for routing
       devServer.app.locals.handlers = handlers;
+
+      if (devServer.server) {
+        devServer.server.once('close', async () => {
+          await performCleanup();
+        });
+      }
     } catch (error) {
       console.error('❌ Failed to load plugin:', error);
+      await performCleanup();
     }
   })();
+
+  process.once('SIGINT', async () => {
+    await performCleanup();
+  });
+  process.once('SIGTERM', async () => {
+    await performCleanup();
+  });
 
   // Root health check
   devServer.app.get('/', (req: any, res: any) => {
