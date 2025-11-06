@@ -7,16 +7,39 @@ Once your plugin is built, you need to deploy it to be accessible remotely.
 
 ## Building Your Plugin
 
-Build the plugin for production:
+The template uses `EveryPluginDevServer` which automatically handles all build configuration including Module Federation, shared dependencies, and TypeScript compilation.
+
+### Development Build
+
+Start the development server with hot reload:
 
 ```bash
-# Production build
+bun run dev
+```
+
+This starts a dev server at `http://localhost:3014` (configurable in `plugin.dev.ts`) with:
+- Hot module reloading
+- Automatic TypeScript compilation via SWC
+- Plugin mounted with `plugin.dev.ts` configuration
+- CORS headers for remote testing
+- Interactive API endpoints
+
+<Callout type="tip">
+Visit `http://localhost:3014/api` to access the **interactive Scalar API dashboard**. You can browse all endpoints, test procedures with live requests, and view schemas - all auto-generated from your oRPC contract. The better you document your contract (summaries, descriptions, tags), the better your API docs will be.
+</Callout>
+
+### Production Build
+
+Build optimized production bundle:
+
+```bash
 bun run build
 ```
 
 This generates:
 - `dist/remoteEntry.js` - The Module Federation entry point
-- `dist/*.js` - Additional module chunks
+- `dist/*.js` - Code-split chunks for optimized loading
+- `dist/**/*.js.map` - Source maps for debugging
 - `dist/index.d.ts` - TypeScript definitions
 
 ## Deployment Options

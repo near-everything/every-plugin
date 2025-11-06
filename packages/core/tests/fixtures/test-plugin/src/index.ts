@@ -1,12 +1,11 @@
-import {
-	CommonPluginErrors,
-	createPlugin,
-	PluginConfigurationError,
-} from "every-plugin";
+import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
-import { eventIterator, MemoryPublisher, oc } from "every-plugin/orpc";
+import { MemoryPublisher } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
-import { TestClient, testItemSchema } from "./client";
+import { TestClient } from "./client";
+import { testContract } from "./contract";
+
+export { testContract };
 
 // Define publisher event types
 type BackgroundEvents = {
@@ -16,123 +15,6 @@ type BackgroundEvents = {
 		timestamp: number;
 	};
 };
-
-// Schema for streaming events
-const streamEventSchema = z.object({
-	item: testItemSchema,
-	state: z.object({
-		nextPollMs: z.number().nullable(),
-		lastId: z.string(),
-	}),
-	metadata: z.object({
-		itemIndex: z.number(),
-	})
-});
-
-// Schema for background producer events
-const backgroundEventSchema = z.object({
-	id: z.string(),
-	index: z.number(),
-	timestamp: z.number(),
-});
-
-// Contract definition for the test plugin
-export const testContract = oc.router({
-	// Basic single item fetch
-	getById: oc
-		.route({ method: 'POST', path: '/getById' })
-		.input(z.object({
-			id: z.string()
-		}))
-		.output(z.object({
-			item: testItemSchema
-		}))
-		.errors(CommonPluginErrors),
-
-	// Basic bulk fetch
-	getBulk: oc
-		.route({ method: 'POST', path: '/getBulk' })
-		.input(z.object({
-			ids: z.array(z.string()),
-		}))
-		.output(z.object({
-			items: z.array(testItemSchema),
-		}))
-		.errors(CommonPluginErrors),
-
-	// Simple streaming - returns fixed number of items
-	simpleStream: oc
-		.route({ method: 'POST', path: '/simpleStream' })
-		.input(z.object({
-			count: z.number().min(1).max(10).default(3),
-			prefix: z.string().default("item"),
-		}))
-		.output(eventIterator(streamEventSchema))
-		.errors(CommonPluginErrors),
-
-	// Empty stream - returns no items
-	emptyStream: oc
-		.route({ method: 'POST', path: '/emptyStream' })
-		.input(z.object({
-			reason: z.string().optional(),
-		}))
-		.output(eventIterator(streamEventSchema))
-		.errors(CommonPluginErrors),
-
-	// Consolidated error testing procedure
-	throwError: oc
-		.route({ method: 'POST', path: '/throwError' })
-		.input(z.object({
-			errorType: z.enum(['UNAUTHORIZED', 'FORBIDDEN', 'RATE_LIMITED', 'SERVICE_UNAVAILABLE']),
-			customMessage: z.string().optional()
-		}))
-		.output(z.object({ message: z.string() }))
-		.errors(CommonPluginErrors),
-
-	// Config validation testing
-	requiresSpecialConfig: oc
-		.route({ method: 'POST', path: '/requiresSpecialConfig' })
-		.input(z.object({
-			checkValue: z.string(),
-		}))
-		.output(z.object({
-			configValue: z.string(),
-			inputValue: z.string(),
-		}))
-		.errors(CommonPluginErrors),
-
-	// Background producer streaming - simulates long-lived process
-	listenBackground: oc
-		.route({ method: 'POST', path: '/listenBackground' })
-		.input(z.object({
-			maxResults: z.number().min(1).max(100).optional(),
-			lastEventId: z.string().optional(),
-		}))
-		.output(eventIterator(backgroundEventSchema))
-		.errors(CommonPluginErrors),
-
-	// Utility to manually enqueue background events
-	enqueueBackground: oc
-		.route({ method: 'POST', path: '/enqueueBackground' })
-		.input(z.object({
-			id: z.string().optional(),
-		}))
-		.output(z.object({
-			ok: z.boolean(),
-		}))
-		.errors(CommonPluginErrors),
-
-
-
-	// Simple ping for testing client dispatch
-	ping: oc
-		.route({ method: 'POST', path: '/ping' })
-		.output(z.object({
-			ok: z.boolean(),
-			timestamp: z.number(),
-		}))
-		.errors(CommonPluginErrors),
-});
 
 // Create the test plugin
 export const TestPlugin = createPlugin({
@@ -151,10 +33,7 @@ export const TestPlugin = createPlugin({
 		Effect.gen(function* () {
 			// Business logic validation - config structure is guaranteed by schema
 			if (config.secrets.apiKey === "invalid-key") {
-				yield* Effect.fail(new PluginConfigurationError({
-					message: "Invalid API key format",
-					retryable: false
-				}));
+				yield* Effect.fail(new Error("Invalid API key format"));
 			}
 
 			// Initialize client
@@ -220,7 +99,6 @@ export const TestPlugin = createPlugin({
 		}),
 	createRouter: (context, builder) => {
 		const { client, publisher } = context;
-
 
 		return {
 			getById: builder.getById.handler(async ({ input }) => {
@@ -310,8 +188,6 @@ export const TestPlugin = createPlugin({
 				await publisher.publish('background-updates', event);
 				return { ok: true };
 			}),
-
-
 
 			ping: builder.ping.handler(async () => {
 				return { ok: true, timestamp: Date.now() };

@@ -1,11 +1,62 @@
-import { Data } from "effect";
+import { z } from "./zod";
 
-// TODO: We still need this?
-
-export class PluginConfigurationError extends Data.TaggedError("PluginConfigurationError")<{
-	readonly message: string;
-	readonly retryable: boolean;
-	readonly cause?: Error;
-}> {
-	override get name() { return "PluginConfigurationError"; }
-}
+/**
+ * Common error schemas for plugin contracts.
+ * Import these to ensure consistent error handling across plugins.
+ *
+ * @example
+ * ```typescript
+ * import { CommonPluginErrors } from "every-plugin/errors";
+ *
+ * export const contract = oc.router({
+ *   getData: oc.route(...)
+ *     .errors(CommonPluginErrors)
+ * });
+ * ```
+ */
+export const CommonPluginErrors = {
+	UNAUTHORIZED: {
+		data: z.object({
+			apiKeyProvided: z.boolean(),
+			provider: z.string().optional(),
+			authType: z.enum(['apiKey', 'oauth', 'token']).optional(),
+		})
+	},
+	RATE_LIMITED: {
+		data: z.object({
+			retryAfter: z.number().int().min(1),
+			remainingRequests: z.number().int().min(0).optional(),
+			resetTime: z.string().datetime().optional(),
+			limitType: z.enum(['requests', 'tokens', 'bandwidth']).optional(),
+		})
+	},
+	SERVICE_UNAVAILABLE: {
+		data: z.object({
+			retryAfter: z.number().int().optional(),
+			maintenanceWindow: z.boolean().default(false),
+			estimatedUptime: z.string().datetime().optional(),
+		})
+	},
+	BAD_REQUEST: {
+		data: z.object({
+			invalidFields: z.array(z.string()).optional(),
+			validationErrors: z.array(z.object({
+				field: z.string(),
+				message: z.string(),
+				code: z.string().optional(),
+			})).optional(),
+		})
+	},
+	NOT_FOUND: {
+		data: z.object({
+			resource: z.string().optional(),
+			resourceId: z.string().optional(),
+		})
+	},
+	FORBIDDEN: {
+		data: z.object({
+			requiredPermissions: z.array(z.string()).optional(),
+			action: z.string().optional(),
+		})
+	}
+} as const;

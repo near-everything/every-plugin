@@ -122,23 +122,18 @@ describe("Plugin Router Access Methods", () => {
   });
 
   it("should work via OpenAPI HTTP", { timeout: 10000 }, async () => {
-    const getByIdResponse = await fetch(`${baseUrl}/api/getById`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: "http-test-123" })
+    const getByIdResponse = await fetch(`${baseUrl}/api/items/http-test-123`, {
+      method: 'GET'
     });
 
     const getByIdResult = await getByIdResponse.json() as { item: { externalId: string; content: string } };
-
 
     expect(getByIdResult).toHaveProperty('item');
     expect(getByIdResult.item).toHaveProperty('externalId', 'http-test-123');
     expect(getByIdResult.item.content).toContain('single content for http-test-123');
 
-    const getBulkResponse = await fetch(`${baseUrl}/api/getBulk`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: ["http-bulk1", "http-bulk2"] })
+    const getBulkResponse = await fetch(`${baseUrl}/api/items?ids=http-bulk1&ids=http-bulk2`, {
+      method: 'GET'
     });
 
     const getBulkResult = await getBulkResponse.json() as { items: { externalId: string; }[] };

@@ -23,6 +23,37 @@ export interface RegisteredPlugins { }
 export type AnyPlugin = Plugin<AnyContractRouter, AnySchema, AnySchema, any>;
 
 /**
+* Extract contract type from plugin binding
+*/
+export type PluginContract<T> = T extends { binding: { contract: infer C extends AnyContractRouter } } ? C : never;
+
+/**
+ * Extract variables type from plugin binding
+ */
+export type PluginVariables<T> = T extends { binding: { variables: infer V extends AnySchema } } ? V : never;
+
+/**
+ * Extract secrets type from plugin binding
+ */
+export type PluginSecrets<T> = T extends { binding: { secrets: infer S extends AnySchema } } ? S : never;
+
+/**
+ * Extract context type from plugin binding
+ */
+export type PluginContext<T> = T extends { binding: { context: infer C extends Context } } ? C : never;
+
+/**
+ * Extract router type from plugin binding
+ * Uses 'any' for context to support nested router compositions
+ */
+export type PluginRouterType<T> = Router<PluginContract<T>, any>;
+
+/**
+ * Extract client type from plugin binding
+ */
+export type PluginClientType<T> = RouterClient<PluginRouterType<T>>;
+
+/**
  * Extract plugin type from registered plugins by key
  */
 export type RegisteredPlugin<K extends keyof RegisteredPlugins> =
@@ -36,22 +67,6 @@ export type RegisteredPlugin<K extends keyof RegisteredPlugins> =
   ? Plugin<C, V, S, TContext>
   : never
   : never;
-
-
-/**
- * Extract router type from plugin binding
- */
-export type PluginRouterType<T> = Router<PluginContract<T>, PluginContext<T>>;
-
-/**
- * Extract client type from plugin binding
- */
-export type PluginClientType<T> = RouterClient<Router<PluginContract<T>, PluginContext<T>>>;
-
-export type PluginContract<T> = T extends { binding: { contract: infer C extends AnyContractRouter } } ? C : never;
-export type PluginVariables<T> = T extends { binding: { variables: infer V extends AnySchema } } ? V : never;
-export type PluginSecrets<T> = T extends { binding: { secrets: infer S extends AnySchema } } ? S : never;
-export type PluginContext<T> = T extends { binding: { context: infer C extends Context } } ? C : never;
 
 /**
  * Extract config input type from plugin binding
@@ -137,9 +152,9 @@ type VerifyPluginBinding<K extends keyof RegisteredPlugins> =
   : `❌ Plugin "${K & string}" is not properly registered. Ensure it extends plugin binding layout { contract, variables, secrets, context }.`
   : `❌ Plugin "${K & string}" is not properly registered. Missing binding property.`;
 
-  /**
- * Result of runtime.usePlugin() call
- */
+/**
+* Result of runtime.usePlugin() call
+*/
 export type UsePluginResult<K extends keyof RegisteredPlugins> = VerifyPluginBinding<K> extends true
   ? {
     readonly client: PluginClientType<RegisteredPlugins[K]>;

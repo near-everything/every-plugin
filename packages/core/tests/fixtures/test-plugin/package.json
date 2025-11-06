@@ -11,14 +11,12 @@
 		"typescript": "^5.6.0"
 	},
 	"devDependencies": {
-		"@module-federation/enhanced": "^0.18.3",
-		"@module-federation/node": "^2.7.15",
-		"@module-federation/runtime-core": "^0.18.3",
 		"@rspack/cli": "latest",
 		"@rspack/core": "latest",
 		"@types/node": "^20.0.0",
 		"typescript": "^5.6.0",
-		"every-plugin": "workspace:*"
+		"every-plugin": "workspace:*",
+		"zephyr-rspack-plugin": "^0.0.59"
 	},
 	"scripts": {
 		"build": "rspack build && tsc",

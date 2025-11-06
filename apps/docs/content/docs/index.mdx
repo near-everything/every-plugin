@@ -190,7 +190,14 @@ plugins/your-plugin/
 │   ├── contract.ts    # oRPC contract (API definition)
 │   ├── service.ts     # Plain class wrapping external API
 │   └── index.ts       # Plugin implementation
+├── rspack.config.cjs  # Build config (uses EveryPluginDevServer)
+└── plugin.dev.ts      # Dev server configuration
 ```
+
+<Callout type="info">
+Build configuration is streamlined with `EveryPluginDevServer` which automatically handles Module Federation, shared dependencies, and TypeScript compilation. See [Creating Plugins](/docs/creating-plugins) for details.
+</Callout>
+
 <Accordions>
 <Accordion title="See Example Structure">
 

@@ -273,6 +273,76 @@ export default createPlugin({
 });
 ```
 
+## Build Configuration
+
+The template uses `EveryPluginDevServer` for automatic build configuration. This handles Module Federation, dev server setup, and shared dependencies automatically.
+
+### Development Server
+
+Start the dev server for local testing:
+
+```bash
+bun run dev
+```
+
+This loads your `plugin.dev.ts` configuration and starts a dev server at `http://localhost:3014` with hot reload.
+
+### Configuration Files
+
+**rspack.config.cjs:**
+```javascript
+const { EveryPluginDevServer } = require('every-plugin/build/rspack');
+const { withZephyr } = require('zephyr-rspack-plugin');
+
+module.exports = withZephyr({
+  hooks: {
+    onDeployComplete: (info) => {
+      console.log('🚀 Deployed:', info.url);
+    },
+  },
+})({
+  plugins: [new EveryPluginDevServer()]
+});
+```
+
+**plugin.dev.ts:**
+```typescript
+import type { PluginConfigInput } from 'every-plugin';
+import type { MyPlugin } from './src/index';
+
+export default {
+  port: 3014,
+  config: {
+    variables: { baseUrl: "https://api.example.com", timeout: 30000 },
+    secrets: { apiKey: process.env.API_KEY || "dev-key" }
+  } satisfies PluginConfigInput<typeof MyPlugin>
+}
+```
+
+The dev server automatically configures:
+- Module Federation with shared dependencies (effect, zod, orpc)
+- Hot module reloading
+- CORS headers for remote access
+- TypeScript compilation via SWC
+- Source maps for debugging
+
+<Callout type="info">
+`EveryPluginDevServer` handles all rspack configuration automatically. You don't need to manually configure Module Federation, shared dependencies, or build settings.
+</Callout>
+
+### Interactive API Dashboard
+
+When running `bun run dev`, visit `http://localhost:3014/api` to access the **Scalar API dashboard**. This provides:
+
+- 🔍 **Browse all procedures** - See your entire API surface in a beautiful interactive UI
+- 🧪 **Test endpoints** - Make requests directly from the browser with live responses
+- 📋 **View schemas** - Inspect input/output types and validation rules
+- 📖 **Auto-generated** - Derived from your oRPC contract (better docs = better contract documentation)
+
+The dashboard uses OpenAPI/Scalar and automatically includes all routes, descriptions, and tags from your contract definitions. This makes development and debugging easier without requiring external tools like Postman or curl.
+
+See [Deployment](/docs/creating-plugins/deployment) for production builds.
+
 ## Key Principles
 
 ### Import Through every-plugin
