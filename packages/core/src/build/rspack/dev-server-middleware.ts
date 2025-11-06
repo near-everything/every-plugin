@@ -22,10 +22,9 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
         }
       });
 
-      // @ts-expect-error pluginId not in usePlugin
       const loaded = await runtime.usePlugin(pluginId, devConfig?.config);
 
-      // Create RPC handler with error logging
+      // @ts-expect-error no type
       handlers.rpc = new RPCHandler(loaded.router, {
         interceptors: [
           onError((error: any) => {
@@ -35,6 +34,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       });
 
       // Create OpenAPI handler for documentation
+      // @ts-expect-error no type
       handlers.api = new OpenAPIHandler(loaded.router, {
         plugins: [
           new OpenAPIReferencePlugin({

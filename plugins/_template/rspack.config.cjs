@@ -1,4 +1,4 @@
-const { EveryPluginDevServer } = require('@every-plugin/rspack-plugin');
+const { EveryPluginDevServer } = require('every-plugin/build/rspack');
 const { withZephyr } = require('zephyr-rspack-plugin');
 
 module.exports = withZephyr({

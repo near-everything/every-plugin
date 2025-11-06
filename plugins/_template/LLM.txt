@@ -582,6 +582,234 @@ const stream = builder.stream.handler(async function* ({ input }) => {
 });
 ```
 
+## Build Process with EveryPluginDevServer
+
+The template includes `EveryPluginDevServer` from `every-plugin/build/rspack` which **automatically handles all rspack configuration**. This is the **recommended and current standard** for building plugins.
+
+### What EveryPluginDevServer Provides
+
+The `EveryPluginDevServer` class automatically configures:
+
+1. **Module Federation** - Exposes your plugin as a remote module with optimized shared dependencies
+2. **Dev Server** - Hot reload, CORS headers, and middleware for interactive testing
+3. **TypeScript Compilation** - Automatic SWC loader for fast TypeScript builds
+4. **Build Output** - Optimized production bundles with source maps
+5. **Runtime Testing** - Loads `plugin.dev.ts` for local development with real configuration
+
+### Configuration Files
+
+The template includes these files for the build process:
+
+**rspack.config.cjs:**
+```javascript
+const { EveryPluginDevServer } = require('every-plugin/build/rspack');
+const { withZephyr } = require('zephyr-rspack-plugin');
+
+module.exports = withZephyr({
+  hooks: {
+    onDeployComplete: (info) => {
+      console.log('🚀 Deployment Complete!');
+      console.log(`   URL: ${info.url}`);
+      console.log(`   Module: ${info.snapshot.uid.app_name}`);
+      console.log(`   Build ID: ${info.snapshot.uid.build}`);
+    },
+  },
+})({
+  plugins: [new EveryPluginDevServer()],
+});
+```
+
+**plugin.dev.ts:**
+```typescript
+import type { PluginConfigInput } from 'every-plugin';
+import type { TemplatePlugin } from './src/index';
+
+export default {
+  port: 3014,  // Dev server port
+  config: {
+    variables: {
+      baseUrl: "https://api.example.com",
+      timeout: 10000,
+      backgroundEnabled: false,
+    },
+    secrets: {
+      apiKey: process.env.TEMPLATE_PLUGIN_API_KEY || "dev-key-12345"
+    }
+  } satisfies PluginConfigInput<typeof TemplatePlugin>
+}
+```
+
+**package.json scripts:**
+```json
+{
+  "scripts": {
+    "build": "rspack build",
+    "dev": "rspack serve",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  }
+}
+```
+
+### Development Workflow
+
+**Start the dev server:**
+```bash
+npm run dev         # Starts at http://localhost:3014
+```
+
+The dev server automatically:
+- Loads your `plugin.dev.ts` configuration
+- Mounts your plugin with the test config
+- Provides hot module reloading
+- Enables interactive testing via HTTP
+- Configures CORS headers for remote access
+
+**Build for production:**
+```bash
+npm run build       # Creates dist/remoteEntry.js
+```
+
+Generates optimized production bundle:
+- `dist/remoteEntry.js` - Module Federation entry point
+- `dist/*.js` - Code-split chunks
+- `dist/**/*.js.map` - Source maps for debugging
+
+### EveryPluginDevServer Options
+
+You can customize the plugin with options:
+
+```javascript
+new EveryPluginDevServer({
+  devConfigPath: './plugin.dev.ts',  // Path to dev config (default)
+  port: 3014,                        // Override port from plugin.dev.ts
+  pluginId: 'custom-id'              // Override auto-detected plugin name
+})
+```
+
+### What Gets Auto-Configured
+
+With `EveryPluginDevServer`, you **don't need to manually configure**:
+
+- ❌ Module Federation settings (name, filename, exposes, shared)
+- ❌ Shared dependencies (effect, zod, @orpc/contract, @orpc/server)
+- ❌ Output paths and filenames
+- ❌ Dev server CORS headers
+- ❌ TypeScript/SWC loader
+- ❌ Build target (async-node)
+- ❌ Infrastructure logging levels
+
+All of this is handled automatically by analyzing your `package.json` and project structure.
+
+### How It Works
+
+`EveryPluginDevServer` reads your `package.json` to:
+
+1. Extract plugin name and normalize it for Module Federation
+2. Determine shared dependencies and versions from `every-plugin`'s dependencies
+3. Configure Module Federation with singleton shared modules
+4. Set up dev server with proper CORS and middleware
+5. Load `plugin.dev.ts` to mount your plugin for testing
+
+The plugin uses these core utilities:
+- `getPluginInfo()` - Extracts name, version, dependencies from package.json
+- `loadDevConfig()` - Dynamically loads plugin.dev.ts configuration
+- `buildSharedDependencies()` - Configures shared modules from every-plugin versions
+- `setupPluginMiddleware()` - Adds dev server middleware for testing
+
+### Testing Your Plugin Locally
+
+The dev server mounts your plugin for interactive testing:
+
+```bash
+# Start dev server
+npm run dev
+
+# In another terminal, test your plugin
+curl http://localhost:3014/api/ping
+
+# Or use the browser
+open http://localhost:3014
+```
+
+### Interactive API Documentation
+
+The dev server provides a **Scalar API dashboard** at `http://localhost:3014/api` with:
+
+- **Interactive exploration** - Browse all your plugin's procedures in a beautiful UI
+- **Live testing** - Test endpoints directly in the browser with real requests
+- **Auto-generated docs** - Derived automatically from your oRPC contract definitions
+- **Schema visualization** - See input/output types, validation rules, and examples
+- **Request/response inspector** - View full HTTP details for debugging
+
+The dashboard is generated using `OpenAPIReferencePlugin` and automatically includes all routes, schemas, and descriptions from your contract. This means the better you document your contract (summaries, descriptions, tags), the better your API docs will be.
+
+**Key endpoints provided by dev server:**
+- `http://localhost:3014/` - Health check (JSON status)
+- `http://localhost:3014/api` - Scalar API dashboard (interactive docs)
+- `http://localhost:3014/api/rpc` - RPC endpoint for procedure calls
+
+The Scalar dashboard makes it easy to test and debug your plugin during development without needing external tools like Postman or curl.
+
+### Migrating from Manual Configuration
+
+**❌ OLD (Manual rspack configuration - Now Outdated):**
+
+```javascript
+const rspack = require('@rspack/core');
+
+module.exports = {
+  plugins: [
+    new rspack.container.ModuleFederationPlugin({
+      name: 'myPlugin',
+      filename: 'remoteEntry.js',
+      exposes: {
+        './plugin': './src/index.ts',
+      },
+      shared: {
+        'effect': { singleton: true, requiredVersion: '^3.10.0' },
+        'zod': { singleton: true, requiredVersion: '^3.23.0' },
+        // ... manually configure all shared deps
+      },
+    }),
+  ],
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: '[name].js',
+    library: { type: 'commonjs-module' },
+    // ... more manual config
+  },
+  // ... hundreds of lines of configuration
+};
+```
+
+**✅ NEW (Automatic with EveryPluginDevServer - Current Standard):**
+
+```javascript
+const { EveryPluginDevServer } = require('every-plugin/build/rspack');
+
+module.exports = {
+  plugins: [new EveryPluginDevServer()]
+};
+```
+
+That's it! Everything is configured automatically.
+
+### Deployment with Zephyr
+
+The template includes Zephyr integration for automatic CDN deployment:
+
+```bash
+npm run build       # Builds and deploys to Zephyr CDN
+```
+
+The `withZephyr()` wrapper in `rspack.config.cjs` handles:
+- Building your plugin
+- Uploading to Zephyr CDN
+- Generating versioned URLs
+- Providing deployment callbacks
+
+**Note:** All manual rspack configuration patterns are now considered **outdated**. Always use `EveryPluginDevServer` for new plugins and consider migrating existing plugins to use it.
+
 ## Best Practices
 
 ### Type Safety

@@ -20,8 +20,7 @@
 		"sirv": "^3.0.2",
 		"vite-tsconfig-paths": "^5.1.4",
 		"vitest": "^3.2.4",
-		"zephyr-rspack-plugin": "^0.0.59",
-		"@every-plugin/rspack-plugin": "workspace:*"
+		"zephyr-rspack-plugin": "^0.0.59"
 	},
 	"scripts": {
 		"build": "rspack build",

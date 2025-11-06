@@ -1,5 +1,19 @@
-const { EveryPluginDevServer } = require('@every-plugin/rspack-plugin');
+const { EveryPluginDevServer } = require('every-plugin/build/rspack');
+const { withZephyr } = require('zephyr-rspack-plugin');
 
-module.exports = {
-  plugins: [new EveryPluginDevServer()],
-};
+module.exports = withZephyr({ // TODO: auto-auth with near login
+  hooks: {
+    onDeployComplete: (info) => { // TODO: write test that this fires
+
+      console.log('🚀 Deployment Complete!');
+      console.log(`   URL: ${info.url}`); // remote URL
+      console.log(`   Module: ${info.snapshot.uid.app_name}`);
+      console.log(`   Build ID: ${info.snapshot.uid.build}`);
+      console.log(`   Dependencies: ${info.federatedDependencies.length}`);
+      console.log(`   Git: ${info.snapshot.git.branch}@${info.snapshot.git.commit}`);
+      console.log(`   CI: ${info.buildStats.context.isCI ? 'Yes' : 'No'}`);
+    },
+  },
+})({
+  plugins: [new EveryPluginDevServer()], // TODO: write test that this works
+});
