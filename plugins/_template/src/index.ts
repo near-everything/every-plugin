@@ -22,7 +22,7 @@ type BackgroundEvents = {
  * - Implement single fetch and streaming procedures
  * - Handle errors with CommonPluginErrors
  */
-export const TemplatePlugin = createPlugin({
+export default createPlugin({
   variables: z.object({
     baseUrl: z.url().default("https://api.example.com"),
     timeout: z.number().min(1000).max(60000).default(10000),

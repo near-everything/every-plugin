@@ -1,17 +1,15 @@
 import type { PluginConfigInput } from 'every-plugin';
-import type { TemplatePlugin } from './src/index';
+import type Plugin from './src/index';
 
 export default {
   port: 3014,
   config: {
     variables: {
       baseUrl: "https://api.example.com",
-      timeout: 10000,
-      backgroundEnabled: false,
-      backgroundIntervalMs: 30000,
+      timeout: 10000
     },
     secrets: {
       apiKey: process.env.TEMPLATE_PLUGIN_API_KEY || "dev-key-12345"
     }
-  } satisfies PluginConfigInput<typeof TemplatePlugin>
+  } satisfies PluginConfigInput<typeof Plugin>
 }

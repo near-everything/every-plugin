@@ -1,7 +1,7 @@
 import type { PluginRegistry } from "every-plugin";
 import { createLocalPluginRuntime } from "every-plugin/testing";
 import { beforeAll, describe, expect, it } from "vitest";
-import { TemplatePlugin } from "@/index";
+import Plugin from "@/index";
 
 const TEST_REGISTRY: PluginRegistry = {
   "@every-plugin/template": {
@@ -12,7 +12,7 @@ const TEST_REGISTRY: PluginRegistry = {
 };
 
 const TEST_PLUGIN_MAP = {
-  "@every-plugin/template": TemplatePlugin,
+  "@every-plugin/template": Plugin,
 } as const;
 
 const TEST_CONFIG = {
@@ -82,8 +82,8 @@ describe("Template Plugin Integration Tests", () => {
         },
         score: 1,
       });
-      expect(results[1].score).toBe(0.9);
-      expect(results[2].score).toBe(0.8);
+      expect(results[1]?.score).toBe(0.9);
+      expect(results[2]?.score).toBe(0.8);
     });
 
     it("should respect limit parameter", async () => {
