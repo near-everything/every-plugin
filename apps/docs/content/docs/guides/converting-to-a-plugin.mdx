@@ -1,0 +1,675 @@
+---
+title: Converting to a Plugin
+description: Transform existing services into composable, runtime-configurable plugins
+---
+
+This guide walks you through converting existing services, API wrappers, or backend components into every-plugin plugins. You'll learn when to convert, how to structure the conversion, and best practices for the transformation.
+
+## Why Convert to Plugins?
+
+every-plugin is ideal for building **composable backends** with **runtime configuration** and **type-safe RPC specifications**:
+
+- **Composable Architecture** - Turn monolithic services into modular, swappable components
+- **Runtime Configuration** - Change behavior without rebuilds (switch API keys, URLs, feature flags)
+- **Module Federation** - No npm dependency hell, shared dependencies managed automatically
+- **Type-Safe RPC** - oRPC contracts define exact API shapes with auto-generated documentation
+- **Independent Deployment** - Update one plugin without rebuilding consumers
+
+## Should You Convert?
+
+### ✅ Good Candidates
+
+- **API Wrappers** - You repeatedly call external REST/GraphQL APIs
+- **Backend Services** - Modular services in your backend (auth, payments, notifications)
+- **Third-Party Integrations** - Connections to external platforms (chat, storage, analytics)
+- **Data Sources** - Database clients, cache layers, file storage adapters
+- **Background Workers** - Job processors, schedulers, pollers, queue consumers
+
+### ❌ Keep as Libraries
+
+- **Pure Computation** - Math utilities, data transformations with no I/O
+- **No External Dependencies** - Simple helper functions
+- **File System Operations** - Direct file access (security concerns with Module Federation)
+- **Native Bindings** - Code requiring native modules
+
+## Conversion Workflow
+
+Follow these six phases to convert your existing code into a plugin:
+
+### Phase 1: API Analysis
+
+**Goal:** Document what your service does and what it needs.
+
+<Steps>
+
+### Map Methods to Procedures
+
+List all public methods you want to expose:
+
+```typescript
+// Existing service methods
+class ExistingService {
+  getById(id: string): Promise<Item>
+  search(query: string, limit: number): Promise<Item[]>
+  create(data: CreateData): Promise<Item>
+  update(id: string, data: UpdateData): Promise<Item>
+}
+
+// → Will become plugin procedures:
+// - getById
+// - search  
+// - create
+// - update
+```
+
+### Identify Configuration
+
+Separate **secrets** (sensitive) from **variables** (non-sensitive):
+
+**Secrets:**
+- API keys
+- Access tokens
+- Database passwords
+- Webhook secrets
+
+**Variables:**
+- Base URLs
+- Timeouts
+- Feature flags
+- Retry limits
+
+### Document Types
+
+List your input/output data structures - these become Zod schemas.
+
+</Steps>
+
+### Phase 2: Contract Design
+
+**Goal:** Define type-safe procedures with oRPC.
+
+Create `src/contract.ts` to define your plugin's API:
+
+```typescript
+import { oc } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+import { CommonPluginErrors } from "every-plugin";
+
+// Define your data schemas
+export const ItemSchema = z.object({
+  id: z.string().describe("Unique identifier"),
+  name: z.string().describe("Item name"),
+  createdAt: z.string().datetime().describe("Creation timestamp"),
+  metadata: z.record(z.unknown()).optional().describe("Additional data")
+});
+
+// Define procedures
+export const contract = oc.router({
+  // Single item fetch
+  getById: oc.route({ method: 'GET', path: '/items/{id}' })
+    .input(z.object({ 
+      id: z.string().describe("Item ID to fetch") 
+    }))
+    .output(z.object({ 
+      item: ItemSchema.optional() 
+    }))
+    .errors(CommonPluginErrors),
+  
+  // Search with filters
+  search: oc.route({ method: 'POST', path: '/search' })
+    .input(z.object({
+      query: z.string().min(1).describe("Search query"),
+      limit: z.number().min(1).max(100).default(10).describe("Max results")
+    }))
+    .output(z.object({
+      items: z.array(ItemSchema),
+      total: z.number(),
+      hasMore: z.boolean()
+    }))
+    .errors(CommonPluginErrors),
+  
+  // Create new item
+  create: oc.route({ method: 'POST', path: '/items' })
+    .input(z.object({
+      name: z.string().min(1),
+      metadata: z.record(z.unknown()).optional()
+    }))
+    .output(z.object({ 
+      item: ItemSchema 
+    }))
+    .errors(CommonPluginErrors)
+});
+```
+
+<Callout type="info">
+Use `.describe()` on all fields - this generates better documentation in the Scalar API dashboard.
+</Callout>
+
+### Phase 3: Service Extraction
+
+**Goal:** Wrap your existing logic in a plain class with Effect error handling.
+
+Create `src/service.ts` to encapsulate business logic:
+
+```typescript
+import { Effect } from "every-plugin/effect";
+
+export class MyService {
+  constructor(
+    private readonly apiKey: string,
+    private readonly baseUrl: string,
+    private readonly timeout: number
+  ) {}
+  
+  getById(id: string) {
+    return Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(
+          `${this.baseUrl}/items/${id}`,
+          {
+            headers: { 
+              'Authorization': `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            signal: AbortSignal.timeout(this.timeout)
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return await response.json();
+      },
+      catch: (error: unknown) => {
+        return new Error(
+          `Failed to fetch item: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    });
+  }
+  
+  search(query: string, limit: number) {
+    return Effect.tryPromise({
+      try: async () => {
+        const params = new URLSearchParams({ 
+          q: query, 
+          limit: limit.toString() 
+        });
+        
+        const response = await fetch(
+          `${this.baseUrl}/search?${params}`,
+          {
+            headers: { 'Authorization': `Bearer ${this.apiKey}` },
+            signal: AbortSignal.timeout(this.timeout)
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        return await response.json();
+      },
+      catch: (error: unknown) => {
+        return new Error(`Search failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
+  }
+  
+  create(data: { name: string; metadata?: Record<string, unknown> }) {
+    return Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(
+          `${this.baseUrl}/items`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data),
+            signal: AbortSignal.timeout(this.timeout)
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        return await response.json();
+      },
+      catch: (error: unknown) => {
+        return new Error(`Create failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
+  }
+}
+```
+
+<Callout>
+Keep business logic in the service class. Handlers should be thin wrappers that call service methods.
+</Callout>
+
+### Phase 4: Plugin Implementation
+
+**Goal:** Wire contract and service together with `createPlugin`.
+
+Create `src/index.ts` for the plugin implementation:
+
+```typescript
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import { z } from "every-plugin/zod";
+import { contract } from "./contract";
+import { MyService } from "./service";
+
+export default createPlugin({
+  contract,
+  
+  // Configuration schemas
+  variables: z.object({
+    baseUrl: z.string().url().describe("API base URL"),
+    timeout: z.number().default(10000).describe("Request timeout in ms")
+  }),
+  
+  secrets: z.object({
+    apiKey: z.string().min(1).describe("API authentication key")
+  }),
+  
+  // Initialize service with config
+  initialize: (config) => Effect.gen(function* () {
+    const service = new MyService(
+      config.secrets.apiKey,
+      config.variables.baseUrl,
+      config.variables.timeout
+    );
+    
+    // Test connection
+    yield* Effect.tryPromise({
+      try: () => fetch(`${config.variables.baseUrl}/health`),
+      catch: () => new Error("Connection test failed")
+    });
+    
+    return { service };
+  }),
+  
+  // Create router with handlers
+  createRouter: (context, builder) => ({
+    getById: builder.getById.handler(async ({ input, errors }) => {
+      try {
+        const item = await Effect.runPromise(
+          context.service.getById(input.id)
+        );
+        return { item };
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('404')) {
+          return { item: undefined };
+        }
+        throw errors.SERVICE_UNAVAILABLE({
+          message: "Failed to fetch item",
+          data: { retryAfter: 30 }
+        });
+      }
+    }),
+    
+    search: builder.search.handler(async ({ input, errors }) => {
+      try {
+        const result = await Effect.runPromise(
+          context.service.search(input.query, input.limit)
+        );
+        return {
+          items: result.items,
+          total: result.total,
+          hasMore: result.hasMore
+        };
+      } catch (error) {
+        throw errors.SERVICE_UNAVAILABLE({
+          message: "Search failed",
+          data: { retryAfter: 30 }
+        });
+      }
+    }),
+    
+    create: builder.create.handler(async ({ input, errors }) => {
+      try {
+        const item = await Effect.runPromise(
+          context.service.create(input)
+        );
+        return { item };
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('401')) {
+          throw errors.UNAUTHORIZED({
+            message: "Invalid API key",
+            data: { apiKeyProvided: true, authType: 'apiKey' as const }
+          });
+        }
+        throw errors.SERVICE_UNAVAILABLE({
+          message: "Create failed",
+          data: { retryAfter: 10 }
+        });
+      }
+    })
+  })
+});
+```
+
+### Phase 5: Local Testing
+
+**Goal:** Verify your plugin works correctly.
+
+<Steps>
+
+### Start Dev Server
+
+```bash
+npm run dev
+```
+
+This starts a dev server at `http://localhost:3014` with hot reload.
+
+### Test with Scalar Dashboard
+
+Visit `http://localhost:3014/api` to access the interactive API dashboard:
+
+- Browse all procedures
+- Test endpoints with live requests
+- View input/output schemas
+- Check error responses
+
+### Verify Functionality
+
+Test each procedure:
+- Happy path (valid inputs)
+- Error cases (invalid inputs, auth failures)
+- Edge cases (empty results, rate limits)
+
+</Steps>
+
+### Phase 6: Deploy
+
+**Goal:** Make your plugin available for remote use.
+
+<Steps>
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+This generates `dist/remoteEntry.js` and supporting files.
+
+### Deploy to CDN
+
+Upload the `dist/` directory to your hosting service:
+- Zephyr Cloud (recommended - automatic with build)
+- Netlify, Vercel, Cloudflare Pages
+- AWS S3 + CloudFront
+- Any static file hosting
+
+### Update Registry
+
+Add your plugin to the runtime registry:
+
+```typescript
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      remoteUrl: "https://cdn.example.com/plugins/my-plugin/v1/remoteEntry.js",
+      version: "1.0.0"
+    }
+  },
+  secrets: {
+    API_KEY: process.env.API_KEY
+  }
+});
+
+const { client } = await runtime.usePlugin("my-plugin", {
+  secrets: { apiKey: "{{API_KEY}}" },
+  variables: { 
+    baseUrl: "https://api.example.com",
+    timeout: 30000
+  }
+});
+```
+
+</Steps>
+
+## Common Conversion Patterns
+
+### REST API → Plugin
+
+Map HTTP endpoints to procedures:
+
+```typescript
+// Before: Direct fetch calls
+fetch('/api/users/123')
+fetch('/api/users/search?q=john')
+fetch('/api/users', { method: 'POST', body: ... })
+
+// After: Plugin procedures
+client.getUser({ id: '123' })
+client.searchUsers({ query: 'john' })
+client.createUser({ name: 'John' })
+```
+
+**Benefits:**
+- Type safety on inputs/outputs
+- Automatic retry and error handling
+- Runtime configuration (dev vs prod URLs)
+- Auto-generated API docs
+
+### Background Worker → Plugin
+
+Add procedures for control and monitoring:
+
+```typescript
+initialize: (config) => Effect.gen(function* () {
+  const stats = { processed: 0, failed: 0 };
+  
+  // Background processing
+  yield* Effect.forkScoped(
+    Effect.gen(function* () {
+      while (true) {
+        const task = yield* fetchNextTask();
+        try {
+          yield* processTask(task);
+          stats.processed++;
+        } catch {
+          stats.failed++;
+        }
+        yield* Effect.sleep("5 seconds");
+      }
+    })
+  );
+  
+  return { stats };
+}),
+
+createRouter: (context, builder) => ({
+  getStats: builder.getStats.handler(async () => {
+    return context.stats;
+  }),
+  
+  // Control procedures...
+})
+```
+
+### Monolith → Multiple Plugins
+
+Extract bounded contexts incrementally:
+
+```typescript
+// Before: Monolithic service
+class AppService {
+  // Auth methods...
+  // Payment methods...
+  // Email methods...
+}
+
+// After: Separate plugins
+// @org/auth-plugin
+// @org/payment-plugin  
+// @org/email-plugin
+
+// Compose at runtime
+const { client: auth } = await runtime.usePlugin("auth", ...);
+const { client: payment } = await runtime.usePlugin("payment", ...);
+const { client: email } = await runtime.usePlugin("email", ...);
+```
+
+## Best Practices
+
+### Contract Design
+
+```typescript
+// ✅ Use descriptive procedure names
+getById: ..., searchUsers: ..., createOrder: ...
+
+// ✅ Add descriptions to all fields
+z.string().describe("User's email address")
+
+// ✅ Group related procedures with tags
+.route({ method: 'POST', path: '/users', tags: ['users'] })
+
+// ✅ Always include CommonPluginErrors
+.errors(CommonPluginErrors)
+
+// ❌ Don't use vague names
+get: ..., do: ..., handle: ...
+```
+
+### Configuration
+
+```typescript
+// ✅ Secrets for sensitive data
+secrets: z.object({
+  apiKey: z.string(),
+  dbPassword: z.string()
+})
+
+// ✅ Variables for non-sensitive config
+variables: z.object({
+  baseUrl: z.string(),
+  timeout: z.number(),
+  enableFeature: z.boolean()
+})
+
+// ✅ Use template injection
+{ secrets: { apiKey: "{{API_KEY}}" } }
+
+// ❌ Don't hardcode secrets
+const apiKey = "sk_live_12345";  // Bad!
+```
+
+### Error Handling
+
+```typescript
+// ✅ Map to CommonPluginErrors
+if (response.status === 401) {
+  throw errors.UNAUTHORIZED({ ... });
+}
+if (response.status === 429) {
+  throw errors.RATE_LIMITED({ ... });
+}
+
+// ✅ Provide retry information
+throw errors.SERVICE_UNAVAILABLE({
+  message: "Service temporarily down",
+  data: { retryAfter: 60 }
+});
+
+// ❌ Don't throw raw errors
+throw new Error("Something broke");  // Not useful!
+
+// ❌ Don't leak sensitive data
+throw new Error(`Failed with key: ${apiKey}`);  // Security issue!
+```
+
+### Resource Management
+
+```typescript
+// ✅ Use Effect.acquireRelease for cleanup
+const queue = yield* Effect.acquireRelease(
+  Queue.bounded(1000),
+  (q) => Queue.shutdown(q)
+);
+
+// ✅ Use Effect.forkScoped for background tasks
+yield* Effect.forkScoped(backgroundWorker);
+
+// ❌ Don't use unscoped resources
+const queue = Queue.bounded(1000);  // Never cleaned up!
+```
+
+## Quick Reference
+
+### File Structure
+
+```
+plugins/my-plugin/
+├── src/
+│   ├── contract.ts    # oRPC API definition
+│   ├── service.ts     # Business logic class
+│   └── index.ts       # Plugin wiring
+├── plugin.dev.ts      # Dev server config
+├── rspack.config.cjs  # Build config (uses EveryPluginDevServer)
+└── package.json
+```
+
+### Essential Commands
+
+```bash
+npm run dev      # Start dev server at http://localhost:3014
+npm run build    # Build for production
+npm run test     # Run tests
+```
+
+### Key Imports
+
+```typescript
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import { oc, eventIterator } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+import { CommonPluginErrors } from "every-plugin";
+```
+
+### Plugin Configuration Template
+
+```typescript
+export default createPlugin({
+  contract,
+  variables: z.object({ /* non-sensitive config */ }),
+  secrets: z.object({ /* sensitive config */ }),
+  
+  initialize: (config) => Effect.gen(function* () {
+    // Setup service, test connection
+    return { /* context */ };
+  }),
+  
+  createRouter: (context, builder) => ({
+    // Implement handlers
+  })
+});
+```
+
+## Next Steps
+
+Now that you understand the conversion process:
+
+<Cards>
+  <Card title="Technical Details" href="/docs/creating-plugins">
+    Deep dive into plugin anatomy and patterns
+  </Card>
+  <Card title="LLM.txt Reference" href="https://github.com/near-everything/every-plugin/blob/main/plugins/_template/LLM.txt">
+    Complete technical reference for plugin development
+  </Card>
+  <Card title="Testing Guide" href="/docs/testing">
+    Learn how to test your converted plugin
+  </Card>
+  <Card title="Recipes" href="/docs/recipes">
+    Advanced patterns for streaming, background tasks, and scaling
+  </Card>
+</Cards>
