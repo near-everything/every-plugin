@@ -146,6 +146,27 @@
         "typescript": "^5.6.0",
       },
     },
+    "plugins/_template": {
+      "name": "@every-plugin/template",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@effect/language-service": "^0.41.1",
+        "@module-federation/node": "^2.7.17",
+        "@rspack/cli": "^1.5.2",
+        "@rspack/core": "^1.5.2",
+        "@types/node": "^24.6.0",
+        "dotenv": "^17.2.2",
+        "every-plugin": "workspace:*",
+        "msw": "^2.3.0",
+        "sirv": "^3.0.2",
+        "vite-tsconfig-paths": "^5.1.4",
+        "vitest": "^3.2.4",
+        "zephyr-rspack-plugin": "^0.0.59",
+      },
+      "peerDependencies": {
+        "typescript": "^5.0.0",
+      },
+    },
     "plugins/gopher-ai": {
       "name": "@curatedotfun/gopher-ai",
       "version": "0.0.1",
@@ -318,6 +339,8 @@
     "@every-plugin/cli": ["@every-plugin/cli@workspace:packages/cli"],
 
     "@every-plugin/registry": ["@every-plugin/registry@workspace:packages/registry"],
+
+    "@every-plugin/template": ["@every-plugin/template@workspace:plugins/_template"],
 
     "@examples/curatedotfun": ["@examples/curatedotfun@workspace:examples/curatedotfun"],
 
