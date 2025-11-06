@@ -1,7 +1,7 @@
 import type { PluginRegistry } from "every-plugin";
 import { createLocalPluginRuntime } from "every-plugin/testing";
 import { beforeAll, describe, expect, it } from "vitest";
-import { GopherAIPlugin } from "@/index";
+import GopherAIPlugin from "@/index";
 
 const TEST_REGISTRY: PluginRegistry = {
   "@curatedotfun/gopher-ai": {

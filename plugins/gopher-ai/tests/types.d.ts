@@ -1,4 +1,4 @@
-import type { GopherAIPlugin } from "@/index";
+import type GopherAIPlugin from "@/index";
 
 declare module "every-plugin" {
   interface RegisteredPlugins {
