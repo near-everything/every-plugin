@@ -1,0 +1,38 @@
+{
+  "name": "@every-plugin/rspack-plugin",
+  "version": "0.1.0",
+  "description": "Rspack plugin for every-plugin development server and Module Federation setup",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/index.d.ts",
+        "require": "./dist/index.d.ts"
+      },
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch"
+  },
+  "dependencies": {
+    "@module-federation/node": "^2.7.15",
+    "@orpc/openapi": "^1.10.4",
+    "@orpc/server": "^1.10.0",
+    "@orpc/zod": "^1.10.4",
+    "every-plugin": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsdown": "^0.5.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@rspack/core": "*",
+    "every-plugin": "*"
+  }
+}

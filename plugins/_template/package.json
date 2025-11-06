@@ -5,10 +5,9 @@
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"type": "module",
-	"peerDependencies": {
-		"every-plugin": "^0.3.0",
-		"typescript": "^5.6.0"
-	},
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
 	"devDependencies": {
 		"@effect/language-service": "^0.41.1",
 		"@module-federation/node": "^2.7.17",
@@ -21,10 +20,11 @@
 		"sirv": "^3.0.2",
 		"vite-tsconfig-paths": "^5.1.4",
 		"vitest": "^3.2.4",
-		"zephyr-rspack-plugin": "link:zephyr-rspack-plugin"
+		"zephyr-rspack-plugin": "^0.0.59",
+		"@every-plugin/rspack-plugin": "workspace:*"
 	},
 	"scripts": {
-		"build": "rspack build && tsc -p tsconfig.build.json",
+		"build": "rspack build",
 		"typecheck": "tsc -p tsconfig.build.json --noEmit",
 		"dev": "rspack serve",
 		"test": "vitest run",

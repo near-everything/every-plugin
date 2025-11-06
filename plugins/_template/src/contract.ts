@@ -1,4 +1,4 @@
-import { CommonPluginErrors } from "every-plugin";
+import { CommonPluginErrors } from "every-plugin/errors";
 import { eventIterator, oc } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 

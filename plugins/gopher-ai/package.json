@@ -11,7 +11,7 @@
 	},
 	"devDependencies": {
 		"@effect/language-service": "^0.41.1",
-		"@module-federation/node": "^2.7.17",
+		"@every-plugin/rspack-plugin": "workspace:*",
 		"@rspack/cli": "^1.5.2",
 		"@rspack/core": "^1.5.2",
 		"@types/node": "^24.6.0",

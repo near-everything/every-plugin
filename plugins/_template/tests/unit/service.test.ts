@@ -47,8 +47,8 @@ describe("TemplateService", () => {
         },
         score: 1,
       });
-      expect(results[1].score).toBe(0.9);
-      expect(results[2].score).toBe(0.8);
+      expect(results[1]?.score).toBe(0.9);
+      expect(results[2]?.score).toBe(0.8);
     });
 
     it("should respect limit parameter", async () => {
