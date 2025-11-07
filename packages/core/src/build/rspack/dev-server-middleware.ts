@@ -12,7 +12,14 @@ const applyCorsHeaders = (res: any) => {
   });
 };
 
+const normalizePrefix = (prefix?: string): string => {
+  if (!prefix) return '';
+  const cleaned = prefix.replace(/^\/+|\/+$/g, '');
+  return cleaned ? `/${cleaned}` : '';
+};
+
 export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, devConfig: any, port: number) {
+  const rpcPrefix = normalizePrefix(devConfig?.prefix);
   let handlers: { rpc: any, api: any } = { rpc: null, api: null };
   let cleanup: (() => Promise<void>) | null = null;
 
@@ -87,7 +94,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       console.log(`╭─────────────────────────────────────────────`);
       console.log(`│  ✅ Plugin dev server ready: `);
       console.log(`├─────────────────────────────────────────────`);
-      console.log(`│  📡 RPC:    http://localhost:${port}/api/rpc`);
+      console.log(`│  📡 RPC:    http://localhost:${port}/api/rpc${rpcPrefix}`);
       console.log(`│  📖 Docs:   http://localhost:${port}/api`);
       console.log(`│  💚 Health: http://localhost:${port}/`);
       console.log(`╰─────────────────────────────────────────────`);
@@ -127,7 +134,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       endpoints: {
         health: '/',
         docs: '/api',
-        rpc: '/api/rpc'
+        rpc: `/api/rpc${rpcPrefix}`
       }
     });
   });
@@ -173,8 +180,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
   devServer.app.all('/api', handleApiRequest);
   devServer.app.all('/api/*', handleApiRequest);
 
-  // RPC calls at /api/rpc/*
-  devServer.app.all('/api/rpc/*', async (req: any, res: any) => {
+  devServer.app.all(`/api/rpc${rpcPrefix}/*`, async (req: any, res: any) => {
     applyCorsHeaders(res);
     const rpcHandler = devServer.app.locals.handlers?.rpc;
     if (!rpcHandler) {
@@ -191,7 +197,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       } as RequestInit);
 
       const result = await rpcHandler.handle(webRequest, {
-        prefix: '/api/rpc',
+        prefix: `/api/rpc${rpcPrefix}`,
         context: {}
       });
 

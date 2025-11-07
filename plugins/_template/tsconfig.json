@@ -14,6 +14,6 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "./plugin.dev.ts"],
   "exclude": ["node_modules", "dist"]
 }

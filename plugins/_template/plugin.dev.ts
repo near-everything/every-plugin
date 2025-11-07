@@ -3,6 +3,7 @@ import type Plugin from './src/index';
 
 export default {
   port: 3014,
+  prefix: '/template',
   config: {
     variables: {
       baseUrl: "https://api.example.com",
