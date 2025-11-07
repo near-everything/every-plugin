@@ -1,5 +1,17 @@
 import type { PluginInfo } from './utils';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+  'Access-Control-Allow-Headers': 'X-Requested-With, content-type, Authorization'
+};
+
+const applyCorsHeaders = (res: any) => {
+  Object.entries(corsHeaders).forEach(([key, value]) => {
+    res.setHeader(key, value);
+  });
+};
+
 export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, devConfig: any, port: number) {
   let handlers: { rpc: any, api: any } = { rpc: null, api: null };
   let cleanup: (() => Promise<void>) | null = null;
@@ -100,8 +112,13 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
     await performCleanup();
   });
 
-  // Root health check
+  devServer.app.options('*', (req: any, res: any) => {
+    applyCorsHeaders(res);
+    res.status(200).end();
+  });
+
   devServer.app.get('/', (req: any, res: any) => {
+    applyCorsHeaders(res);
     res.json({
       ok: true,
       plugin: pluginInfo.normalizedName,
@@ -117,6 +134,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
 
   // OpenAPI documentation and REST endpoints at /api and /api/*
   const handleApiRequest = async (req: any, res: any) => {
+    applyCorsHeaders(res);
     const apiHandler = devServer.app.locals.handlers?.api;
     if (!apiHandler) {
       return res.status(503).json({ error: 'Plugin still loading...' });
@@ -157,6 +175,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
 
   // RPC calls at /api/rpc/*
   devServer.app.all('/api/rpc/*', async (req: any, res: any) => {
+    applyCorsHeaders(res);
     const rpcHandler = devServer.app.locals.handlers?.rpc;
     if (!rpcHandler) {
       return res.status(503).json({ error: 'Plugin still loading...' });
