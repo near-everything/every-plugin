@@ -127,8 +127,9 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       const webRequest = new Request(url, {
         method: req.method,
         headers: req.headers,
-        body: req.method !== 'GET' && req.method !== 'HEAD' ? req : undefined
-      });
+        body: req.method !== 'GET' && req.method !== 'HEAD' ? req : undefined,
+        duplex: req.method !== 'GET' && req.method !== 'HEAD' ? 'half' : undefined
+      } as RequestInit);
 
       const result = await apiHandler.handle(webRequest, {
         prefix: '/api',
@@ -166,8 +167,9 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       const webRequest = new Request(url, {
         method: req.method,
         headers: req.headers,
-        body: req.method !== 'GET' && req.method !== 'HEAD' ? req : undefined
-      });
+        body: req.method !== 'GET' && req.method !== 'HEAD' ? req : undefined,
+        duplex: req.method !== 'GET' && req.method !== 'HEAD' ? 'half' : undefined
+      } as RequestInit);
 
       const result = await rpcHandler.handle(webRequest, {
         prefix: '/api/rpc',

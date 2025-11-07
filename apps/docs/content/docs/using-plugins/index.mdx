@@ -86,6 +86,12 @@ const myPlugin = await runtime.usePlugin("@org/my-plugin", {
 export const plugins = {
   myPlugin
 };
+
+// Remember to shutdown
+if (typeof process !== 'undefined') {
+  process.once('SIGTERM', () => runtime.shutdown().then(() => process.exit(0)));
+  process.once('SIGINT', () => runtime.shutdown().then(() => process.exit(0)));
+}
 ```
 
 **Usage in main.ts:**

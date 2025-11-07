@@ -73,6 +73,12 @@ const dataSource = await runtime.usePlugin("data-source", {
 export const plugins = {
   dataSource
 };
+
+// Remember to shutdown
+if (typeof process !== 'undefined') {
+  process.once('SIGTERM', () => runtime.shutdown().then(() => process.exit(0)));
+  process.once('SIGINT', () => runtime.shutdown().then(() => process.exit(0)));
+}
 ```
 
 **Usage in main.ts:**
@@ -158,6 +164,12 @@ export const runtime = createPluginRuntime({...});
 // Initialize once
 const dataSource = await runtime.usePlugin("data-source", config);
 export const plugins = { dataSource };
+
+// Remember to shutdown
+if (typeof process !== 'undefined') {
+  process.once('SIGTERM', () => runtime.shutdown().then(() => process.exit(0)));
+  process.once('SIGINT', () => runtime.shutdown().then(() => process.exit(0)));
+}
 ```
 
 #### 3. Use Type Inference
