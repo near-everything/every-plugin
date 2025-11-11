@@ -59,7 +59,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 
 					yield* moduleFederationService.registerRemote(pluginId, url).pipe(
 						Effect.mapError((error) =>
-							toPluginRuntimeError(error.cause, pluginId, undefined, "register-remote", true),
+							toPluginRuntimeError(error, pluginId, undefined, "register-remote", true),
 						),
 					);
 
@@ -67,7 +67,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 
 					const ctor = yield* moduleFederationService.loadRemoteConstructor(pluginId, url).pipe(
 						Effect.mapError((error) =>
-							toPluginRuntimeError(error.cause, pluginId, undefined, "load-remote", false),
+							toPluginRuntimeError(error, pluginId, undefined, "load-remote", false),
 						),
 					);
 

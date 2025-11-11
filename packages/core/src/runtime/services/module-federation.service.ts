@@ -92,33 +92,41 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 				Effect.gen(function* () {
 					console.log(`[MF] Registering ${pluginId}`);
 
-					// Check if remote is available
-					const { error } = yield* Effect.tryPromise({
-						try: () => betterFetch(url, { method: "HEAD" }),
-						catch: (error): ModuleFederationError =>
-							new ModuleFederationError({
-								pluginId,
-								remoteUrl: url,
-								cause:
-									error instanceof Error ? error : new Error(String(error)),
-							}),
+					const manifestUrl = url.endsWith('/')
+						? `${url}mf-manifest.json`
+						: `${url}/mf-manifest.json`;
+
+					// Check if manifest is available (MF 2.0 with manifests)
+					const { error: manifestError } = yield* Effect.tryPromise({
+						try: () => betterFetch(manifestUrl, { method: "HEAD" }),
+						catch: (error) => error, // Don't fail yet, try fallback
 					});
 
-					if (error) {
-						console.log(`[MF] ❌ Remote not available for ${pluginId}`);
-						return yield* Effect.fail(
-							new ModuleFederationError({
-								pluginId,
-								remoteUrl: url,
-								cause: new Error(`Remote not available (${url}): ${JSON.stringify(error)}`),
-							}),
-						);
+					let entryUrl: string;
+					let isManifestMode = false;
+
+					if (!manifestError) {
+						// MF 2.0 manifest mode - use manifest URL
+						entryUrl = manifestUrl;
+						isManifestMode = true;
+						console.log(`[MF] Using MF 2.0 manifest mode for ${pluginId}`);
+					} else {
+						// Fallback to MF 1.5 direct mode - assume URL points to remoteEntry.js
+						console.log(`[MF] ⚠️ Manifest not found, falling back to MF 1.5 mode for ${pluginId}`);
+						entryUrl = url;
+						isManifestMode = false;
 					}
 
-					const remoteName = getNormalizedRemoteName(pluginId);
+					// For MF 2.0, the name can be the pluginId (alias)
+					// The manifest will contain the actual container name
+					const remoteName = isManifestMode ? pluginId : getNormalizedRemoteName(pluginId);
 
 					yield* Effect.try({
-						try: () => mf.registerRemotes([{ name: remoteName, entry: url }]),
+						try: () => mf.registerRemotes([{
+							name: remoteName,
+							entry: entryUrl,
+							...(isManifestMode && { alias: pluginId }) // Explicit alias for clarity
+						}]),
 						catch: (error): ModuleFederationError =>
 							new ModuleFederationError({
 								pluginId,
@@ -128,7 +136,7 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 							}),
 					});
 
-					console.log(`[MF] ✅ Registered ${pluginId}`);
+					console.log(`[MF] ✅ Registered ${pluginId} (${isManifestMode ? 'MF 2.0' : 'MF 1.5'})`);
 				}),
 
 			loadRemoteConstructor: (pluginId: string, url: string) =>

@@ -1,10 +1,9 @@
+import { ModuleFederationPlugin } from '@module-federation/enhanced/rspack';
 import type { Compiler, RspackPluginInstance } from '@rspack/core';
-import { rspack } from '@rspack/core';
 import path from 'node:path';
-import { getPluginInfo } from './utils';
-import { loadDevConfig } from './utils';
-import { buildSharedDependencies } from './module-federation';
 import { setupPluginMiddleware } from './dev-server-middleware';
+import { buildSharedDependencies } from './module-federation';
+import { getPluginInfo, loadDevConfig } from './utils';
 
 
 export interface EveryPluginOptions {
@@ -16,7 +15,7 @@ export interface EveryPluginOptions {
 export class EveryPluginDevServer implements RspackPluginInstance {
   name = 'EveryPluginDevServer';
 
-  constructor(private options: EveryPluginOptions = {}) {}
+  constructor(private options: EveryPluginOptions = {}) { }
 
   apply(compiler: Compiler) {
     // Load configuration
@@ -36,9 +35,11 @@ export class EveryPluginDevServer implements RspackPluginInstance {
     this.configureDevServer(compiler, pluginInfo, devConfig, port);
 
     // Apply Module Federation plugin
-    new rspack.container.ModuleFederationPlugin({
+    new ModuleFederationPlugin({
       name: pluginInfo.normalizedName,
       filename: 'remoteEntry.js',
+      manifest: true,  // Enable MF 2.0 manifest generation
+      dts: false,
       runtimePlugins: [
         require.resolve('@module-federation/node/runtimePlugin'),
       ],
@@ -62,15 +63,6 @@ export class EveryPluginDevServer implements RspackPluginInstance {
     compiler.options.output.path = path.resolve(context, 'dist');
     compiler.options.output.clean = true;
     compiler.options.output.library = { type: 'commonjs-module' };
-
-    // Configure entry if not set
-    if (!compiler.options.entry) {
-      compiler.options.entry = {
-        main: {
-          import: ['./src/index']
-        }
-      };
-    }
 
     // Configure target and mode defaults
     if (!compiler.options.target) {
