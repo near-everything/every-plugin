@@ -8,7 +8,7 @@ export function buildSharedDependencies(pluginInfo: PluginInfo) {
     'every-plugin': {
       version: everyPluginPkg.version,
       singleton: true,
-      requiredVersion: `${everyPluginPkg.version}`,
+      requiredVersion: `^${everyPluginPkg.version}`,
       strictVersion: false,
       eager: false,
     },

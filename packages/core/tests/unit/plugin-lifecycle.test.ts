@@ -20,7 +20,7 @@ describe("Plugin Lifecycle Unit Tests", () => {
   const runtime = createLocalPluginRuntime({
     registry: {
       "test-plugin": {
-        remoteUrl: "http://localhost:3999/remoteEntry.js",
+        remoteUrl: "http://localhost:3999",
         version: "0.0.1",
       },
     },

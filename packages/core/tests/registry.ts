@@ -1,4 +1,4 @@
-import { TEST_REMOTE_ENTRY_URL } from "./setup/global-setup";
+import { TEST_REMOTE_ENTRY_URL, TEST_REMOTE_ENTRY_URL_LEGACY } from "./setup/global-setup";
 import type { TestPlugin } from "./fixtures/test-plugin/src/index";
 
 export type TestRegistry = {

@@ -18,7 +18,7 @@ import { PluginRuntimeError } from "./errors";
 import { PluginService } from "./services/plugin.service";
 
 export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
-	private pluginCache = new Map<string, Effect.Effect<InitializedPlugin<AnyPlugin>, PluginRuntimeError>>();
+	private pluginCache = new Map<string, Promise<InitializedPlugin<AnyPlugin>>>();
 
 	constructor(
 		private runtime: ManagedRuntime.ManagedRuntime<PluginService, never>,
@@ -66,8 +66,8 @@ export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
 	): Promise<UsePluginResult<K>> {
 		const cacheKey = this.generateCacheKey(pluginId, config);
 
-		let cachedPlugin = this.pluginCache.get(cacheKey);
-		if (!cachedPlugin) {
+		let cachedPromise = this.pluginCache.get(cacheKey);
+		if (!cachedPromise) {
 			const operation = Effect.gen(this, function* () {
 				const pluginService = yield* PluginService;
 				const validatedId = yield* this.validatePluginId(pluginId);
@@ -80,11 +80,11 @@ export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
 				return initialized;
 			}).pipe(Effect.provide(this.runtime));
 
-			cachedPlugin = Effect.cached(operation).pipe(Effect.flatten);
-			this.pluginCache.set(cacheKey, cachedPlugin);
+			cachedPromise = this.runPromise(operation);
+			this.pluginCache.set(cacheKey, cachedPromise);
 		}
 
-		const initialized = await this.runPromise(cachedPlugin);
+		const initialized = await cachedPromise;
 		const router = initialized.plugin.createRouter(initialized.context);
 		const client = createRouterClient(router);
 
@@ -92,7 +92,7 @@ export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
 			router: router as PluginRouterType<R[K]>,
 			client: client as PluginClientType<R[K]>,
 			metadata: initialized.metadata,
-			initialized: initialized as InitializedPlugin<RegisteredPlugin<K>>
+			initialized: initialized as unknown as InitializedPlugin<RegisteredPlugin<K>>
 		} as UsePluginResult<K>;
 	}
 
@@ -141,37 +141,23 @@ export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
 		config: PluginConfigInput<RegisteredPlugins[K]>
 	): Promise<void> {
 		const cacheKey = this.generateCacheKey(pluginId, config);
+		const cachedPromise = this.pluginCache.get(cacheKey);
 
-		const effect = Effect.gen(this, function* () {
-			const pluginService = yield* PluginService;
-			const cachedPlugin = this.pluginCache.get(cacheKey);
+		if (cachedPromise) {
+			this.pluginCache.delete(cacheKey);
 
-			if (cachedPlugin) {
-				this.pluginCache.delete(cacheKey);
-
-				const pluginResult = yield* cachedPlugin.pipe(
-					Effect.catchAll(() => Effect.succeed(null))
-				);
-
-				if (pluginResult) {
-					yield* pluginService.shutdownPlugin(pluginResult).pipe(
-						Effect.catchAll(() => Effect.void)
-					);
-				}
+			try {
+				const pluginResult = await cachedPromise;
+				const effect = Effect.gen(function* () {
+					const pluginService = yield* PluginService;
+					return yield* pluginService.shutdownPlugin(pluginResult);
+				});
+				await this.runPromise(effect);
+			} catch {
+				// Ignore errors during shutdown
 			}
-		}).pipe(Effect.catchAll(() => Effect.void));
-
-		return this.runPromise(effect);
+		}
 	}
-}
-
-/**
- * Normalizes a remote URL to ensure it points to remoteEntry.js
- * If the URL doesn't end with a file extension, appends /remoteEntry.js
- */
-function normalizeRemoteUrl(url: string): string {
-	if (url.endsWith('.js')) return url; // Already a file
-	return `${url.endsWith('/') ? url.slice(0, -1) : url}/remoteEntry.js`;
 }
 
 export function createPluginRuntime(
@@ -179,19 +165,8 @@ export function createPluginRuntime(
 ): PluginRuntime {
 	const secrets = config.secrets || {};
 
-	// Normalize all remote URLs in the registry
-	const normalizedRegistry = Object.fromEntries(
-		Object.entries(config.registry).map(([pluginId, entry]) => [
-			pluginId,
-			{
-				...entry,
-				remoteUrl: normalizeRemoteUrl(entry.remoteUrl)
-			}
-		])
-	) as PluginRegistry;
-
-	const layer = PluginService.Live(normalizedRegistry, secrets);
+	const layer = PluginService.Live(config.registry, secrets);
 	const runtime = ManagedRuntime.make(layer);
 
-	return new PluginRuntime(runtime, normalizedRegistry);
+	return new PluginRuntime(runtime, config.registry);
 }

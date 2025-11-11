@@ -13,14 +13,6 @@
 	},
 	"packageManager": "bun@1.2.20",
 	"private": true,
-	"resolutions": {
-		"effect": "3.18.1",
-		"@orpc/contract": "1.10.0",
-		"@orpc/server": "1.10.0",
-		"@module-federation/runtime-core": "0.19.1",
-		"@module-federation/enhanced": "0.19.1",
-		"@module-federation/node": "2.7.15"
-	},
 	"scripts": {
 		"fmt": "biome check --write .",
 		"prepare": "husky",

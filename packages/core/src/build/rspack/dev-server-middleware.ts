@@ -46,7 +46,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       const runtime = createPluginRuntime({
         registry: {
           [pluginId]: {
-            remoteUrl: `http://localhost:${port}/remoteEntry.js`
+            remoteUrl: `http://localhost:${port}`
           }
         }
       });

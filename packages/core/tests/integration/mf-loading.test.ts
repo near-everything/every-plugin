@@ -5,7 +5,9 @@ import { TEST_REMOTE_ENTRY_URL } from "../setup/global-setup";
 
 describe("Module Federation Integration Tests", () => {
   it("should verify remote URL is accessible", async () => {
-    const response = await fetch(TEST_REMOTE_ENTRY_URL, { method: "HEAD" });
+    // Check that mf-manifest.json is accessible (MF 2.0)
+    const manifestUrl = `${TEST_REMOTE_ENTRY_URL}/mf-manifest.json`;
+    const response = await fetch(manifestUrl, { method: "HEAD" });
     expect(response.ok).toBe(true);
     expect(response.status).toBe(200);
   });

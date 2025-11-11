@@ -68,4 +68,5 @@ export const PORT_POOL = {
 
 // Export test server URL for use in tests
 export const TEST_SERVER_URL = `http://localhost:${TEST_PORT}`;
-export const TEST_REMOTE_ENTRY_URL = `${TEST_SERVER_URL}/remoteEntry.js`;
+export const TEST_REMOTE_ENTRY_URL = TEST_SERVER_URL; // MF 2.0 - uses manifest detection
+export const TEST_REMOTE_ENTRY_URL_LEGACY = `${TEST_SERVER_URL}/remoteEntry.js`; // MF 1.5 - direct remoteEntry.js

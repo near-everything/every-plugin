@@ -58,16 +58,26 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 					const url = resolveUrl(metadata.remoteUrl);
 
 					yield* moduleFederationService.registerRemote(pluginId, url).pipe(
-						Effect.mapError((error) =>
-							toPluginRuntimeError(error, pluginId, undefined, "register-remote", true),
+						Effect.catchTag("ModuleFederationError", (error) =>
+							Effect.fail(new PluginRuntimeError({
+								pluginId,
+								operation: "register-remote",
+								cause: error,
+								retryable: true,
+							})),
 						),
 					);
 
 					yield* Effect.logDebug("Loading plugin", { pluginId, url });
 
 					const ctor = yield* moduleFederationService.loadRemoteConstructor(pluginId, url).pipe(
-						Effect.mapError((error) =>
-							toPluginRuntimeError(error, pluginId, undefined, "load-remote", false),
+						Effect.catchTag("ModuleFederationError", (error) =>
+							Effect.fail(new PluginRuntimeError({
+								pluginId,
+								operation: "load-remote",
+								cause: error,
+								retryable: false,
+							})),
 						),
 					);
 

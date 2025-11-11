@@ -1,85 +1,81 @@
-import { betterFetch } from "@better-fetch/fetch";
 import {
 	createInstance,
 	getInstance,
-} from "@module-federation/enhanced/runtime";
+} from "@module-federation/runtime";
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
 import { Effect } from "effect";
 import type { AnyPlugin } from "../../types";
 import { ModuleFederationError } from "../errors";
 import { getNormalizedRemoteName } from "./normalize";
 
-type RemoteModule = 
-  | (new () => AnyPlugin)
-  | { default: new () => AnyPlugin };
+type RemoteModule =
+	| (new () => AnyPlugin)
+	| { default: new () => AnyPlugin };
 
 import pkg from "../../../package.json";
 
 const createModuleFederationInstance = Effect.cached(
 	Effect.sync(() => {
-		try {
-			let instance = getInstance();
+		let instance = getInstance();
 
-			if (!instance) {
-				instance = createInstance({
-					name: "host",
-					remotes: [],
-					shared: {
-						"every-plugin": {
-							version: pkg.version,
-							shareConfig: {
-								singleton: true,
-								requiredVersion: `^${pkg.version}`,
-								eager: true,
-								strictVersion: false, // Allow bidirectional version compatibility
-							},
+		if (!instance) {
+			instance = createInstance({
+				name: "host",
+				remotes: [],
+				// plugins: [nodeRuntimePlugin()],
+				shared: {
+					"every-plugin": {
+						version: pkg.version,
+						shareConfig: {
+							singleton: true,
+							requiredVersion: `^${pkg.version}`,
+							eager: true,
+							strictVersion: false, // Allow bidirectional version compatibility
 						},
-						effect: {
-							version: pkg.dependencies.effect,
-							shareConfig: {
-								singleton: true,
-								requiredVersion: "^3.18.0", // Allow any 3.18.x patch version
-								eager: true,
-								strictVersion: false, // Allow version flexibility for compatibility
-							},
-						},
-						zod: {
-							version: pkg.dependencies.zod,
-							shareConfig: {
-								singleton: true,
-								requiredVersion: "^4.1.0", // Allow any 4.1.x patch version
-								eager: true,
-								strictVersion: false, // Allow version flexibility for compatibility
-							},
-						},
-						"@orpc/contract": {
-							version: pkg.dependencies["@orpc/contract"],
-							shareConfig: {
-								singleton: true,
-								requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
-								eager: true,
-								strictVersion: false, // Allow version flexibility for compatibility
-							},
-						},
-						"@orpc/server": {
-							version: pkg.dependencies["@orpc/server"],
-							shareConfig: {
-								singleton: true,
-								requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
-								eager: true,
-								strictVersion: false, // Allow version flexibility for compatibility
-							},
-						}
 					},
-				});
+					effect: {
+						version: pkg.dependencies.effect,
+						shareConfig: {
+							singleton: true,
+							requiredVersion: "^3.18.0", // Allow any 3.18.x patch version
+							eager: true,
+							strictVersion: false, // Allow version flexibility for compatibility
+						},
+					},
+					zod: {
+						version: pkg.dependencies.zod,
+						shareConfig: {
+							singleton: true,
+							requiredVersion: "^4.1.0", // Allow any 4.1.x patch version
+							eager: true,
+							strictVersion: false, // Allow version flexibility for compatibility
+						},
+					},
+					"@orpc/contract": {
+						version: pkg.dependencies["@orpc/contract"],
+						shareConfig: {
+							singleton: true,
+							requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
+							eager: true,
+							strictVersion: false, // Allow version flexibility for compatibility
+						},
+					},
+					"@orpc/server": {
+						version: pkg.dependencies["@orpc/server"],
+						shareConfig: {
+							singleton: true,
+							requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
+							eager: true,
+							strictVersion: false, // Allow version flexibility for compatibility
+						},
+					}
+				},
+			});
 
-				setGlobalFederationInstance(instance);
-			}
-
-			return instance;
-		} catch (error) {
-			throw new Error(`Failed to initialize Module Federation: ${error}`);
+			setGlobalFederationInstance(instance);
 		}
+
+		return instance;
 	}),
 );
 
@@ -97,19 +93,32 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 						: `${url}/mf-manifest.json`;
 
 					// Check if manifest is available (MF 2.0 with manifests)
-					const { error: manifestError } = yield* Effect.tryPromise({
-						try: () => betterFetch(manifestUrl, { method: "HEAD" }),
-						catch: (error) => error, // Don't fail yet, try fallback
+					const manifestExists = yield* Effect.tryPromise({
+						try: async () => {
+							const response = await fetch(manifestUrl, { method: "HEAD" });
+							return response.ok;
+						},
+						catch: () => false, // If fetch fails, manifest doesn't exist
 					});
 
 					let entryUrl: string;
 					let isManifestMode = false;
 
-					if (!manifestError) {
-						// MF 2.0 manifest mode - use manifest URL
-						entryUrl = manifestUrl;
+					if (manifestExists) {
+						// MF 2.0 manifest mode - fetch manifest and extract remoteEntry URL
+						const manifest: any = yield* Effect.tryPromise({
+							try: () => fetch(manifestUrl).then(r => r.json()),
+							catch: (error) => {
+								console.log(`[MF] ⚠️ Failed to fetch manifest for ${pluginId}, falling back to MF 1.5:`, error);
+								throw error;
+							}
+						});
+
+						// Extract remoteEntry from manifest metaData
+						const remoteEntryName = manifest.metaData?.remoteEntry?.name || 'remoteEntry.js';
+						entryUrl = url.endsWith('/') ? `${url}${remoteEntryName}` : `${url}/${remoteEntryName}`;
 						isManifestMode = true;
-						console.log(`[MF] Using MF 2.0 manifest mode for ${pluginId}`);
+						console.log(`[MF] Using MF 2.0 manifest mode for ${pluginId} (remoteEntry: ${remoteEntryName})`);
 					} else {
 						// Fallback to MF 1.5 direct mode - assume URL points to remoteEntry.js
 						console.log(`[MF] ⚠️ Manifest not found, falling back to MF 1.5 mode for ${pluginId}`);
@@ -117,15 +126,14 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 						isManifestMode = false;
 					}
 
-					// For MF 2.0, the name can be the pluginId (alias)
+					// For MF 2.0, the name can be the pluginId
 					// The manifest will contain the actual container name
 					const remoteName = isManifestMode ? pluginId : getNormalizedRemoteName(pluginId);
 
 					yield* Effect.try({
 						try: () => mf.registerRemotes([{
 							name: remoteName,
-							entry: entryUrl,
-							...(isManifestMode && { alias: pluginId }) // Explicit alias for clarity
+							entry: entryUrl
 						}]),
 						catch: (error): ModuleFederationError =>
 							new ModuleFederationError({
@@ -141,8 +149,24 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 
 			loadRemoteConstructor: (pluginId: string, url: string) =>
 				Effect.gen(function* () {
-					const remoteName = getNormalizedRemoteName(pluginId);
-					console.log(`[MF] Loading remote ${remoteName}`);
+					const manifestUrl = url.endsWith('/')
+						? `${url}mf-manifest.json`
+						: `${url}/mf-manifest.json`;
+
+					// Check if manifest is available (MF 2.0 with manifests)
+					const manifestExists = yield* Effect.tryPromise({
+						try: async () => {
+							const response = await fetch(manifestUrl, { method: "HEAD" });
+							return response.ok;
+						},
+						catch: () => false, // If fetch fails, manifest doesn't exist
+					});
+
+					// Use same naming logic as registerRemote
+					const remoteName = manifestExists ? pluginId : getNormalizedRemoteName(pluginId);
+					const isManifestMode = manifestExists;
+
+					console.log(`[MF] Loading remote ${remoteName} (${isManifestMode ? 'MF 2.0' : 'MF 1.5'})`);
 					const modulePath = `${remoteName}/plugin`;
 
 					return yield* Effect.tryPromise({
@@ -158,37 +182,18 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 								typeof container === "function"
 									? container  // Direct function export
 									: container.default
-									? container.default  // Default export
-									: Object.values(container).find(  // Named export fallback
+										? container.default  // Default export
+										: Object.values(container).find(  // Named export fallback
 											(exp) => typeof exp === "function" && exp.prototype?.constructor === exp
 										);
 
 							if (!Constructor || typeof Constructor !== "function") {
-								const containerInfo = typeof container === "object"
-									? `Available exports: ${Object.keys(container).join(', ')}`
-									: `Container type: ${typeof container}`;
-
-								throw new Error(
-									`No valid plugin constructor found for '${pluginId}'.\n` +
-									`Supported patterns:\n` +
-									`  - export const YourPlugin = createPlugin({...})\n` +
-									`  - export default createPlugin({...})\n` +
-									`${containerInfo}`,
-								);
+								throw new Error(`No valid plugin constructor found for '${pluginId}'`);
 							}
 
 							// Validate it looks like a plugin constructor (has binding property)
 							if (!(Constructor as any).binding) {
-								const containerInfo = typeof container === "object"
-									? `Found exports: ${Object.keys(container).join(', ')}`
-									: `Container type: ${typeof container}`;
-
-								throw new Error(
-									`Invalid plugin constructor for '${pluginId}'. ` +
-									`The exported value must be created with createPlugin(). ` +
-									`Found a function but it's missing the required 'binding' property.\n` +
-									`${containerInfo}`,
-								);
+								throw new Error(`Invalid plugin constructor for '${pluginId}' - missing binding property`);
 							}
 
 							console.log(`[MF] ✅ Loaded constructor for ${pluginId}`);
@@ -205,4 +210,4 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 				}),
 		};
 	}),
-}) {}
+}) { }

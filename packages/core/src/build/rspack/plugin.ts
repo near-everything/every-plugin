@@ -1,6 +1,6 @@
+import path from 'node:path';
 import { ModuleFederationPlugin } from '@module-federation/enhanced/rspack';
 import type { Compiler, RspackPluginInstance } from '@rspack/core';
-import path from 'node:path';
 import { setupPluginMiddleware } from './dev-server-middleware';
 import { buildSharedDependencies } from './module-federation';
 import { getPluginInfo, loadDevConfig } from './utils';
@@ -43,7 +43,11 @@ export class EveryPluginDevServer implements RspackPluginInstance {
       runtimePlugins: [
         require.resolve('@module-federation/node/runtimePlugin'),
       ],
-      library: { type: 'commonjs-module' },
+      library: { type: 'var' },
+      remoteType: 'script',  // Required for proper remote loading in Node.js
+      experiments: {
+        asyncStartup: true,  // Enable async startup for Node.js backend modules
+      },
       exposes: {
         './plugin': './src/index.ts',
       },
