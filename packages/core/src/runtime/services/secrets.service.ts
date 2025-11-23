@@ -16,20 +16,47 @@ export class SecretsService extends Effect.Service<SecretsService>()("SecretsSer
 	effect: Effect.gen(function* () {
 		const secrets = yield* SecretsConfigTag;
 
+		const hydrateValue = (value: unknown): unknown => {
+			if (typeof value === 'string') {
+				let result = value;
+				for (const [key, secretValue] of Object.entries(secrets)) {
+					const pattern = new RegExp(`{{${key}}}`, "g");
+					result = result.replace(pattern, String(secretValue));
+				}
+				return result;
+			}
+
+			if (Array.isArray(value)) {
+				return value.map(hydrateValue);
+			}
+
+			if (value && typeof value === 'object') {
+				const isPlainObject = value.constructor === Object || value.constructor === undefined;
+				
+				if (isPlainObject) {
+					const hydrated: Record<string, unknown> = {};
+					for (const [key, val] of Object.entries(value)) {
+						hydrated[key] = hydrateValue(val);
+					}
+					return hydrated;
+				}
+
+				const hydrated = Object.create(Object.getPrototypeOf(value));
+				for (const [key, val] of Object.entries(value)) {
+					hydrated[key] = hydrateValue(val);
+				}
+				return hydrated;
+			}
+
+			return value;
+		};
+
 		return {
 			hydrateSecrets: <T>(config: T) =>
 				Effect.gen(function* () {
 					const parseResult = configSchema.parse(config);
 					try {
-						const configString = JSON.stringify(parseResult);
-						let hydratedString = configString;
-
-						for (const [key, value] of Object.entries(secrets)) {
-							const pattern = new RegExp(`{{${key}}}`, "g");
-							hydratedString = hydratedString.replace(pattern, String(value));
-						}
-
-						return JSON.parse(hydratedString) as T;
+						return hydrateValue(parseResult) as T;
 					} catch (error) {
 						return yield* Effect.fail(
 							new PluginRuntimeError({

@@ -60,10 +60,10 @@ export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
 		return exit.value;
 	}
 
-	async usePlugin<K extends keyof RegisteredPlugins & string>(
+	async usePlugin<K extends keyof R & string>(
 		pluginId: K,
 		config: PluginConfigInput<R[K]>
-	): Promise<UsePluginResult<K>> {
+	): Promise<UsePluginResult<K, R>> {
 		const cacheKey = this.generateCacheKey(pluginId, config);
 
 		let cachedPlugin = this.pluginCache.get(cacheKey);
@@ -92,29 +92,29 @@ export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
 			router: router as PluginRouterType<R[K]>,
 			client: client as PluginClientType<R[K]>,
 			metadata: initialized.metadata,
-			initialized: initialized as InitializedPlugin<RegisteredPlugin<K>>
-		} as UsePluginResult<K>;
+			initialized: initialized as InitializedPlugin<RegisteredPlugin<K, R>>
+		} as UsePluginResult<K, R>;
 	}
 
-	async loadPlugin<K extends keyof RegisteredPlugins & string>(
+	async loadPlugin<K extends keyof R & string>(
 		pluginId: K
-	): Promise<LoadedPlugin<RegisteredPlugin<K>>> {
+	): Promise<LoadedPlugin<RegisteredPlugin<K, R>>> {
 		const effect = Effect.gen(function* () {
 			const pluginService = yield* PluginService;
 			return yield* pluginService.loadPlugin(pluginId);
 		});
-		return this.runPromise(effect) as Promise<LoadedPlugin<RegisteredPlugin<K>>>;
+		return this.runPromise(effect) as Promise<LoadedPlugin<RegisteredPlugin<K, R>>>;
 	}
 
-	async instantiatePlugin<K extends keyof RegisteredPlugins & string>(
+	async instantiatePlugin<K extends keyof R & string>(
 		pluginId: K,
-		loadedPlugin: LoadedPlugin<RegisteredPlugin<K>>
-	): Promise<PluginInstance<RegisteredPlugin<K>>> {
+		loadedPlugin: LoadedPlugin<RegisteredPlugin<K, R>>
+	): Promise<PluginInstance<RegisteredPlugin<K, R>>> {
 		const effect = Effect.gen(function* () {
 			const pluginService = yield* PluginService;
 			return yield* pluginService.instantiatePlugin(pluginId, loadedPlugin);
 		});
-		return this.runPromise(effect) as Promise<PluginInstance<RegisteredPlugin<K>>>;
+		return this.runPromise(effect) as Promise<PluginInstance<RegisteredPlugin<K, R>>>;
 	}
 
 	async initializePlugin<T extends AnyPlugin>(
@@ -136,9 +136,9 @@ export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
 		return this.runPromise(effect);
 	}
 
-	async evictPlugin<K extends keyof RegisteredPlugins & string>(
+	async evictPlugin<K extends keyof R & string>(
 		pluginId: K,
-		config: PluginConfigInput<RegisteredPlugins[K]>
+		config: PluginConfigInput<R[K]>
 	): Promise<void> {
 		const cacheKey = this.generateCacheKey(pluginId, config);
 
@@ -174,9 +174,9 @@ function normalizeRemoteUrl(url: string): string {
 	return `${url.endsWith('/') ? url.slice(0, -1) : url}/remoteEntry.js`;
 }
 
-export function createPluginRuntime(
-	config: PluginRuntimeConfig
-): PluginRuntime {
+export function createPluginRuntime<R extends RegisteredPlugins = RegisteredPlugins>(
+	config: PluginRuntimeConfig<R>
+): PluginRuntime<R> {
 	const secrets = config.secrets || {};
 
 	// Normalize all remote URLs in the registry

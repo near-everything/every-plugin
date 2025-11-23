@@ -55,9 +55,11 @@ export type PluginClientType<T> = RouterClient<PluginRouterType<T>>;
 
 /**
  * Extract plugin type from registered plugins by key
+ * @param K - The plugin key
+ * @param R - The registry type (defaults to RegisteredPlugins for module augmentation pattern)
  */
-export type RegisteredPlugin<K extends keyof RegisteredPlugins> =
-  RegisteredPlugins[K] extends { binding: infer B }
+export type RegisteredPlugin<K extends keyof R, R = RegisteredPlugins> =
+  R[K] extends { binding: infer B }
   ? B extends {
     contract: infer C extends AnyContractRouter;
     variables: infer V extends AnySchema;
@@ -140,8 +142,8 @@ export interface InitializedPlugin<T extends AnyPlugin = AnyPlugin> {
 /**
  * Helper type to detect type errors when looking up RegisteredPlugins
  */
-type VerifyPluginBinding<K extends keyof RegisteredPlugins> =
-  RegisteredPlugins[K] extends { binding: infer B }
+type VerifyPluginBinding<K extends keyof R, R = RegisteredPlugins> =
+  R[K] extends { binding: infer B }
   ? B extends {
     contract: AnyContractRouter;
     variables: AnySchema;
@@ -154,15 +156,17 @@ type VerifyPluginBinding<K extends keyof RegisteredPlugins> =
 
 /**
 * Result of runtime.usePlugin() call
+* @param K - The plugin key
+* @param R - The registry type (defaults to RegisteredPlugins for module augmentation pattern)
 */
-export type UsePluginResult<K extends keyof RegisteredPlugins> = VerifyPluginBinding<K> extends true
+export type UsePluginResult<K extends keyof R, R = RegisteredPlugins> = VerifyPluginBinding<K, R> extends true
   ? {
-    readonly client: PluginClientType<RegisteredPlugins[K]>;
-    readonly router: PluginRouterType<RegisteredPlugins[K]>;
+    readonly client: PluginClientType<R[K]>;
+    readonly router: PluginRouterType<R[K]>;
     readonly metadata: PluginMetadata;
-    readonly initialized: InitializedPlugin<RegisteredPlugin<K>>;
+    readonly initialized: InitializedPlugin<RegisteredPlugin<K, R>>;
   }
-  : VerifyPluginBinding<K>;
+  : VerifyPluginBinding<K, R>;
 
 /**
  * Runtime options
@@ -190,7 +194,7 @@ export namespace EveryPlugin {
    * const plugin: Plugin = await runtime.usePlugin("my-plugin", config);
    * ```
    */
-  export type Infer<K extends keyof RegisteredPlugins> = UsePluginResult<K>;
+  export type Infer<K extends keyof R, R = RegisteredPlugins> = UsePluginResult<K, R>;
 }
 
 /**

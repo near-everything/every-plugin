@@ -17,6 +17,6 @@ export default defineConfig({
   clean: true,
   outDir: 'dist',
   treeshake: true,        // Enable tree-shaking for consumers
-  sourcemap: 'inline',    // Inline source maps (no separate .map files)
+  sourcemap: true,        // External .map files for better IDE support
   minify: false          // Keep readable for debugging
 })
