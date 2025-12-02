@@ -38,7 +38,7 @@ export class EveryPluginDevServer implements RspackPluginInstance {
     new ModuleFederationPlugin({
       name: pluginInfo.normalizedName,
       filename: 'remoteEntry.js',
-      manifest: true,  // Enable MF 2.0 manifest generation
+      // manifest: true,  // Enable MF 2.0 manifest generation
       dts: false,
       runtimePlugins: [
         require.resolve('@module-federation/node/runtimePlugin'),

@@ -1,0 +1,9 @@
+{
+  "account": "potlock.near",
+  "gateway": {
+    "bundleUrl": "https://campaign-indexer.potlock.near/remote-entry.js",
+    "tagName": "potlock-campaign-indexer",
+    "apiEndpoint": "http://localhost:3014",
+    "documentation": "http://localhost:3014/api"
+  }
+}

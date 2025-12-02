@@ -1,0 +1,1972 @@
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "name": "potlock-campaigns",
+    "version": "0.1.0",
+    "build": {
+      "compiler": "rustc 1.81.0",
+      "builder": "cargo-near cargo-near-build 0.7.1"
+    }
+  },
+  "body": {
+    "functions": [
+      {
+        "name": "admin_set_creator_fee_basis_points",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "creator_fee_basis_points",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "admin_set_protocol_fee_basis_points",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "protocol_fee_basis_points",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "admin_set_protocol_fee_recipient_account",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "protocol_fee_recipient_account",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "admin_set_referral_fee_basis_points",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "referral_fee_basis_points",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "can_process_refunds",
+        "doc": " Returns true if refunds can be processed (campaign ended, below min amount, and has escrowed donations)",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "contract_source_metadata",
+        "kind": "view"
+      },
+      {
+        "name": "create_campaign",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "name",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "description",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "cover_image_url",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "recipient",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            {
+              "name": "start_ms",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "end_ms",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "ft_id",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/AccountId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "target_amount",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "min_amount",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "max_amount",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "referral_fee_basis_points",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "creator_fee_basis_points",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "allow_fee_avoidance",
+              "type_schema": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/CampaignExternal"
+          }
+        }
+      },
+      {
+        "name": "delete_campaign",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "donate",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "message",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "referrer_id",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/AccountId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "bypass_protocol_fee",
+              "type_schema": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "bypass_creator_fee",
+              "type_schema": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/PromiseOrValueDonationExternal"
+          }
+        }
+      },
+      {
+        "name": "escrowed_donations_fee_transfer_callback",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "recipient",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "donation_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            },
+            {
+              "name": "receiver_type",
+              "type_schema": {
+                "$ref": "#/definitions/FundsReceiver"
+              }
+            }
+          ]
+        },
+        "callbacks": [
+          {
+            "serialization_type": "json",
+            "type_schema": {
+              "type": "null"
+            }
+          }
+        ]
+      },
+      {
+        "name": "escrowed_donations_recipient_transfer_callback",
+        "doc": " Called after processing a batch of donations for a campaign, and transferring the total payout to the recipient",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "recipient",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "donation_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            },
+            {
+              "name": "protocol_fee",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "creator_fee",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "referrer_payouts",
+              "type_schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "format": "uint128",
+                  "minimum": 0.0
+                }
+              }
+            }
+          ]
+        },
+        "callbacks": [
+          {
+            "serialization_type": "json",
+            "type_schema": {
+              "type": "null"
+            }
+          }
+        ]
+      },
+      {
+        "name": "ft_on_transfer",
+        "doc": " FT equivalent of donate, for use with FTs that implement NEP-144",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "sender_id",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "msg",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/PromiseOrValueString"
+          }
+        }
+      },
+      {
+        "name": "get_campaign",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/CampaignExternal"
+          }
+        }
+      },
+      {
+        "name": "get_campaigns",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/CampaignExternal"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_campaigns_by_owner",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "owner_id",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/CampaignExternal"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_campaigns_by_recipient",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "recipient_id",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/CampaignExternal"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_config",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Config"
+          }
+        }
+      },
+      {
+        "name": "get_contract_source_metadata",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ContractSourceMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_donatio",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      {
+        "name": "get_donation_by_id",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "donation_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/DonationExternal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_donations",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/DonationExternal"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_donations_for_campaign",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/DonationExternal"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_donations_for_donor",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "donor_id",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "get_owner",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/AccountId"
+          }
+        }
+      },
+      {
+        "name": "has_escrowed_donations_to_process",
+        "doc": " Returns true if there are escrowed donations to process and campaign has met its minimum amount",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "new",
+        "kind": "call",
+        "modifiers": [
+          "init"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "owner",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            {
+              "name": "protocol_fee_basis_points",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "protocol_fee_recipient_account",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            {
+              "name": "default_referral_fee_basis_points",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "default_creator_fee_basis_points",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "source_metadata",
+              "type_schema": {
+                "$ref": "#/definitions/ContractSourceMetadata"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "new_default_meta",
+        "doc": " For testing purposes only",
+        "kind": "call",
+        "modifiers": [
+          "init"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "owner",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "owner_add_admins",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "admins",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/AccountId"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "owner_change_owner",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "owner",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "owner_clear_admins",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ]
+      },
+      {
+        "name": "owner_remove_admins",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "admins",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/AccountId"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "process_escrowed_donations_batch",
+        "doc": " * Process (aka move out of escrow) a batch of escrowed donations for a campaign\n * Can be called by anyone willing to pay the gas (max gas to avoid hitting gas limits)\n * Will return void without panicking if min_amount has not been reached",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "process_refunds_batch",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "self_set_source_metadata",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "source_metadata",
+              "type_schema": {
+                "$ref": "#/definitions/ContractSourceMetadata"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "storage_balance_of",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "storage_deposit",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "storage_withdraw",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "transfer_funds_callback",
+        "doc": " Verifies whether donation & fees have been paid out for a given donation",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint128",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "donation",
+              "type_schema": {
+                "$ref": "#/definitions/DonationExternal"
+              }
+            },
+            {
+              "name": "receiver_type",
+              "type_schema": {
+                "$ref": "#/definitions/FundsReceiver"
+              }
+            }
+          ]
+        },
+        "callbacks": [
+          {
+            "serialization_type": "json",
+            "type_schema": {
+              "type": "null"
+            }
+          }
+        ],
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/DonationExternal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "transfer_refund_callback",
+        "doc": " Verifies whether refund was successful and updates escrowed_donation_ids and Donation.returned accordingly for each donation refunded for this donor",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "donor_id",
+              "type_schema": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            {
+              "name": "temp_refund_record",
+              "type_schema": {
+                "$ref": "#/definitions/TempRefundRecord"
+              }
+            },
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "callbacks": [
+          {
+            "serialization_type": "json",
+            "type_schema": {
+              "type": "null"
+            }
+          }
+        ]
+      },
+      {
+        "name": "update_campaign",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "name",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "description",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "cover_image_url",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "start_ms",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "end_ms",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "ft_id",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/AccountId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "target_amount",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "max_amount",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "min_amount",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "allow_fee_avoidance",
+              "type_schema": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/CampaignExternal"
+          }
+        }
+      }
+    ],
+    "root_schema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string",
+      "definitions": {
+        "AccountId": {
+          "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+          "type": "string"
+        },
+        "CampaignExternal": {
+          "type": "object",
+          "required": [
+            "allow_fee_avoidance",
+            "created_ms",
+            "creator_fee_basis_points",
+            "escrow_balance",
+            "id",
+            "name",
+            "net_raised_amount",
+            "owner",
+            "recipient",
+            "referral_fee_basis_points",
+            "start_ms",
+            "target_amount",
+            "total_raised_amount"
+          ],
+          "properties": {
+            "allow_fee_avoidance": {
+              "type": "boolean"
+            },
+            "cover_image_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "created_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "creator_fee_basis_points": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "end_ms": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "escrow_balance": {
+              "type": "string"
+            },
+            "ft_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "max_amount": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "min_amount": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "net_raised_amount": {
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/definitions/AccountId"
+            },
+            "recipient": {
+              "$ref": "#/definitions/AccountId"
+            },
+            "referral_fee_basis_points": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "start_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "target_amount": {
+              "type": "string"
+            },
+            "total_raised_amount": {
+              "type": "string"
+            }
+          }
+        },
+        "Config": {
+          "description": "NOT stored in contract storage; only used for get_config response",
+          "type": "object",
+          "required": [
+            "admins",
+            "default_creator_fee_basis_points",
+            "default_referral_fee_basis_points",
+            "owner",
+            "protocol_fee_basis_points",
+            "protocol_fee_recipient_account",
+            "total_campaigns_count",
+            "total_donations_count"
+          ],
+          "properties": {
+            "admins": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/AccountId"
+              }
+            },
+            "default_creator_fee_basis_points": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "default_referral_fee_basis_points": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "owner": {
+              "$ref": "#/definitions/AccountId"
+            },
+            "protocol_fee_basis_points": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "protocol_fee_recipient_account": {
+              "$ref": "#/definitions/AccountId"
+            },
+            "total_campaigns_count": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "total_donations_count": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          }
+        },
+        "ContractSourceMetadata": {
+          "description": "CONTRACT SOURCE METADATA - as per NEP 0330 (https://github.com/near/NEPs/blob/master/neps/nep-0330.md), with addition of `commit_hash`",
+          "type": "object",
+          "required": [
+            "commit_hash",
+            "link",
+            "version"
+          ],
+          "properties": {
+            "commit_hash": {
+              "description": "Git commit hash of currently deployed contract code",
+              "type": "string"
+            },
+            "link": {
+              "description": "GitHub repo url for currently deployed contract code",
+              "type": "string"
+            },
+            "version": {
+              "description": "Version of source code, e.g. \"v1.0.0\", could correspond to Git tag",
+              "type": "string"
+            }
+          }
+        },
+        "Donation": {
+          "description": "`Donation` is the data structure that is stored within the contract. *NB: recipient & ft_id are stored in the Campaign struct.*",
+          "type": "object",
+          "required": [
+            "campaign_id",
+            "creator_fee",
+            "donated_at_ms",
+            "donor_id",
+            "id",
+            "net_amount",
+            "protocol_fee",
+            "total_amount"
+          ],
+          "properties": {
+            "campaign_id": {
+              "description": "Campaign ID",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "creator_fee": {
+              "description": "Creator fee",
+              "type": "integer",
+              "format": "uint128",
+              "minimum": 0.0
+            },
+            "donated_at_ms": {
+              "description": "Timestamp when the donation was made",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "donor_id": {
+              "description": "ID of the donor",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                }
+              ]
+            },
+            "id": {
+              "description": "Unique identifier for the donation",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "message": {
+              "description": "Optional message from the donor",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "net_amount": {
+              "description": "Net amount, after all fees & storage costs",
+              "type": "integer",
+              "format": "uint128",
+              "minimum": 0.0
+            },
+            "protocol_fee": {
+              "description": "Protocol fee",
+              "type": "integer",
+              "format": "uint128",
+              "minimum": 0.0
+            },
+            "referrer_fee": {
+              "description": "Referrer fee",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint128",
+              "minimum": 0.0
+            },
+            "referrer_id": {
+              "description": "Referrer ID",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "returned_at_ms": {
+              "description": "Whether (and when) the donation was returned to sender",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "total_amount": {
+              "description": "Amount donated",
+              "type": "integer",
+              "format": "uint128",
+              "minimum": 0.0
+            }
+          }
+        },
+        "DonationExternal": {
+          "description": "Ephemeral-only (used in views)",
+          "type": "object",
+          "required": [
+            "campaign_id",
+            "creator_fee",
+            "donated_at_ms",
+            "donor_id",
+            "id",
+            "is_in_escrow",
+            "net_amount",
+            "protocol_fee",
+            "recipient_id",
+            "total_amount"
+          ],
+          "properties": {
+            "campaign_id": {
+              "description": "Campaign ID",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "creator_fee": {
+              "description": "Creator fee",
+              "type": "string"
+            },
+            "donated_at_ms": {
+              "description": "Timestamp when the donation was made",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "donor_id": {
+              "description": "ID of the donor",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                }
+              ]
+            },
+            "ft_id": {
+              "description": "FT ID (if None, it's a native NEAR donation)",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "description": "Unique identifier for the donation",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "is_in_escrow": {
+              "description": "Whether the donation is currently in escrow",
+              "type": "boolean"
+            },
+            "message": {
+              "description": "Optional message from the donor",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "net_amount": {
+              "description": "Net amount, after all fees & storage costs",
+              "type": "string"
+            },
+            "protocol_fee": {
+              "description": "Protocol fee",
+              "type": "string"
+            },
+            "recipient_id": {
+              "description": "ID of the account receiving the donation",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                }
+              ]
+            },
+            "referrer_fee": {
+              "description": "Referrer fee",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "referrer_id": {
+              "description": "Referrer ID",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "returned_at_ms": {
+              "description": "Whether the donation was returned to sender",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "total_amount": {
+              "description": "Amount donated",
+              "type": "string"
+            }
+          }
+        },
+        "FundsReceiver": {
+          "type": "string",
+          "enum": [
+            "Recipient",
+            "Protocol",
+            "Referrer",
+            "Creator"
+          ]
+        },
+        "PromiseOrValueDonationExternal": {
+          "description": "Ephemeral-only (used in views)",
+          "type": "object",
+          "required": [
+            "campaign_id",
+            "creator_fee",
+            "donated_at_ms",
+            "donor_id",
+            "id",
+            "is_in_escrow",
+            "net_amount",
+            "protocol_fee",
+            "recipient_id",
+            "total_amount"
+          ],
+          "properties": {
+            "campaign_id": {
+              "description": "Campaign ID",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "creator_fee": {
+              "description": "Creator fee",
+              "type": "string"
+            },
+            "donated_at_ms": {
+              "description": "Timestamp when the donation was made",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "donor_id": {
+              "description": "ID of the donor",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                }
+              ]
+            },
+            "ft_id": {
+              "description": "FT ID (if None, it's a native NEAR donation)",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "description": "Unique identifier for the donation",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "is_in_escrow": {
+              "description": "Whether the donation is currently in escrow",
+              "type": "boolean"
+            },
+            "message": {
+              "description": "Optional message from the donor",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "net_amount": {
+              "description": "Net amount, after all fees & storage costs",
+              "type": "string"
+            },
+            "protocol_fee": {
+              "description": "Protocol fee",
+              "type": "string"
+            },
+            "recipient_id": {
+              "description": "ID of the account receiving the donation",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                }
+              ]
+            },
+            "referrer_fee": {
+              "description": "Referrer fee",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "referrer_id": {
+              "description": "Referrer ID",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AccountId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "returned_at_ms": {
+              "description": "Whether the donation was returned to sender",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "total_amount": {
+              "description": "Amount donated",
+              "type": "string"
+            }
+          }
+        },
+        "PromiseOrValueString": {
+          "type": "string"
+        },
+        "TempRefundRecord": {
+          "description": "Temporary record for refunding donations in batches. Includes an amount which may represent many donations.",
+          "type": "object",
+          "required": [
+            "amount",
+            "donations",
+            "escrow_balance"
+          ],
+          "properties": {
+            "amount": {
+              "type": "integer",
+              "format": "uint128",
+              "minimum": 0.0
+            },
+            "donations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Donation"
+              }
+            },
+            "escrow_balance": {
+              "type": "integer",
+              "format": "uint128",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    }
+  }
+}

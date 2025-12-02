@@ -1,0 +1,9 @@
+node_modules
+dist
+*.log
+.env
+.env.local
+
+# Cache files
+data/cache.json
+data/evm-chainlist.json

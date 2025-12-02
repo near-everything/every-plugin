@@ -24,6 +24,9 @@ export const TestPlugin = createPlugin({
 		backgroundEnabled: z.boolean().default(false).optional(),
 		backgroundIntervalMs: z.number().min(50).max(5000).default(500).optional(),
 		backgroundMaxItems: z.number().min(1).max(1000).optional(),
+		client: z.custom<any>((val) => val && typeof val === 'object', {
+			message: "Must be an object"
+		}).optional(),
 	}),
 	secrets: z.object({
 		apiKey: z.string(),
@@ -94,11 +97,12 @@ export const TestPlugin = createPlugin({
 			// Return context object - this gets passed to createRouter
 			return {
 				client,
-				publisher
+				publisher,
+				customClient: config.variables.client,
 			};
 		}),
 	createRouter: (context, builder) => {
-		const { client, publisher } = context;
+		const { client, publisher, customClient } = context;
 
 		return {
 			getById: builder.getById.handler(async ({ input }) => {
@@ -191,6 +195,39 @@ export const TestPlugin = createPlugin({
 
 			ping: builder.ping.handler(async () => {
 				return { ok: true, timestamp: Date.now() };
+			}),
+
+			useClient: builder.useClient.handler(async ({ input }) => {
+				if (!customClient) {
+					return {
+						result: 'No client provided',
+						clientType: 'undefined',
+						hasGetDataMethod: false,
+						hasGetBaseUrlMethod: false,
+					};
+				}
+
+				const hasGetData = typeof customClient.getData === 'function';
+				const hasGetBaseUrl = typeof customClient.getBaseUrl === 'function';
+
+				let result: string;
+				try {
+					if (hasGetData) {
+						const data = await customClient.getData(input.id);
+						result = `data: ${JSON.stringify(data)}`;
+					} else {
+						result = 'Client missing getData method';
+					}
+				} catch (error) {
+					result = `Error calling client.getData: ${error instanceof Error ? error.message : String(error)}`;
+				}
+
+				return {
+					result,
+					clientType: customClient.constructor?.name || 'Unknown',
+					hasGetDataMethod: hasGetData,
+					hasGetBaseUrlMethod: hasGetBaseUrl,
+				};
 			}),
 		};
 	}

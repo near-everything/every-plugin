@@ -175,4 +175,24 @@ export const testContract = oc.router({
 			timestamp: z.number(),
 		}))
 		.errors(CommonPluginErrors),
+
+	// Variable serialization testing
+	useClient: oc
+		.route({
+			method: 'POST',
+			path: '/client/test',
+			summary: 'Test client variable',
+			description: 'Tests that client objects with methods are preserved through Module Federation.',
+			tags: ['Testing'],
+		})
+		.input(z.object({
+			id: z.string().describe('ID to pass to client method'),
+		}))
+		.output(z.object({
+			result: z.string(),
+			clientType: z.string(),
+			hasGetDataMethod: z.boolean(),
+			hasGetBaseUrlMethod: z.boolean(),
+		}))
+		.errors(CommonPluginErrors),
 });
