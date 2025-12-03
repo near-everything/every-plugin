@@ -1,3 +1,56 @@
 @import 'tailwindcss';
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
+
+.prose {
+  font-size: 1.125rem;
+}
+
+.prose h1 {
+  font-size: 2.625rem;
+}
+
+.prose h2 {
+  font-size: 2rem;
+}
+
+.prose h3 {
+  font-size: 1.625rem;
+}
+
+.prose h4 {
+  font-size: 1.375rem;
+}
+
+.prose p,
+.prose li {
+  font-size: 1.125rem;
+}
+
+#nd-nav a[href="/"],
+nav a[href="/"] {
+  font-size: 1.125rem;
+}
+
+#nd-sidebar [role="treeitem"] span,
+#nd-sidebar a {
+  font-size: 1rem;
+}
+
+#nd-sidebar [role="group"] > button span {
+  font-size: 1.0625rem;
+}
+
+[data-page-header] h1,
+.fd-page-title {
+  font-size: 2.625rem;
+}
+
+#nd-toc a {
+  font-size: 0.9375rem;
+}
+
+nav[aria-label="Breadcrumb"] a,
+nav[aria-label="Breadcrumb"] span {
+  font-size: 0.9375rem;
+}
