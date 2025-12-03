@@ -58,7 +58,6 @@ shutdown: (context) => Effect.gen(function* () {
 
 ```typescript
 export default createPlugin({
-  id: "production-ready-plugin",
   contract,
   variables: z.object({
     redisUrl: z.string(),

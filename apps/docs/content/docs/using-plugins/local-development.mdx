@@ -103,7 +103,6 @@ import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
 
 export default createPlugin({
-  id: "my-plugin",
   contract: {
     getData: oc.route({ method: 'POST', path: '/getData' })
       .input(z.object({ id: z.string() }))

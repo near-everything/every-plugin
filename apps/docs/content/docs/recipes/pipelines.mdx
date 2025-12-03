@@ -86,7 +86,6 @@ Support multiple tenants with isolated contexts:
 
 ```typescript
 export default createPlugin({
-  id: "multi-tenant-api",
   contract,
   variables: z.object({
     tenantId: z.string()

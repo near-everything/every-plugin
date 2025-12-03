@@ -39,7 +39,6 @@ const contract = oc.router({
 });
 
 export default createPlugin({
-  id: "user-activity-stream",
   contract,
   variables: z.object({
     redisUrl: z.string().optional(), // For multi-instance scaling

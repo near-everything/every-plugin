@@ -33,7 +33,6 @@ const contract = oc.router({
 });
 
 export default createPlugin({
-  id: "work-processor",
   contract,
   variables: z.object({
     workerCount: z.number().default(3),

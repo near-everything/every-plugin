@@ -181,8 +181,6 @@ import { contract } from "./contract";
 import { YourService } from "./service";
 
 export default createPlugin({
-  id: "@your-org/your-plugin",
-  
   variables: z.object({
     baseUrl: z.string().url(),
     timeout: z.number().default(10000),

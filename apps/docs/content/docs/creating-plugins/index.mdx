@@ -188,7 +188,6 @@ import { contract } from "./contract";
 import { MyService } from "./service";
 
 export default createPlugin({
-  id: "my-plugin",
   contract,
   
   // Configuration schemas
@@ -494,7 +493,6 @@ class SimpleService {
 }
 
 export default createPlugin({
-  id: "simple-plugin",
   contract,
   variables: z.object({ timeout: z.number().default(30000) }),
   secrets: z.object({ apiKey: z.string() }),
@@ -641,7 +639,6 @@ createRouter: (context, builder) => ({
 ```typescript
 // In your plugin package
 export default createPlugin({
-  id: "my-plugin",
   // ... plugin definition
 });
 
