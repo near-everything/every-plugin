@@ -1,19 +1,13 @@
 {
+  "extends": "./tsconfig.build.json",
   "compilerOptions": {
-    "module": "ESNext",
+    "composite": false,
+    "rootDir": ".",
     "target": "ES2020",
-    "lib": ["ES2020"],
-    "types": ["node"],
-    "moduleResolution": "bundler",
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "dist",
-    "composite": true,
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true
+    "declaration": false,
+    "declarationMap": false
   },
-  "include": ["src/**/*", "./plugin.dev.ts"],
+  "files": ["tests/types.d.ts"],
+  "include": ["src/**/*", "tests/**/*", "plugin.dev.ts"],
   "exclude": ["node_modules", "dist"]
 }

@@ -1,19 +1,13 @@
-import type { EveryPlugin, PluginRegistry } from "every-plugin";
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import type { EveryPlugin } from "every-plugin";
+import { createPluginRuntime } from "every-plugin";
 import { beforeAll, describe, expect, it } from "vitest";
 import { TestPlugin } from "../fixtures/test-plugin/src/index";
-import type { TestRegistry } from "../registry";
 
-const TEST_PLUGIN_MAP = {
-  "test-plugin": TestPlugin,
-} as const;
-
-const TEST_REGISTRY: PluginRegistry = {
+const TEST_REGISTRY = {
   "test-plugin": {
-    remoteUrl: "http://localhost:3999/remoteEntry.js",
-    version: "0.0.1",
+    module: TestPlugin
   },
-};
+} as const;
 
 const TEST_CONFIG = {
   variables: {
@@ -30,12 +24,12 @@ const SECRETS_CONFIG = {
 };
 
 describe("Plugin Client Unit Tests", () => {
-  const runtime = createLocalPluginRuntime<TestRegistry>({
+  const runtime = createPluginRuntime({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG,
-  }, TEST_PLUGIN_MAP);
+  });
 
-  let plugin: EveryPlugin.Infer<"test-plugin">;
+  let plugin: EveryPlugin.Infer<"test-plugin", typeof runtime>;
 
   beforeAll(async () => {
     plugin = await runtime.usePlugin("test-plugin", TEST_CONFIG);

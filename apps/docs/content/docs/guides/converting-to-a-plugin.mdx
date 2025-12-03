@@ -416,8 +416,7 @@ Add your plugin to the runtime registry:
 const runtime = createPluginRuntime({
   registry: {
     "my-plugin": {
-      remoteUrl: "https://cdn.example.com/plugins/my-plugin/v1/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/plugins/my-plugin/v1/remoteEntry.js"
     }
   },
   secrets: {

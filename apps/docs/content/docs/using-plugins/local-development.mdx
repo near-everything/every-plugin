@@ -1,50 +1,34 @@
 ---
 title: Local Development
-description: Develop plugins locally without Module Federation
+description: Develop plugins locally with module entries
 ---
 
-For local development, monorepos, or testing, you can use `createLocalPluginRuntime` to work with plugins directly without Module Federation overhead.
+For local development, monorepos, or testing, you can use module entries with `createPluginRuntime` to work with plugins directly without Module Federation overhead.
 
 ## Setup
 
-Import the local runtime from the testing package:
+Import plugins directly and use module entries:
 
 ```typescript
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin/runtime";
 import DataSource from "./plugins/data-source";
 import Transformer from "./plugins/transformer";
 ```
 
 ## Basic Usage
 
-Create a local runtime with your plugin map:
+Create a runtime with module entries:
 
 ```typescript
-// Define plugin map with 'as const' for type inference
-const pluginMap = {
-  "data-source": DataSource,
-  "transformer": Transformer
-} as const;
-
-// Runtime automatically infers bindings from plugin map
-const runtime = createLocalPluginRuntime(
-  {
-    registry: {
-      "data-source": {
-        remoteUrl: "http://localhost:3000/remoteEntry.js", // Not used, but still required
-        version: "1.0.0"
-      },
-      "transformer": {
-        remoteUrl: "http://localhost:3001/remoteEntry.js", // you can put dummy value
-        version: "1.0.0"
-      }
-    },
-    secrets: { API_KEY: "dev-key" }
+const runtime = createPluginRuntime({
+  registry: {
+    "data-source": { module: DataSource },
+    "transformer": { module: Transformer }
   },
-  pluginMap
-);
+  secrets: { API_KEY: "dev-key" }
+});
 
-// Get fully typed client
+// Get fully typed client with automatic type inference
 const { client } = await runtime.usePlugin("data-source", {
   secrets: { apiKey: "{{API_KEY}}" },
   variables: { timeout: 30000 }
@@ -55,24 +39,25 @@ const result = await client.getData({ id: "123" });
 ```
 
 <Callout>
-**Always use `as const`** on plugin maps for automatic type inference.
+Module entries provide automatic type inference from the plugin constructor. No module augmentation needed!
 </Callout>
 
 ## Automatic Type Inference
 
-When you define your plugin map with `as const`, type bindings are automatically inferred:
+Module entries automatically infer types from the plugin:
 
 ```typescript
-const pluginMap = {
-  "data-source": DataSource,
-  "transformer": Transformer
-} as const;
+import { createPluginRuntime } from "every-plugin/runtime";
+import DataSource from "./plugins/data-source";
+import Transformer from "./plugins/transformer";
 
-// Bindings automatically inferred - no manual typing needed
-const runtime = createLocalPluginRuntime(
-  { registry: {...}, secrets: {...} },
-  pluginMap
-);
+const runtime = createPluginRuntime({
+  registry: {
+    "data-source": { module: DataSource },
+    "transformer": { module: Transformer }
+  },
+  secrets: { API_KEY: "test" }
+});
 
 // Full type safety without manual bindings
 const { client } = await runtime.usePlugin("data-source", config);
@@ -87,18 +72,20 @@ const result = await client.getData({ id: "123" });
 - Type inference for config (variables/secrets)
 - Compile-time validation of inputs/outputs
 - Better refactoring support
+- No module augmentation required
 
 ## When to Use
 
-### ✅ Use Local Runtime For:
+### ✅ Use Module Entries For:
 
 - **Monorepo development** - Work with local plugin implementations
 - **Unit testing** - Test plugins without Module Federation overhead
 - **Integration testing** - Test plugin interactions locally
 - **Development servers** - Run plugins from source during development
 - **CI/CD pipelines** - Test before deploying
+- **Hybrid setups** - Mix local and remote plugins in one runtime
 
-### ⚠️ Use Remote Runtime For:
+### ⚠️ Use Remote Entries For:
 
 - **Production** - Load plugins via Module Federation from CDN
 - **Distributed systems** - Plugins deployed separately from runtime
@@ -142,27 +129,17 @@ export default createPlugin({
 ### Test Locally
 
 ```typescript title="dev-server.ts"
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin/runtime";
 import MyPlugin from "./plugins/my-plugin/src/index";
 
-const pluginMap = {
-  "my-plugin": MyPlugin
-} as const;
-
-const runtime = createLocalPluginRuntime(
-  {
-    registry: {
-      "my-plugin": {
-        remoteUrl: "", // Not used locally
-        version: "1.0.0"
-      }
-    },
-    secrets: {
-      API_KEY: process.env.DEV_API_KEY || "dev-key"
-    }
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": { module: MyPlugin }
   },
-  pluginMap
-);
+  secrets: {
+    API_KEY: process.env.DEV_API_KEY || "dev-key"
+  }
+});
 
 const { client } = await runtime.usePlugin("my-plugin", {
   secrets: { apiKey: "{{API_KEY}}" },
@@ -207,27 +184,19 @@ my-app/
 ```
 
 ```typescript title="apps/api/src/main.ts"
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin/runtime";
 import DataSource from "../../../plugins/data-source/src/index";
 import Transformer from "../../../plugins/transformer/src/index";
 
-const pluginMap = {
-  "data-source": DataSource,
-  "transformer": Transformer
-} as const;
-
-const runtime = createLocalPluginRuntime(
-  {
-    registry: {
-      "data-source": { remoteUrl: "", version: "1.0.0" },
-      "transformer": { remoteUrl: "", version: "1.0.0" }
-    },
-    secrets: {
-      API_KEY: process.env.API_KEY!
-    }
+const runtime = createPluginRuntime({
+  registry: {
+    "data-source": { module: DataSource },
+    "transformer": { module: Transformer }
   },
-  pluginMap
-);
+  secrets: {
+    API_KEY: process.env.API_KEY!
+  }
+});
 
 // Use plugins locally during development
 const { client: source } = await runtime.usePlugin("data-source", {
@@ -249,24 +218,16 @@ Use in test files for comprehensive testing:
 
 ```typescript title="__tests__/plugin.test.ts"
 import { describe, it, expect } from "vitest";
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin/runtime";
 import MyPlugin from "../src/index";
 
 describe("MyPlugin", () => {
-  const pluginMap = { "my-plugin": MyPlugin } as const;
-  
-  const runtime = createLocalPluginRuntime(
-    {
-      registry: {
-        "my-plugin": {
-          remoteUrl: "",
-          version: "1.0.0"
-        }
-      },
-      secrets: { API_KEY: "test-key" }
+  const runtime = createPluginRuntime({
+    registry: {
+      "my-plugin": { module: MyPlugin }
     },
-    pluginMap
-  );
+    secrets: { API_KEY: "test-key" }
+  });
 
   it("should fetch data correctly", async () => {
     const { client } = await runtime.usePlugin("my-plugin", {
@@ -295,31 +256,40 @@ describe("MyPlugin", () => {
 
 ## Environment-Specific Runtime
 
-Switch between local and remote based on environment:
+Switch between module and remote based on environment:
 
 ```typescript
 import { createPluginRuntime } from "every-plugin/runtime";
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import DevPlugin from "./plugins/my-plugin";
 
-const isDevelopment = process.env.NODE_ENV === "development";
+const isDev = process.env.NODE_ENV === "development";
 
-const runtime = isDevelopment
-  ? createLocalPluginRuntime(
-      { registry: {...}, secrets: {...} },
-      { "my-plugin": LocalPlugin } as const
-    )
-  : createPluginRuntime({
-      registry: {
-        "my-plugin": {
-          remoteUrl: "https://cdn.example.com/my-plugin/remoteEntry.js",
-          version: "1.0.0"
-        }
-      },
-      secrets: {...}
-    });
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": isDev
+      ? { module: DevPlugin }
+      : { remote: "https://cdn.example.com/my-plugin/remoteEntry.js" }
+  },
+  secrets: { API_KEY: process.env.API_KEY }
+});
 
 // Same API for both
 const { client } = await runtime.usePlugin("my-plugin", config);
+```
+
+Or use hybrid approach with module precedence:
+
+```typescript
+import DevPlugin from "./plugins/my-plugin";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      module: isDev ? DevPlugin : undefined,  // Module used in dev
+      remote: "https://cdn.example.com/my-plugin/remoteEntry.js"  // Fallback
+    }
+  }
+});
 ```
 
 ## Best Practices
@@ -327,21 +297,25 @@ const { client } = await runtime.usePlugin("my-plugin", config);
 ### ✅ Do This
 
 ```typescript
-// Always use 'as const' for type inference
-const pluginMap = {
-  "plugin-1": Plugin1,
-  "plugin-2": Plugin2
-} as const;
+// Use module entries for local development
+const runtime = createPluginRuntime({
+  registry: {
+    "plugin-1": { module: Plugin1 },
+    "plugin-2": { module: Plugin2 }
+  }
+});
 
 // Test locally before deploying
-const runtime = createLocalPluginRuntime(...);
-const { client } = await runtime.usePlugin(...);
+const { client } = await runtime.usePlugin("plugin-1", config);
 await client.testOperation();
 
-// Switch to remote runtime for production
+// Use remote entries for production
 if (process.env.NODE_ENV === "production") {
   runtime = createPluginRuntime({
-    registry: { /* remote URLs */ }
+    registry: {
+      "plugin-1": { remote: "https://..." },
+      "plugin-2": { remote: "https://..." }
+    }
   });
 }
 ```
@@ -349,18 +323,22 @@ if (process.env.NODE_ENV === "production") {
 ### ❌ Don't Do This
 
 ```typescript
-// Don't forget 'as const'
-const pluginMap = {
-  "plugin-1": Plugin1  // No type inference!
-};
-
-// Don't use local runtime in production
-if (process.env.NODE_ENV === "production") {
-  runtime = createLocalPluginRuntime(...); // Wrong!
-}
+// Don't mix concerns
+const runtime = createPluginRuntime({
+  registry: {
+    "plugin-1": { module: Plugin1 }  // Local in production!
+  }
+});
 
 // Don't skip testing
 // Just deploy without local testing
+
+// Don't forget environment switching
+const runtime = createPluginRuntime({
+  registry: {
+    "plugin-1": { module: DevPlugin }  // Always dev mode!
+  }
+});
 ```
 
 ## Next Steps

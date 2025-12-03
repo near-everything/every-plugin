@@ -2,12 +2,15 @@ import { createRouterClient } from "@orpc/server";
 import { Cause, Effect, Exit, Hash, ManagedRuntime, Option } from "effect";
 import type {
 	AnyPlugin,
+	AnyPluginConstructor,
+	InferRegistryFromEntries,
 	InitializedPlugin,
 	LoadedPlugin,
 	PluginClientType,
 	PluginConfigInput,
 	PluginInstance,
 	PluginRegistry,
+	PluginRegistryEntry,
 	PluginRouterType,
 	PluginRuntimeConfig,
 	RegisteredPlugin,
@@ -17,7 +20,9 @@ import type {
 import { PluginRuntimeError } from "./errors";
 import { PluginService } from "./services/plugin.service";
 
-export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
+export class PluginRuntime<R = RegisteredPlugins> {
+	readonly ['__registryType']?: R;
+	
 	private pluginCache = new Map<string, Effect.Effect<InitializedPlugin<AnyPlugin>, PluginRuntimeError>>();
 
 	constructor(
@@ -170,28 +175,78 @@ export class PluginRuntime<R extends RegisteredPlugins = RegisteredPlugins> {
  * If the URL doesn't end with a file extension, appends /remoteEntry.js
  */
 function normalizeRemoteUrl(url: string): string {
-	if (url.endsWith('.js')) return url; // Already a file
+	if (!url) return url;
+	if (url.endsWith('.js')) return url;
 	return `${url.endsWith('/') ? url.slice(0, -1) : url}/remoteEntry.js`;
 }
 
-export function createPluginRuntime<R extends RegisteredPlugins = RegisteredPlugins>(
-	config: PluginRuntimeConfig<R>
-): PluginRuntime<R> {
-	const secrets = config.secrets || {};
+/**
+ * Extract plugin map (module constructors) from registry entries
+ */
+function extractPluginMap(registry: Record<string, PluginRegistryEntry>): Record<string, AnyPluginConstructor> {
+	const pluginMap: Record<string, AnyPluginConstructor> = {};
+	
+	for (const [pluginId, entry] of Object.entries(registry)) {
+		if ("module" in entry && entry.module) {
+			pluginMap[pluginId] = entry.module;
+		}
+	}
+	
+	return pluginMap;
+}
 
-	// Normalize all remote URLs in the registry
-	const normalizedRegistry = Object.fromEntries(
-		Object.entries(config.registry).map(([pluginId, entry]) => [
-			pluginId,
-			{
+/**
+ * Normalize registry entries - ensure remote URLs are properly formatted
+ */
+function normalizeRegistry(registry: Record<string, PluginRegistryEntry>): PluginRegistry {
+	const normalized: Record<string, PluginRegistryEntry> = {};
+	
+	for (const [pluginId, entry] of Object.entries(registry)) {
+		if ("module" in entry) {
+			normalized[pluginId] = {
 				...entry,
-				remoteUrl: normalizeRemoteUrl(entry.remoteUrl)
-			}
-		])
-	) as PluginRegistry;
+				remote: entry.remote ? normalizeRemoteUrl(entry.remote) : undefined,
+			};
+		} else {
+			normalized[pluginId] = {
+				...entry,
+				remote: normalizeRemoteUrl(entry.remote),
+			};
+		}
+	}
+	
+	return normalized as PluginRegistry;
+}
 
-	const layer = PluginService.Live(normalizedRegistry, secrets);
+/**
+ * Creates a plugin runtime with support for both module and remote plugin entries.
+ * 
+ * @example
+ * ```typescript
+ * // With module entries (types inferred automatically)
+ * const runtime = createPluginRuntime({
+ *   registry: {
+ *     telegram: { module: TelegramPlugin },
+ *     gopher: { remote: "https://cdn.example.com/gopher/remoteEntry.js" }
+ *   },
+ *   secrets: { API_KEY: "..." }
+ * });
+ * 
+ * // Types are automatically inferred from module entries!
+ * const { client } = await runtime.usePlugin("telegram", config);
+ * ```
+ */
+export function createPluginRuntime<
+	TRegistry extends Record<string, PluginRegistryEntry>
+>(
+	config: PluginRuntimeConfig<TRegistry>
+): PluginRuntime<InferRegistryFromEntries<TRegistry>> {
+	const secrets = config.secrets || {};
+	const normalizedRegistry = normalizeRegistry(config.registry);
+	const pluginMap = extractPluginMap(config.registry);
+
+	const layer = PluginService.Live(normalizedRegistry, secrets, pluginMap);
 	const runtime = ManagedRuntime.make(layer);
 
-	return new PluginRuntime(runtime, normalizedRegistry);
+	return new PluginRuntime(runtime, normalizedRegistry) as PluginRuntime<InferRegistryFromEntries<TRegistry>>;
 }

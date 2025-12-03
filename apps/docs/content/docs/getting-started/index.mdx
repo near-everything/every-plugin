@@ -21,8 +21,7 @@ import { createPluginRuntime } from "every-plugin/runtime";
 const runtime = createPluginRuntime({
   registry: {
     "social-feed": {
-      remoteUrl: "https://cdn.example.com/plugins/social-feed/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/plugins/social-feed/remoteEntry.js"
     }
   },
   secrets: {
@@ -284,32 +283,31 @@ const { client } = await runtime.usePlugin("plugin-id", {
 });
 ```
 
-### Local vs Remote
+### Module vs Remote Loading
 
-Same API for development and production:
+Unified API supports both direct imports and remote loading:
 
-<Tabs items={['Local Development', 'Production']}>
+<Tabs items={['Module (Local)', 'Remote (Production)', 'Hybrid']}>
 
-<Tab value="Local Development">
+<Tab value="Module (Local)">
 
 ```typescript
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin/runtime";
 import MyPlugin from "./my-plugin";
 
-const runtime = createLocalPluginRuntime(
-  { 
-    registry: { "my-plugin": { remoteUrl: "", version: "1.0.0" } },
-    secrets: { API_KEY: "test-key" }
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": { module: MyPlugin }
   },
-  { "my-plugin": MyPlugin } as const
-);
+  secrets: { API_KEY: "test-key" }
+});
 
 const { client } = await runtime.usePlugin("my-plugin", config);
 ```
 
 </Tab>
 
-<Tab value="Production">
+<Tab value="Remote (Production)">
 
 ```typescript
 import { createPluginRuntime } from "every-plugin/runtime";
@@ -317,8 +315,28 @@ import { createPluginRuntime } from "every-plugin/runtime";
 const runtime = createPluginRuntime({
   registry: {
     "my-plugin": {
-      remoteUrl: "https://cdn.example.com/my-plugin/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/my-plugin/remoteEntry.js"
+    }
+  },
+  secrets: { API_KEY: process.env.API_KEY }
+});
+
+const { client } = await runtime.usePlugin("my-plugin", config);
+```
+
+</Tab>
+
+<Tab value="Hybrid">
+
+```typescript
+import { createPluginRuntime } from "every-plugin/runtime";
+import MyPlugin from "./my-plugin";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      module: MyPlugin,  // Used in dev
+      remote: "https://cdn.example.com/my-plugin/remoteEntry.js"  // Fallback
     }
   },
   secrets: { API_KEY: process.env.API_KEY }

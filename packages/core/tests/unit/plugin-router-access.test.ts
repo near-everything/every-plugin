@@ -7,22 +7,17 @@ import { OpenAPIHandler } from "@orpc/openapi/node";
 import type { RouterClient } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/node";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import type { EveryPlugin, PluginRegistry } from "every-plugin";
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import type { EveryPlugin } from "every-plugin";
+import { createPluginRuntime } from "every-plugin";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TestPlugin, type testContract } from "../fixtures/test-plugin/src/index";
 import { PORT_POOL } from "../setup/global-setup";
 
-const TEST_PLUGIN_MAP = {
-  "test-plugin": TestPlugin,
-} as const;
-
-const TEST_REGISTRY: PluginRegistry = {
+const TEST_REGISTRY = {
   "test-plugin": {
-    remoteUrl: "http://localhost:3999/remoteEntry.js",
-    version: "0.0.1",
+    module: TestPlugin
   },
-};
+} as const;
 
 const TEST_CONFIG = {
   variables: {
@@ -39,32 +34,28 @@ const SECRETS_CONFIG = {
 };
 
 describe("Plugin Router Access Methods", () => {
-  const runtime = createLocalPluginRuntime({
+  const runtime = createPluginRuntime({
     registry: TEST_REGISTRY,
     secrets: SECRETS_CONFIG
-  }, TEST_PLUGIN_MAP);
+  });
 
-  // Shared server setup for all tests
   let server: ReturnType<typeof createServer> | null = null;
-  let plugin: EveryPlugin.Infer<"test-plugin"> | null = null;
+  let plugin: EveryPlugin.Infer<"test-plugin", typeof runtime> | null = null;
   let baseUrl: string = "";
 
   beforeAll(async () => {
     plugin = await runtime.usePlugin("test-plugin", TEST_CONFIG);
     const { router } = plugin;
 
-    // Create both handlers
     const rpcHandler = new RPCHandler(router);
     const openApiHandler = new OpenAPIHandler(router);
 
-    const port = PORT_POOL.RPC_TEST; // Use one port for unified server
+    const port = PORT_POOL.RPC_TEST;
     baseUrl = `http://localhost:${port}`;
 
-    // Create unified server with both handlers
     server = createServer(async (req, res) => {
       const url = new URL(req.url!, baseUrl);
 
-      // Route to RPC handler
       if (url.pathname.startsWith('/rpc')) {
         const result = await rpcHandler.handle(req, res, {
           prefix: '/rpc',
@@ -73,7 +64,6 @@ describe("Plugin Router Access Methods", () => {
         if (result.matched) return;
       }
 
-      // Route to OpenAPI handler  
       if (url.pathname.startsWith('/api')) {
         const result = await openApiHandler.handle(req, res, {
           prefix: '/api',
@@ -82,12 +72,10 @@ describe("Plugin Router Access Methods", () => {
         if (result.matched) return;
       }
 
-      // 404 for unmatched routes
       res.statusCode = 404;
       res.end('Route not found');
     });
 
-    // Start server
     await new Promise<void>((resolve, reject) => {
       server?.listen(port, '127.0.0.1', () => resolve());
       server?.on('error', reject);
@@ -172,7 +160,6 @@ describe("Plugin Router Access Methods", () => {
       url: `${baseUrl}/rpc`,
       fetch: globalThis.fetch,
     });
-
 
     const client: ContractRouterClient<typeof testContract> = createORPCClient(link);
 

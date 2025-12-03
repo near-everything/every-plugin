@@ -3,14 +3,14 @@ title: Testing Plugins
 description: Unit and integration testing for plugins
 ---
 
-Test plugins using `createLocalPluginRuntime`, which loads plugins directly without Module Federation overhead.
+Test plugins using `createPluginRuntime` with module entries, which loads plugins directly without Module Federation overhead.
 
 ## Setup
 
-Import the local plugin runtime from `every-plugin/testing`:
+Import the runtime and your plugin:
 
 ```typescript
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin/runtime";
 import { describe, it, expect } from "vitest";
 import TestPlugin from "../src/index";
 ```
@@ -21,29 +21,18 @@ Create a test suite with automatic type inference:
 
 ```typescript
 import { describe, it, expect } from "vitest";
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin/runtime";
 import TestPlugin from "../src/index";
 
 describe("Test Plugin", () => {
-  // Define plugin map with 'as const' for type inference
-  const pluginMap = {
-    "test-plugin": TestPlugin
-  } as const;
-
-  const runtime = createLocalPluginRuntime(
-    {
-      registry: {
-        "test-plugin": {
-          remoteUrl: "http://localhost:3999/remoteEntry.js",
-          version: "0.0.1"
-        }
-      },
-      secrets: {
-        API_KEY: "test-api-key-value"
-      }
+  const runtime = createPluginRuntime({
+    registry: {
+      "test-plugin": { module: TestPlugin }
     },
-    pluginMap
-  );
+    secrets: {
+      API_KEY: "test-api-key-value"
+    }
+  });
 
   it("should fetch single item", async () => {
     const { client } = await runtime.usePlugin("test-plugin", {
@@ -60,7 +49,7 @@ describe("Test Plugin", () => {
 ```
 
 <Callout>
-**Always use `as const`** on plugin maps for automatic type inference in tests.
+Module entries provide automatic type inference from the plugin constructor. No manual type bindings needed!
 </Callout>
 
 ## Testing Procedures
@@ -315,8 +304,8 @@ class MockApiService {
 
 // Use in plugin
 export default createPlugin({
-  id: "test-plugin",
-  // ... contract and config
+  contract,
+  // ... config
   initialize: (config) => Effect.gen(function* () {
     const service = process.env.NODE_ENV === "test"
       ? new MockApiService()
@@ -366,26 +355,18 @@ it("should produce events in background", async () => {
 Test multiple plugins working together:
 
 ```typescript
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin/runtime";
 import SourcePlugin from "./source-plugin";
 import TransformerPlugin from "./transformer-plugin";
 
 describe("Plugin Integration", () => {
-  const pluginMap = {
-    "source": SourcePlugin,
-    "transformer": TransformerPlugin
-  } as const;
-
-  const runtime = createLocalPluginRuntime(
-    {
-      registry: {
-        "source": { remoteUrl: "", version: "1.0.0" },
-        "transformer": { remoteUrl: "", version: "1.0.0" }
-      },
-      secrets: { API_KEY: "test-key" }
+  const runtime = createPluginRuntime({
+    registry: {
+      "source": { module: SourcePlugin },
+      "transformer": { module: TransformerPlugin }
     },
-    pluginMap
-  );
+    secrets: { API_KEY: "test-key" }
+  });
 
   it("should process data through pipeline", async () => {
     const { client: source } = await runtime.usePlugin("source", {
@@ -416,24 +397,16 @@ Full test suite for a plugin:
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin/runtime";
 import TestPlugin from "../src/index";
 
 describe("Complete Plugin Test Suite", () => {
-  const pluginMap = { "test-plugin": TestPlugin } as const;
-
-  const runtime = createLocalPluginRuntime(
-    {
-      registry: {
-        "test-plugin": {
-          remoteUrl: "http://localhost:3999/remoteEntry.js",
-          version: "0.0.1"
-        }
-      },
-      secrets: { API_KEY: "test-api-key" }
+  const runtime = createPluginRuntime({
+    registry: {
+      "test-plugin": { module: TestPlugin }
     },
-    pluginMap
-  );
+    secrets: { API_KEY: "test-api-key" }
+  });
 
   const TEST_CONFIG = {
     secrets: { apiKey: "{{API_KEY}}" },
@@ -445,7 +418,6 @@ describe("Complete Plugin Test Suite", () => {
       const result = await runtime.usePlugin("test-plugin", TEST_CONFIG);
       
       expect(result.metadata.id).toBe("test-plugin");
-      expect(result.metadata.version).toBe("0.0.1");
     });
 
     it("should fetch by ID", async () => {

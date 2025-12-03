@@ -1,48 +1,10 @@
-import type { PluginRegistry } from "every-plugin";
-import { createLocalPluginRuntime } from "every-plugin/testing";
-import { beforeAll, describe, expect, it } from "vitest";
-import TemplatePlugin from "@/index";
-
-const TEST_REGISTRY: PluginRegistry = {
-  "@every-plugin/template": {
-    remoteUrl: "http://localhost:3000/remoteEntry.js",
-    version: "1.0.0",
-    description: "Template plugin for integration testing",
-  },
-};
-
-const TEST_PLUGIN_MAP = {
-  "@every-plugin/template": TemplatePlugin,
-} as const;
-
-const TEST_CONFIG = {
-  variables: {
-    baseUrl: "https://api.example.com",
-    timeout: 5000,
-  },
-  secrets: {
-    apiKey: "test-api-key",
-  },
-};
+import { describe, expect, it } from "vitest";
+import { getPluginClient } from "../setup";
 
 describe("Template Plugin Integration Tests", () => {
-  const runtime = createLocalPluginRuntime(
-    {
-      registry: TEST_REGISTRY,
-      secrets: { API_KEY: "test-api-key" },
-    },
-    TEST_PLUGIN_MAP
-  );
-
-  beforeAll(async () => {
-    const { initialized } = await runtime.usePlugin("@every-plugin/template", TEST_CONFIG);
-    expect(initialized).toBeDefined();
-    expect(initialized.plugin.id).toBe("@every-plugin/template");
-  });
-
   describe("getById procedure", () => {
     it("should fetch item successfully", async () => {
-      const { client } = await runtime.usePlugin("@every-plugin/template", TEST_CONFIG);
+      const client = await getPluginClient();
 
       const result = await client.getById({ id: "test-123" });
 
@@ -54,7 +16,7 @@ describe("Template Plugin Integration Tests", () => {
     });
 
     it("should handle not found error", async () => {
-      const { client } = await runtime.usePlugin("@every-plugin/template", TEST_CONFIG);
+      const client = await getPluginClient();
 
       await expect(
         client.getById({ id: "not-found" })
@@ -64,7 +26,7 @@ describe("Template Plugin Integration Tests", () => {
 
   describe("search procedure", () => {
     it("should stream search results", async () => {
-      const { client } = await runtime.usePlugin("@every-plugin/template", TEST_CONFIG);
+      const client = await getPluginClient();
 
       const stream = await client.search({ query: "test-query", limit: 3 });
 
@@ -87,7 +49,7 @@ describe("Template Plugin Integration Tests", () => {
     });
 
     it("should respect limit parameter", async () => {
-      const { client } = await runtime.usePlugin("@every-plugin/template", TEST_CONFIG);
+      const client = await getPluginClient();
 
       const stream = await client.search({ query: "limited", limit: 2 });
 
@@ -102,7 +64,7 @@ describe("Template Plugin Integration Tests", () => {
 
   describe("ping procedure", () => {
     it("should return healthy status", async () => {
-      const { client } = await runtime.usePlugin("@every-plugin/template", TEST_CONFIG);
+      const client = await getPluginClient();
 
       const result = await client.ping();
 

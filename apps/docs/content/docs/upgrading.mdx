@@ -5,6 +5,324 @@ description: Migration guides for major version changes
 
 This guide covers breaking changes and migration steps for upgrading between major versions of every-plugin.
 
+## v0.4 → v0.5
+
+Version 0.5.0 introduces a unified `createPluginRuntime` API that supports both module (direct imports) and remote (Module Federation) loading strategies with automatic type inference.
+
+### What's New
+
+- 🔄 **Unified API** - Single `createPluginRuntime` for both module and remote loading
+- 🎯 **Automatic Type Inference** - Types derived from `module` entries without augmentation
+- 📦 **Flexible Registry** - Mix module and remote entries in the same configuration
+- 🏷️ **Simplified Fields** - `remoteUrl` → `remote`, removed `version` field
+- 🔧 **Enhanced EveryPlugin.Infer** - Now accepts runtime instances for better type inference
+
+### Breaking Changes
+
+#### 1. Registry Format Changes
+
+**Before (v0.4):**
+```typescript
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      remoteUrl: "https://cdn.example.com/my-plugin/remoteEntry.js",
+      version: "1.0.0"
+    }
+  }
+});
+```
+
+**After (v0.5):**
+```typescript
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      remote: "https://cdn.example.com/my-plugin/remoteEntry.js"
+    }
+  }
+});
+```
+
+**Changes:**
+- `remoteUrl` renamed to `remote`
+- `version` field removed (not needed for runtime behavior)
+- Optional `description` field added for documentation
+
+#### 2. Module Entries (New Feature)
+
+You can now include plugins directly in the registry:
+
+```typescript
+import { createPluginRuntime } from "every-plugin/runtime";
+import LocalPlugin from "./plugins/local-plugin";
+
+const runtime = createPluginRuntime({
+  registry: {
+    // Direct module import - types inferred automatically
+    "local-plugin": { module: LocalPlugin },
+    
+    // Remote plugin
+    "remote-plugin": { remote: "https://cdn.example.com/remoteEntry.js" },
+    
+    // Both (module takes precedence)
+    "hybrid": {
+      module: LocalPlugin,
+      remote: "https://cdn.example.com/remoteEntry.js"
+    }
+  }
+});
+```
+
+**Benefits:**
+- No module augmentation needed for local plugins
+- Automatic type inference from constructor
+- Easier testing and development
+
+#### 3. createLocalPluginRuntime Deprecated
+
+**Before (v0.4):**
+```typescript
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import MyPlugin from "./my-plugin";
+
+const runtime = createLocalPluginRuntime(
+  {
+    registry: {
+      "my-plugin": { remoteUrl: "", version: "1.0.0" }
+    },
+    secrets: { API_KEY: "test" }
+  },
+  { "my-plugin": MyPlugin } as const
+);
+```
+
+**After (v0.5):**
+```typescript
+import { createPluginRuntime } from "every-plugin/runtime";
+import MyPlugin from "./my-plugin";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": { module: MyPlugin }
+  },
+  secrets: { API_KEY: "test" }
+});
+```
+
+**Note:** `createLocalPluginRuntime` still works but is deprecated. It now wraps `createPluginRuntime` internally.
+
+#### 4. Enhanced Type Inference
+
+**Before (v0.4):**
+```typescript
+import type { EveryPlugin } from "every-plugin";
+
+type MyPluginType = EveryPlugin.Infer<"my-plugin">;
+```
+
+**After (v0.5):**
+```typescript
+import type { EveryPlugin } from "every-plugin";
+
+// Option 1: Still works with module augmentation
+type MyPluginType = EveryPlugin.Infer<"my-plugin">;
+
+// Option 2: Infer from runtime instance (new!)
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": { module: MyPlugin }
+  }
+});
+
+type MyPluginType = EveryPlugin.Infer<"my-plugin", typeof runtime>;
+```
+
+The runtime-based inference is especially useful with module entries since types are automatically derived.
+
+### Migration Steps
+
+#### Step 1: Update Registry Format
+
+Replace all `remoteUrl` with `remote` and remove `version`:
+
+```typescript
+// Before
+const runtime = createPluginRuntime({
+  registry: {
+    "plugin-1": {
+      remoteUrl: "https://cdn.example.com/plugin1/remoteEntry.js",
+      version: "1.0.0"
+    },
+    "plugin-2": {
+      remoteUrl: "https://cdn.example.com/plugin2/remoteEntry.js",
+      version: "2.5.0"
+    }
+  }
+});
+
+// After
+const runtime = createPluginRuntime({
+  registry: {
+    "plugin-1": {
+      remote: "https://cdn.example.com/plugin1/remoteEntry.js"
+    },
+    "plugin-2": {
+      remote: "https://cdn.example.com/plugin2/remoteEntry.js"
+    }
+  }
+});
+```
+
+#### Step 2: Migrate createLocalPluginRuntime Calls
+
+Replace `createLocalPluginRuntime` with `createPluginRuntime` using module entries:
+
+```typescript
+// Before
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import Plugin1 from "./plugin1";
+import Plugin2 from "./plugin2";
+
+const runtime = createLocalPluginRuntime(
+  {
+    registry: {
+      "plugin-1": { remoteUrl: "", version: "1.0.0" },
+      "plugin-2": { remoteUrl: "", version: "1.0.0" }
+    },
+    secrets: { API_KEY: "test" }
+  },
+  {
+    "plugin-1": Plugin1,
+    "plugin-2": Plugin2
+  } as const
+);
+
+// After
+import { createPluginRuntime } from "every-plugin/runtime";
+import Plugin1 from "./plugin1";
+import Plugin2 from "./plugin2";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "plugin-1": { module: Plugin1 },
+    "plugin-2": { module: Plugin2 }
+  },
+  secrets: { API_KEY: "test" }
+});
+```
+
+#### Step 3: Update Type Inference (Optional)
+
+If using module entries, you can remove module augmentation:
+
+```typescript
+// Before - Required module augmentation
+import type Plugin1 from "./plugin1";
+
+declare module "every-plugin" {
+  interface RegisteredPlugins {
+    "plugin-1": typeof Plugin1;
+  }
+}
+
+const runtime = createPluginRuntime({
+  registry: {
+    "plugin-1": { remoteUrl: "...", version: "1.0.0" }
+  }
+});
+
+type Plugin1Type = EveryPlugin.Infer<"plugin-1">;
+
+// After - Automatic inference with module entries
+import Plugin1 from "./plugin1";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "plugin-1": { module: Plugin1 }
+  }
+});
+
+type Plugin1Type = EveryPlugin.Infer<"plugin-1", typeof runtime>;
+```
+
+**Note:** Module augmentation still works and is recommended for remote-only plugins.
+
+#### Step 4: Update Tests
+
+Update test files to use the new format:
+
+```typescript
+// Before
+import { createLocalPluginRuntime } from "every-plugin/testing";
+import TestPlugin from "../src/index";
+
+const pluginMap = { "test-plugin": TestPlugin } as const;
+
+const runtime = createLocalPluginRuntime(
+  {
+    registry: {
+      "test-plugin": {
+        remoteUrl: "http://localhost:3999/remoteEntry.js",
+        version: "0.0.1"
+      }
+    }
+  },
+  pluginMap
+);
+
+// After
+import { createPluginRuntime } from "every-plugin/runtime";
+import TestPlugin from "../src/index";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "test-plugin": { module: TestPlugin }
+  }
+});
+```
+
+### Hybrid Development/Production Pattern
+
+The unified API enables easy switching between development and production:
+
+```typescript
+import { createPluginRuntime } from "every-plugin/runtime";
+import DevPlugin from "./plugins/my-plugin";
+
+const isDev = process.env.NODE_ENV === "development";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": isDev
+      ? { module: DevPlugin }
+      : { remote: "https://cdn.example.com/my-plugin/remoteEntry.js" }
+  },
+  secrets: { API_KEY: process.env.API_KEY }
+});
+```
+
+Or use both with module precedence:
+
+```typescript
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": {
+      module: isDev ? DevPlugin : undefined,
+      remote: "https://cdn.example.com/my-plugin/remoteEntry.js"
+    }
+  }
+});
+```
+
+### Backwards Compatibility
+
+- `createLocalPluginRuntime` still works (wraps `createPluginRuntime`)
+- Module augmentation still works for type inference
+- Existing remote-only runtimes continue working (just update field names)
+
+---
+
 ## v0.3 → v0.4
 
 Version 0.4.0 introduces improved type safety and better organization patterns for applications using multiple plugins or entry points.

@@ -20,8 +20,7 @@ every-plugin uses **Module Federation** to load plugins at runtime. This is fund
 const runtime = createPluginRuntime({
   registry: {
     "my-plugin": {
-      remoteUrl: "https://cdn.example.com/v1/my-plugin/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/v1/my-plugin/remoteEntry.js"
     }
   }
 });
@@ -68,18 +67,36 @@ const result = await client.getData({ id: "123" });
 // ✅ Still type-safe at runtime
 // ❌ No IDE autocomplete
 
-// With bindings - same safety + autocomplete
-import type MyPlugin from "@my-org/my-plugin";
+// With module entries - automatic type inference!
+import MyPlugin from "@my-org/my-plugin";
 
-type AppBindings = {
-  "my-plugin": typeof MyPlugin;
-};
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": { module: MyPlugin }
+  }
+});
 
-const runtime = createPluginRuntime<AppBindings>({...});
 const { client } = await runtime.usePlugin("my-plugin", config);
 //                                         ^-- IDE suggests plugin IDs
 const result = await client.getData({ id: "123" });
 //                          ^-- Autocomplete shows procedures
+// ✅ Type-safe at runtime
+// ✅ IDE autocomplete and validation
+
+// With remote entries - use module augmentation
+import type MyPlugin from "@my-org/my-plugin";
+
+declare module "every-plugin" {
+  interface RegisteredPlugins {
+    "my-plugin": typeof MyPlugin;
+  }
+}
+
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": { remote: "https://cdn.example.com/remoteEntry.js" }
+  }
+});
 // ✅ Type-safe at runtime
 // ✅ IDE autocomplete and validation
 ```
@@ -103,26 +120,40 @@ bun add -D @my-org/data-source-plugin
 This installs the plugin package ONLY for its TypeScript types. The actual plugin code is loaded remotely at runtime via Module Federation.
 </Callout>
 
-### Define Bindings
+### Option A: Module Entry (Automatic Inference)
+
+If you have the plugin locally, use module entries for automatic type inference:
 
 ```typescript
-import type { DataSource } from "@my-org/data-source-plugin";
+import DataSource from "@my-org/data-source-plugin";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "data-source": { module: DataSource }
+  }
+});
+
+// Types automatically inferred - no augmentation needed!
+const { client } = await runtime.usePlugin("data-source", config);
+```
+
+### Option B: Module Augmentation (Remote Plugins)
+
+For remote-only plugins, use module augmentation:
+
+```typescript
+import type DataSource from "@my-org/data-source-plugin";
 
 declare module "every-plugin" {
   interface RegisteredPlugins {
     "data-source": typeof DataSource;
   }
 }
-```
 
-### Apply to Runtime
-
-```typescript
 const runtime = createPluginRuntime({
   registry: {
     "data-source": {
-      remoteUrl: "https://cdn.example.com/v1/data-source/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/v1/data-source/remoteEntry.js"
     }
   }
 });
@@ -154,13 +185,22 @@ type Context = PluginContext<RegisteredPlugins["data-source"]>;
 type Contract = PluginContract<RegisteredPlugins["data-source"]>
 ```
 
-Or use the `EveryPlugin` type utility:
+Or use the `EveryPlugin.Infer` utility:
 
 ```typescript
 import type { EveryPlugin } from "every-plugin";
 
-// Extract the full plugin type from your runtime
+// Option 1: From module augmentation
 type DataSourcePlugin = EveryPlugin.Infer<"data-source">;
+
+// Option 2: From runtime instance (useful with module entries)
+const runtime = createPluginRuntime({
+  registry: {
+    "data-source": { module: DataSource }
+  }
+});
+
+type DataSourcePlugin = EveryPlugin.Infer<"data-source", typeof runtime>;
 ```
 
 This is useful for:
@@ -169,34 +209,33 @@ This is useful for:
 - Creating plugin wrappers for monitoring/logging
 - Type-safe plugin composition utilities
 
-## Local Runtime Type Inference
+## Module Entry Type Inference
 
-When using `createLocalPluginRuntime` for development/testing, type inference is automatic:
+When using module entries, type inference is automatic:
 
 ```typescript
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin/runtime";
 import DataSource from "./plugins/data-source";
 import Transformer from "./plugins/transformer";
 
-// Use 'as const' - bindings are inferred automatically
-const pluginMap = {
-  "data-source": DataSource,
-  "transformer": Transformer
-} as const;
+const runtime = createPluginRuntime({
+  registry: {
+    "data-source": { module: DataSource },
+    "transformer": { module: Transformer }
+  },
+  secrets: { API_KEY: "test" }
+});
 
-// No manual type bindings needed!
-const runtime = createLocalPluginRuntime(
-  { registry: {...}, secrets: {...} },
-  pluginMap
-);
-
-// Full autocomplete from plugin map
+// Full autocomplete - types inferred from module entries
 const { client } = await runtime.usePlugin("data-source", config);
-//                                         ^-- IDE knows this from pluginMap
+//                                         ^-- IDE knows this from registry
+
+// Extract types from runtime
+type DataSourcePlugin = EveryPlugin.Infer<"data-source", typeof runtime>;
 ```
 
 <Callout>
-**Always use `as const`** on plugin maps for automatic type inference.
+Module entries provide automatic type inference without manual augmentation. This is the recommended approach for local development and testing.
 </Callout>
 
 ## Common Pitfalls
@@ -239,8 +278,7 @@ const runtime = createPluginRuntime({...});
 const runtime = createPluginRuntime({
   registry: {
     "my-plugin": {
-      remoteUrl: "https://cdn.example.com/v1/my-plugin/remoteEntry.js",
-      version: "1.2.0"  // Newer version deployed!
+      remote: "https://cdn.example.com/v1/my-plugin/remoteEntry.js"
     }
   }
 });

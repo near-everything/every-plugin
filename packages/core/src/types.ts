@@ -5,6 +5,7 @@ import type { Plugin } from "./plugin";
 
 /**
  * Registry bindings interface - populated via module augmentation
+ * Only needed for remote-only plugin entries.
  * @example
  * ```typescript
  * declare module "every-plugin" {
@@ -21,6 +22,39 @@ export interface RegisteredPlugins { }
  * Base type for any plugin instance.
  */
 export type AnyPlugin = Plugin<AnyContractRouter, AnySchema, AnySchema, any>;
+
+/**
+ * Loaded plugin constructor with binding information
+ */
+export type AnyPluginConstructor = {
+	new(): AnyPlugin;
+	binding: {
+		contract: AnyContractRouter;
+		variables: AnySchema;
+		secrets: AnySchema;
+		context: Context;
+	};
+};
+
+/**
+ * Registry entry that supports both direct module imports and remote URLs
+ */
+export type PluginRegistryEntry = 
+	| { module: AnyPluginConstructor; remote?: string; version?: string; description?: string }
+	| { remote: string; version?: string; description?: string };
+
+/**
+ * Extract plugin constructor type from registry entry
+ */
+export type ExtractPluginType<E> = E extends { module: infer M } ? M : never;
+
+/**
+ * Infer registry types from plugin entries with module constructors
+ */
+export type InferRegistryFromEntries<R extends Record<string, PluginRegistryEntry>> = {
+	[K in keyof R]: R[K] extends { module: infer M } ? M : 
+		K extends keyof RegisteredPlugins ? RegisteredPlugins[K] : never
+};
 
 /**
 * Extract contract type from plugin binding
@@ -88,26 +122,31 @@ export type ContextOf<T extends AnyPlugin> =
   : never;
 
 /**
- * Runtime registry configuration.
+ * Plugin metadata for remote loading
  */
-export type PluginRegistry = Record<string, PluginMetadata>;
+export type PluginMetadata = {
+	readonly remoteUrl: string;
+	readonly version?: string;
+	readonly description?: string;
+};
+
+/**
+ * Runtime registry configuration supporting both module and remote entries
+ */
+export type PluginRegistry = Record<string, PluginRegistryEntry>;
+
+/**
+ * Legacy metadata-only registry (for backwards compatibility)
+ */
+export type PluginMetadataRegistry = Record<string, PluginMetadata>;
 
 /**
  * Configuration for secrets injection.
  * Secrets are hydrated into plugin configs using template replacement.
  */
 export interface SecretsConfig {
-  [key: string]: string;
+	[key: string]: string;
 }
-
-/**
- * Plugin metadata
- */
-export type PluginMetadata = {
-  readonly remoteUrl: string;
-  readonly version?: string;
-  readonly description?: string;
-};
 
 /**
  * Loaded plugin
@@ -181,27 +220,55 @@ export interface RuntimeOptions {
 }
 
 /**
+ * Extract registry type from runtime instance or use type directly
+ * This allows EveryPlugin.Infer to work with both:
+ * - typeof runtime (extracts registry from PluginRuntime<R> via __registryType)
+ * - Registry types directly
+ */
+type RegistryOf<T> = T extends { __registryType?: infer R } ? R : T;
+
+/**
  * Namespace containing type utilities for working with plugin results.
  */
 export namespace EveryPlugin {
   /**
-   * Extract plugin runtime instance type from registered plugins.
+   * Extract plugin runtime instance type from registered plugins or runtime.
    * Provides full type safety for plugin clients, routers, and metadata.
    *
    * @example
    * ```ts
+   * // From RegisteredPlugins (module augmentation)
    * type Plugin = EveryPlugin.Infer<"my-plugin">;
-   * const plugin: Plugin = await runtime.usePlugin("my-plugin", config);
+   * 
+   * // From runtime instance (when using module entries)
+   * const runtime = createPluginRuntime({ registry: { "my-plugin": { module: MyPlugin } } });
+   * type Plugin = EveryPlugin.Infer<"my-plugin", typeof runtime>;
+   * 
+   * // From explicit registry type
+   * type Plugin = EveryPlugin.Infer<"my-plugin", MyRegistryType>;
    * ```
    */
-  export type Infer<K extends keyof R, R = RegisteredPlugins> = UsePluginResult<K, R>;
+  export type Infer<K extends string, Source = RegisteredPlugins> = 
+    K extends keyof RegistryOf<Source> 
+      ? UsePluginResult<K, RegistryOf<Source>> 
+      : never;
 }
 
 /**
- * Plugin runtime configuration
+ * Plugin runtime configuration with support for both module and remote entries
  */
-export interface PluginRuntimeConfig<R extends RegisteredPlugins = RegisteredPlugins> {
-  registry: PluginRegistry;
-  secrets?: SecretsConfig;
-  options?: RuntimeOptions;
+export interface PluginRuntimeConfig<R extends Record<string, PluginRegistryEntry> = Record<string, PluginRegistryEntry>> {
+	registry: R;
+	secrets?: SecretsConfig;
+	options?: RuntimeOptions;
+}
+
+/**
+ * Legacy plugin runtime configuration (metadata-only registry)
+ * @deprecated Use PluginRuntimeConfig with module/remote entries instead
+ */
+export interface LegacyPluginRuntimeConfig {
+	registry: PluginMetadataRegistry;
+	secrets?: SecretsConfig;
+	options?: RuntimeOptions;
 }

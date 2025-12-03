@@ -14,8 +14,7 @@ Traditional npm packages require publish/install/rebuild cycles. **every-plugin*
 const runtime = createPluginRuntime({
   registry: {
     "data-source": {
-      remoteUrl: "https://cdn.example.com/plugins/source/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/plugins/source/remoteEntry.js"
     }
   }
 });
@@ -41,8 +40,7 @@ import { createPluginRuntime } from "every-plugin/runtime";
 const runtime = createPluginRuntime({
   registry: {
     "data-source": {
-      remoteUrl: "https://cdn.example.com/plugins/source/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/plugins/source/remoteEntry.js"
     }
   },
   secrets: { API_KEY: process.env.SOCIAL_API_KEY }
@@ -129,30 +127,33 @@ for await (const item of stream) {
 }
 ```
 
-### Local and Remote
+### Module and Remote Loading
 
-Same API for development and production:
+Unified API supports both direct imports and remote loading:
 
 ```typescript
-// Production - Load from CDN via Module Federation
+import { createPluginRuntime } from "every-plugin/runtime";
+import LocalPlugin from "./plugins/local-plugin";
+
+// Both module and remote in one config
 const runtime = createPluginRuntime({
   registry: {
-    "plugin-id": {
-      remoteUrl: "https://cdn.example.com/remoteEntry.js",
-      version: "1.0.0"
+    // Direct module import (dev/test) - types derived automatically
+    "local-plugin": { module: LocalPlugin },
+    
+    // Remote URL (production)
+    "remote-plugin": { remote: "https://cdn.example.com/remoteEntry.js" },
+    
+    // Both (module takes precedence for easy dev/prod switching)
+    "hybrid-plugin": {
+      module: LocalPlugin,
+      remote: "https://cdn.example.com/remoteEntry.js"
     }
   }
 });
 
-// Development - Load locally without Module Federation
-import { createLocalPluginRuntime } from "every-plugin/testing";
-const runtime = createLocalPluginRuntime(
-  { registry: {...} },
-  { "plugin-id": PluginImplementation } as const
-);
-
-// Identical API for both
-const { client } = await runtime.usePlugin("plugin-id", config);
+// Identical API for all loading strategies
+const { client } = await runtime.usePlugin("local-plugin", config);
 ```
 
 ### Secret Management

@@ -1,9 +1,11 @@
-import { createLocalPluginRuntime } from "every-plugin/testing";
+import { createPluginRuntime } from "every-plugin";
 import { describe, expect, it } from "vitest";
 import { TestPlugin } from "../fixtures/test-plugin/src/index";
 
-const TEST_PLUGIN_MAP = {
-  "test-plugin": TestPlugin,
+const TEST_REGISTRY = {
+  "test-plugin": {
+    module: TestPlugin
+  },
 } as const;
 
 const TEST_CONFIG = {
@@ -17,17 +19,12 @@ const TEST_CONFIG = {
 };
 
 describe("Plugin Lifecycle Unit Tests", () => {
-  const runtime = createLocalPluginRuntime({
-    registry: {
-      "test-plugin": {
-        remoteUrl: "http://localhost:3999/remoteEntry.js",
-        version: "0.0.1",
-      },
-    },
+  const runtime = createPluginRuntime({
+    registry: TEST_REGISTRY,
     secrets: {
       API_KEY: "test-api-key-value",
     },
-  }, TEST_PLUGIN_MAP);
+  });
 
   it("should handle complete plugin lifecycle", { timeout: 4000 }, async () => {
     const result = await runtime.usePlugin("test-plugin", TEST_CONFIG);

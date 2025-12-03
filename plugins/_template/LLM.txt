@@ -589,7 +589,7 @@ const stream = builder.stream.handler(async function* ({ input }) => {
 - Re-throw configuration errors after catching
 
 ### Testing
-- Use `createLocalPluginRuntime` for testing
+- Use module entries in registry for testing (`{ module: Plugin }`)
 - Mock external APIs with MSW or similar
 - Test error cases and edge conditions
 - Test streaming procedures thoroughly
@@ -634,7 +634,6 @@ export class MyService {
 
 // index.ts
 export default createPlugin({
-  id: "@org/plugin",
   variables: z.object({ apiUrl: z.string() }),
   secrets: z.object({ apiKey: z.string() }),
   contract,
@@ -682,8 +681,7 @@ Add to your registry:
 ```javascript
 const registry = {
   "my-org/my-plugin": {
-    remoteUrl: "https://cdn.example.com/plugins/my-plugin/remoteEntry.js",
-    version: "1.0.0"
+    remote: "https://cdn.example.com/plugins/my-plugin/remoteEntry.js"
   }
 };
 ```
@@ -739,29 +737,29 @@ The build config handles:
 
 Deploy and register your plugin for others to use.
 
-**Local Development Registry:**
+**Local Development:**
 For testing during development - no deployment needed:
 
 ```typescript
-import { createLocalPluginRuntime } from "every-plugin/runtime";
+import { createPluginRuntime } from "every-plugin/runtime";
 import MyPlugin from "./src/index";
 
-const runtime = createLocalPluginRuntime(
-  { registry: {} },  // Empty registry - plugins loaded locally
-  { "my-plugin": MyPlugin }  // Direct import, same API
-);
+const runtime = createPluginRuntime({
+  registry: {
+    "my-plugin": { module: MyPlugin }  // Direct import with automatic type inference
+  }
+});
 ```
 
-**Remote Production Registry:**
+**Remote Production:**
 Deploy to a CDN/hosting service, then register:
 
 ```javascript
-// Method 1: Localhost for testing
+// Method 1: Dev server (localhost testing)
 const runtime = createPluginRuntime({
   registry: {
     "my-org/my-plugin": {
-      remoteUrl: "http://localhost:3014/remoteEntry.js",  // From dev server
-      version: "1.0.0"
+      remote: "http://localhost:3014/remoteEntry.js"
     }
   }
 });
@@ -770,13 +768,24 @@ const runtime = createPluginRuntime({
 const runtime = createPluginRuntime({
   registry: {
     "my-org/my-plugin": {
-      remoteUrl: "https://cdn.zephyr.com/v123/plugins/my-plugin/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.zephyr.com/v123/plugins/my-plugin/remoteEntry.js"
     }
   }
 });
 
-// Same usage API for both!
+// Method 3: Hybrid (module during dev, remote in production)
+import MyPlugin from "./src/index";
+
+const runtime = createPluginRuntime({
+  registry: {
+    "my-org/my-plugin": {
+      module: process.env.NODE_ENV === "development" ? MyPlugin : undefined,
+      remote: "https://cdn.zephyr.com/v123/plugins/my-plugin/remoteEntry.js"
+    }
+  }
+});
+
+// Same usage API for all approaches!
 const { client } = await runtime.usePlugin("my-org/my-plugin", {
   variables: { timeout: 30000 },
   secrets: { apiKey: "{{PROD_API_KEY}}" }  // Template injection
@@ -788,7 +797,7 @@ const { client } = await runtime.usePlugin("my-org/my-plugin", {
 2. **Manual Upload** - Build then upload `dist/remoteEntry.js` to CDN
 3. **Self-hosted** - Serve from your own infrastructure
 
-Once deployed, share the `remoteUrl` so others can add to their registries.
+Once deployed, share the `remote` URL so others can add to their registries.
 
 ## Common Pitfalls
 
@@ -809,7 +818,7 @@ Once deployed, share the `remoteUrl` so others can add to their registries.
 5. Add tests in `__tests__/`
 6. Update `package.json` with dependencies
 7. Build with `npm run build`
-8. Test with `createLocalPluginRuntime`
+8. Test with module entries (`{ module: MyPlugin }`)
 
 ## Related Examples
 

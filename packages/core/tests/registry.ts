@@ -7,8 +7,7 @@ export type TestRegistry = {
 
 export const TEST_REGISTRY = {
   "test-plugin": {
-    remoteUrl: TEST_REMOTE_ENTRY_URL,
-    version: "0.0.1",
+    remote: TEST_REMOTE_ENTRY_URL,
     description: "Real test plugin for background producer integration testing",
   },
 } as const;

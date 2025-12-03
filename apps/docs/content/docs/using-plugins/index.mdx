@@ -15,12 +15,10 @@ import { createPluginRuntime } from "every-plugin/runtime";
 const runtime = createPluginRuntime({
   registry: {
     "data-source": {
-      remoteUrl: "https://cdn.example.com/plugins/data-source/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/plugins/data-source/remoteEntry.js"
     },
     "transformer": {
-      remoteUrl: "https://cdn.example.com/plugins/transformer/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/plugins/transformer/remoteEntry.js"
     }
   },
   secrets: {
@@ -68,8 +66,7 @@ declare module "every-plugin" {
 export const runtime = createPluginRuntime({
   registry: {
     "@org/my-plugin": {
-      remoteUrl: "https://cdn.example.com/plugins/my/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/plugins/my/remoteEntry.js"
     }
   },
   secrets: {
@@ -353,8 +350,7 @@ type AppBindings = {
 const runtime = createPluginRuntime<AppBindings>({
   registry: {
     "data-source": {
-      remoteUrl: "https://cdn.example.com/plugins/data-source/remoteEntry.js",
-      version: "1.0.0"
+      remote: "https://cdn.example.com/plugins/data-source/remoteEntry.js"
     }
   }
 });
@@ -371,10 +367,10 @@ Extract plugin types for utilities:
 ```typescript
 import type { EveryPlugin } from "every-plugin";
 
-type DataSourcePlugin = EveryPlugin.Infer<typeof runtime, "data-source">;
+type DataSourcePlugin = EveryPlugin.Infer<"data-source", typeof runtime>;
 
 function logPluginUsage(plugin: DataSourcePlugin) {
-  console.log(`[${plugin.metadata.id}] v${plugin.metadata.version}`);
+  console.log(`[${plugin.metadata.id}]`);
 }
 
 const result = await runtime.usePlugin("data-source", config);

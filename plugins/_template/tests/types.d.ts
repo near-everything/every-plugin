@@ -1,7 +1,8 @@
-import type TemplateService from "@/index";
+import Plugin from "@/index";
+import pluginDevConfig from "../plugin.dev";
 
 declare module "every-plugin" {
   interface RegisteredPlugins {
-    "@every-plugin/template": typeof TemplateService;
+    [pluginDevConfig.pluginId]: typeof Plugin;
   }
 }

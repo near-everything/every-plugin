@@ -3,9 +3,11 @@ import { Context, Effect, Scope } from "effect";
 import type { z } from "zod";
 import type {
 	AnyPlugin,
+	AnyPluginConstructor,
 	InitializedPlugin,
 	LoadedPlugin,
 	PluginInstance,
+	PluginMetadata,
 	PluginRegistry
 } from "../../types";
 import { PluginRuntimeError, toPluginRuntimeError } from "../errors";
@@ -18,22 +20,55 @@ export class PluginRegistryTag extends Context.Tag("PluginRegistry")<
 	PluginRegistry
 >() { }
 
+export class PluginMapTag extends Context.Tag("PluginMap")<
+	PluginMapTag,
+	Record<string, AnyPluginConstructor>
+>() { }
+
 export class RegistryService extends Effect.Service<RegistryService>()("RegistryService", {
 	effect: Effect.gen(function* () {
 		const registry = yield* PluginRegistryTag;
+		const pluginMap = yield* PluginMapTag;
 
 		return {
 			get: (pluginId: string) =>
-				Effect.fromNullable(registry[pluginId]).pipe(
-					Effect.mapError(() =>
-						new PluginRuntimeError({
-							pluginId,
-							operation: "validate-plugin-id",
-							cause: new Error(`Plugin ${pluginId} not found in registry`),
-							retryable: false,
-						}),
-					),
-				),
+				Effect.gen(function* () {
+					const entry = registry[pluginId];
+					
+					if (!entry) {
+						return yield* Effect.fail(
+							new PluginRuntimeError({
+								pluginId,
+								operation: "validate-plugin-id",
+								cause: new Error(`Plugin ${pluginId} not found in registry`),
+								retryable: false,
+							})
+						);
+					}
+
+					if ("module" in entry) {
+						return {
+							constructor: entry.module,
+							metadata: {
+								remoteUrl: entry.remote || "",
+								version: entry.version,
+								description: entry.description,
+							} as PluginMetadata,
+						};
+					}
+
+					return {
+						constructor: null,
+						metadata: {
+							remoteUrl: entry.remote,
+							version: entry.version,
+							description: entry.description,
+						} as PluginMetadata,
+					};
+				}),
+
+			getModule: (pluginId: string) =>
+				Effect.succeed(pluginMap[pluginId] || null),
 		};
 	}),
 }) { }
@@ -49,13 +84,21 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 				? baseUrl.replace("@latest", `@${version}`)
 				: baseUrl;
 
-		const getMetadata = (pluginId: string) => registryService.get(pluginId);
-
 		return {
 			loadPlugin: (pluginId: string) =>
 				Effect.gen(function* () {
-					const metadata = yield* getMetadata(pluginId);
-					const url = resolveUrl(metadata.remoteUrl);
+					const entry = yield* registryService.get(pluginId);
+
+					if (entry.constructor) {
+						yield* Effect.logDebug("Loading plugin from direct module", { pluginId });
+						
+						return {
+							ctor: entry.constructor,
+							metadata: entry.metadata,
+						} satisfies LoadedPlugin;
+					}
+
+					const url = resolveUrl(entry.metadata.remoteUrl);
 
 					yield* moduleFederationService.registerRemote(pluginId, url).pipe(
 						Effect.mapError((error) =>
@@ -63,7 +106,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 						),
 					);
 
-					yield* Effect.logDebug("Loading plugin", { pluginId, url });
+					yield* Effect.logDebug("Loading plugin from remote", { pluginId, url });
 
 					const ctor = yield* moduleFederationService.loadRemoteConstructor(pluginId, url).pipe(
 						Effect.mapError((error) =>
@@ -73,7 +116,7 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 
 					return {
 						ctor,
-						metadata: metadata,
+						metadata: entry.metadata,
 					} satisfies LoadedPlugin;
 				}),
 

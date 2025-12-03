@@ -1,13 +1,14 @@
 import { Effect, Exit, Layer, Scope } from "effect";
 import type {
 	AnyPlugin,
+	AnyPluginConstructor,
 	InitializedPlugin,
 	PluginRegistry,
 	SecretsConfig
 } from "../../types";
 import { ModuleFederationService } from "./module-federation.service";
 import { PluginLifecycleService } from "./plugin-lifecycle.service";
-import { PluginLoaderService, PluginRegistryTag, RegistryService } from "./plugin-loader.service";
+import { PluginLoaderService, PluginMapTag, PluginRegistryTag, RegistryService } from "./plugin-loader.service";
 import { SecretsConfigTag, SecretsService } from "./secrets.service";
 
 export class PluginService extends Effect.Service<PluginService>()("PluginService", {
@@ -36,10 +37,11 @@ export class PluginService extends Effect.Service<PluginService>()("PluginServic
 		};
 	}),
 }) {
-	static Live = (registry: PluginRegistry, secrets: SecretsConfig) => {
+	static Live = (registry: PluginRegistry, secrets: SecretsConfig, pluginMap: Record<string, AnyPluginConstructor> = {}) => {
 		const contextLayer = Layer.mergeAll(
 			Layer.succeed(PluginRegistryTag, registry),
 			Layer.succeed(SecretsConfigTag, secrets),
+			Layer.succeed(PluginMapTag, pluginMap),
 		);
 
 		const servicesLayer = Layer.mergeAll(
