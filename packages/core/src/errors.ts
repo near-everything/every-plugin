@@ -1,6 +1,20 @@
 import { z } from "./zod";
 
 /**
+ * Error pattern constants for categorizing infrastructure errors
+ */
+export const ERROR_PATTERNS = {
+	CONNECTION_REFUSED: ['ECONNREFUSED'],
+	HOST_NOT_FOUND: ['ENOTFOUND', 'EHOSTUNREACH'],
+	TIMEOUT: ['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'timeout'],
+	CONNECTION_RESET: ['ECONNRESET', 'EPIPE'],
+	PERMISSION: ['EACCES', 'EPERM', 'permission denied'],
+	AUTH: ['401', 'unauthorized', 'authentication failed'],
+	RATE_LIMITED: ['429', 'too many requests', 'rate limit'],
+	SERVICE_UNAVAILABLE: ['503', 'service unavailable'],
+} as const;
+
+/**
  * Common error schemas for plugin contracts.
  * Import these to ensure consistent error handling across plugins.
  *
@@ -57,6 +71,21 @@ export const CommonPluginErrors = {
 		data: z.object({
 			requiredPermissions: z.array(z.string()).optional(),
 			action: z.string().optional(),
+		})
+	},
+	TIMEOUT: {
+		data: z.object({
+			timeoutMs: z.number().int().min(0).optional(),
+			operation: z.string().optional(),
+			retryable: z.boolean().default(true),
+		})
+	},
+	CONNECTION_ERROR: {
+		data: z.object({
+			errorCode: z.string().optional(),
+			host: z.string().optional(),
+			port: z.number().int().optional(),
+			suggestion: z.string().optional(),
 		})
 	}
 } as const;

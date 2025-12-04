@@ -98,17 +98,29 @@ export class PluginLoaderService extends Effect.Service<PluginLoaderService>()("
 						} satisfies LoadedPlugin;
 					}
 
-					const url = resolveUrl(entry.metadata.remoteUrl);
+					const url = entry.metadata.remoteUrl;
+					if (!url) {
+						return yield* Effect.fail(
+							new PluginRuntimeError({
+								pluginId,
+								operation: "load-plugin",
+								cause: new Error(`Plugin ${pluginId} has no module or remote URL configured`),
+								retryable: false,
+							})
+						);
+					}
 
-					yield* moduleFederationService.registerRemote(pluginId, url).pipe(
+					const resolvedUrl = resolveUrl(url);
+
+					yield* moduleFederationService.registerRemote(pluginId, resolvedUrl).pipe(
 						Effect.mapError((error) =>
 							toPluginRuntimeError(error, pluginId, undefined, "register-remote", true),
 						),
 					);
 
-					yield* Effect.logDebug("Loading plugin from remote", { pluginId, url });
+					yield* Effect.logDebug("Loading plugin from remote", { pluginId, url: resolvedUrl });
 
-					const ctor = yield* moduleFederationService.loadRemoteConstructor(pluginId, url).pipe(
+					const ctor = yield* moduleFederationService.loadRemoteConstructor(pluginId, resolvedUrl).pipe(
 						Effect.mapError((error) =>
 							toPluginRuntimeError(error, pluginId, undefined, "load-remote", false),
 						),

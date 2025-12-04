@@ -1,8 +1,7 @@
+import everyPluginPkg from '../../../package.json';
 import type { PluginInfo } from './utils';
 
 export function buildSharedDependencies(pluginInfo: PluginInfo) {
-  // Get every-plugin package info for version constraints
-  const everyPluginPkg = require('every-plugin/package.json');
 
   return {
     'every-plugin': {
