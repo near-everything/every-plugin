@@ -1,10 +1,10 @@
 import tailwindcss from '@tailwindcss/vite';
+import { nitroV2Plugin } from '@tanstack/nitro-v2-vite-plugin';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import react from '@vitejs/plugin-react';
 import mdx from 'fumadocs-mdx/vite';
 import { defineConfig } from 'vite';
 import tsConfigPaths from "vite-tsconfig-paths";
-import { nitro } from 'nitro/vite';
 
 export default defineConfig({
   server: {
@@ -16,8 +16,15 @@ export default defineConfig({
     tsConfigPaths({
       projects: ['./tsconfig.json'],
     }),
-    tanstackStart(),
+    tanstackStart({
+      prerender: {
+        enabled: true,
+      },
+    }),
+    nitroV2Plugin({
+      preset: 'bun',
+      compatibilityDate: "2025-10-20"
+    }),
     react(),
-    nitro(),
   ],
 });
