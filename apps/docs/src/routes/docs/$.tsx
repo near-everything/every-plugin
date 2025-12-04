@@ -60,7 +60,7 @@ const clientLoader = createClientLoader(docs.doc, {
     return (
       <DocsPage toc={toc}>
         <DocsTitle>{frontmatter.title}</DocsTitle>
-        <DocsDescription>{frontmatter.description}</DocsDescription>
+        <DocsDescription className="mb-2">{frontmatter.description}</DocsDescription>
         <div className="flex flex-row gap-2 items-center border-b pt-2 pb-6">
           <LLMCopyButton markdownUrl={rawMarkdownUrl} />
           <ViewOptions
