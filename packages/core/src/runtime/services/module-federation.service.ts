@@ -1,4 +1,3 @@
-import { betterFetch } from "@better-fetch/fetch";
 import {
 	createInstance,
 	getInstance,
@@ -97,15 +96,18 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 						: `${url}/mf-manifest.json`;
 
 					// Check if manifest is available (MF 2.0 with manifests)
-					const { error: manifestError } = yield* Effect.tryPromise({
-						try: () => betterFetch(manifestUrl, { method: "HEAD" }),
-						catch: (error) => error, // Don't fail yet, try fallback
+					const manifestCheck = yield* Effect.tryPromise({
+						try: async () => {
+							const response = await fetch(manifestUrl, { method: "HEAD" });
+							return response.ok;
+						},
+						catch: () => false,
 					});
 
 					let entryUrl: string;
 					let isManifestMode = false;
 
-					if (!manifestError) {
+					if (manifestCheck) {
 						// MF 2.0 manifest mode - use manifest URL
 						entryUrl = manifestUrl;
 						isManifestMode = true;

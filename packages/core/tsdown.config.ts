@@ -3,8 +3,10 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: [
     'src/index.ts',
+    'src/types.ts',
     'src/effect.ts',
     'src/zod.ts',
+    'src/zod-core.ts',
     'src/orpc.ts',
     'src/errors.ts',
     'src/runtime/index.ts',
@@ -16,7 +18,14 @@ export default defineConfig({
   dts: true,
   clean: true,
   outDir: 'dist',
-  treeshake: true,        // Enable tree-shaking for consumers
-  sourcemap: true,        // External .map files for better IDE support
-  minify: false          // Keep readable for debugging
+  treeshake: true,
+  sourcemap: true,
+  minify: false,
+  unbundle: true,
+  external: [
+    'effect',
+    'zod',
+    /^@orpc\/.*/,
+    /^@module-federation\/.*/,
+  ]
 })

@@ -21,3 +21,7 @@ export async function getPluginClient() {
   const { client } = await runtime.usePlugin(TEST_PLUGIN_ID, TEST_CONFIG);
   return client;
 }
+
+export async function teardown() {
+  await runtime.shutdown();
+}

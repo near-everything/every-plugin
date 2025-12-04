@@ -1,6 +1,6 @@
 {
 	"name": "every-plugin",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"type": "module",
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.mjs",
@@ -54,6 +54,14 @@
 			"import": "./dist/zod.mjs",
 			"require": "./dist/zod.cjs"
 		},
+		"./zod/v4/core": {
+			"types": {
+				"import": "./dist/zod-core.d.mts",
+				"require": "./dist/zod-core.d.cts"
+			},
+			"import": "./dist/zod-core.mjs",
+			"require": "./dist/zod-core.cjs"
+		},
 		"./orpc": {
 			"types": {
 				"import": "./dist/orpc.d.mts",
@@ -69,6 +77,14 @@
 			},
 			"import": "./dist/errors.mjs",
 			"require": "./dist/errors.cjs"
+		},
+		"./types": {
+			"types": {
+				"import": "./dist/types.d.mts",
+				"require": "./dist/types.d.cts"
+			},
+			"import": "./dist/types.mjs",
+			"require": "./dist/types.cjs"
 		},
 		"./build/rspack": {
 			"types": {
@@ -113,7 +129,6 @@
 		"vitest": "^3.2.4"
 	},
 	"dependencies": {
-		"@better-fetch/fetch": "^1.1.18",
 		"@module-federation/enhanced": "^0.19.1",
 		"@module-federation/node": "^2.7.15",
 		"@module-federation/runtime-core": "^0.19.1",
