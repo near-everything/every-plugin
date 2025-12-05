@@ -123,7 +123,6 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
         console.error(lines.join('\n'));
       };
 
-      // @ts-expect-error no type
       handlers.rpc = new RPCHandler(loaded.router, {
         interceptors: [
           onError((error: any) => {
@@ -132,7 +131,6 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
         ]
       });
 
-      // @ts-expect-error no type
       handlers.api = new OpenAPIHandler(loaded.router, {
         plugins: [
           new OpenAPIReferencePlugin({
@@ -232,9 +230,6 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
     }
   };
 
-  devServer.app.all('/api', handleApiRequest);
-  devServer.app.all('/api/*', handleApiRequest);
-
   devServer.app.all(`/api/rpc${rpcPrefix}/*`, async (req: any, res: any) => {
     applyCorsHeaders(res);
     const rpcHandler = devServer.app.locals.handlers?.rpc;
@@ -271,4 +266,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       res.status(500).json({ error: (error as Error).message });
     }
   });
+
+  devServer.app.all('/api', handleApiRequest);
+  devServer.app.all('/api/*', handleApiRequest);
 }
