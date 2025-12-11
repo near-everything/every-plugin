@@ -10,7 +10,8 @@
     }
   },
   "peerDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "every-plugin": "workspace:*"
   },
   "devDependencies": {
     "@effect/language-service": "^0.41.1",

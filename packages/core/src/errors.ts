@@ -30,6 +30,7 @@ export const ERROR_PATTERNS = {
  */
 export const CommonPluginErrors = {
 	UNAUTHORIZED: {
+		status: 401,
 		data: z.object({
 			apiKeyProvided: z.boolean(),
 			provider: z.string().optional(),
@@ -37,6 +38,7 @@ export const CommonPluginErrors = {
 		})
 	},
 	RATE_LIMITED: {
+		status: 429,
 		data: z.object({
 			retryAfter: z.number().int().min(1),
 			remainingRequests: z.number().int().min(0).optional(),
@@ -45,6 +47,7 @@ export const CommonPluginErrors = {
 		})
 	},
 	SERVICE_UNAVAILABLE: {
+		status: 503,
 		data: z.object({
 			retryAfter: z.number().int().optional(),
 			maintenanceWindow: z.boolean().default(false),
@@ -52,6 +55,7 @@ export const CommonPluginErrors = {
 		})
 	},
 	BAD_REQUEST: {
+		status: 400,
 		data: z.object({
 			invalidFields: z.array(z.string()).optional(),
 			validationErrors: z.array(z.object({
@@ -62,18 +66,21 @@ export const CommonPluginErrors = {
 		})
 	},
 	NOT_FOUND: {
+		status: 404,
 		data: z.object({
 			resource: z.string().optional(),
 			resourceId: z.string().optional(),
 		})
 	},
 	FORBIDDEN: {
+		status: 403,
 		data: z.object({
 			requiredPermissions: z.array(z.string()).optional(),
 			action: z.string().optional(),
 		})
 	},
 	TIMEOUT: {
+		status: 504,
 		data: z.object({
 			timeoutMs: z.number().int().min(0).optional(),
 			operation: z.string().optional(),
@@ -81,6 +88,7 @@ export const CommonPluginErrors = {
 		})
 	},
 	CONNECTION_ERROR: {
+		status: 502,
 		data: z.object({
 			errorCode: z.string().optional(),
 			host: z.string().optional(),

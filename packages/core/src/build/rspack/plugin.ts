@@ -48,6 +48,7 @@ export class EveryPluginDevServer implements RspackPluginInstance {
         './plugin': './src/index.ts',
       },
       shared: buildSharedDependencies(pluginInfo),
+      shareStrategy: 'version-first',
     }).apply(compiler);
   }
 

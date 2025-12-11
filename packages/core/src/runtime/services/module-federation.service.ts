@@ -14,6 +14,12 @@ type RemoteModule =
 
 import pkg from "../../../package.json";
 
+function getMajorVersionRange(version: string): string {
+	const match = version.match(/^[\^~]?(\d+)/);
+	const major = match ? match[1] : '0';
+	return `^${major}.0.0`;
+}
+
 const createModuleFederationInstance = Effect.cached(
 	Effect.sync(() => {
 		try {
@@ -28,45 +34,45 @@ const createModuleFederationInstance = Effect.cached(
 							version: pkg.version,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: `^${pkg.version}`,
-								eager: true,
-								strictVersion: false, // Allow bidirectional version compatibility
+								requiredVersion: getMajorVersionRange(pkg.version),
+								eager: false,
+								strictVersion: false,
 							},
 						},
 						effect: {
 							version: pkg.dependencies.effect,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^3.18.0", // Allow any 3.18.x patch version
-								eager: true,
-								strictVersion: false, // Allow version flexibility for compatibility
+								requiredVersion: getMajorVersionRange(pkg.dependencies.effect),
+								eager: false,
+								strictVersion: false,
 							},
 						},
 						zod: {
 							version: pkg.dependencies.zod,
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^4.1.0", // Allow any 4.1.x patch version
-								eager: true,
-								strictVersion: false, // Allow version flexibility for compatibility
+								requiredVersion: getMajorVersionRange(pkg.dependencies.zod),
+								eager: false,
+								strictVersion: false,
 							},
 						},
 						"@orpc/contract": {
 							version: pkg.dependencies["@orpc/contract"],
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
-								eager: true,
-								strictVersion: false, // Allow version flexibility for compatibility
+								requiredVersion: getMajorVersionRange(pkg.dependencies["@orpc/contract"]),
+								eager: false,
+								strictVersion: false,
 							},
 						},
 						"@orpc/server": {
 							version: pkg.dependencies["@orpc/server"],
 							shareConfig: {
 								singleton: true,
-								requiredVersion: "^1.8.0", // Allow any 1.8.x patch version
-								eager: true,
-								strictVersion: false, // Allow version flexibility for compatibility
+								requiredVersion: getMajorVersionRange(pkg.dependencies["@orpc/server"]),
+								eager: false,
+								strictVersion: false,
 							},
 						}
 					},
@@ -91,43 +97,12 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 				Effect.gen(function* () {
 					console.log(`[MF] Registering ${pluginId}`);
 
-					const manifestUrl = url.endsWith('/')
-						? `${url}mf-manifest.json`
-						: `${url}/mf-manifest.json`;
-
-					// Check if manifest is available (MF 2.0 with manifests)
-					const manifestCheck = yield* Effect.tryPromise({
-						try: async () => {
-							const response = await fetch(manifestUrl, { method: "HEAD" });
-							return response.ok;
-						},
-						catch: () => false,
-					});
-
-					let entryUrl: string;
-					let isManifestMode = false;
-
-					if (manifestCheck) {
-						// MF 2.0 manifest mode - use manifest URL
-						entryUrl = manifestUrl;
-						isManifestMode = true;
-						console.log(`[MF] Using MF 2.0 manifest mode for ${pluginId}`);
-					} else {
-						// Fallback to MF 1.5 direct mode - assume URL points to remoteEntry.js
-						console.log(`[MF] ⚠️ Manifest not found, falling back to MF 1.5 mode for ${pluginId}`);
-						entryUrl = url;
-						isManifestMode = false;
-					}
-
-					// For MF 2.0, the name can be the pluginId (alias)
-					// The manifest will contain the actual container name
-					const remoteName = isManifestMode ? pluginId : getNormalizedRemoteName(pluginId);
+					const remoteName = getNormalizedRemoteName(pluginId);
 
 					yield* Effect.try({
 						try: () => mf.registerRemotes([{
 							name: remoteName,
-							entry: entryUrl,
-							...(isManifestMode && { alias: pluginId }) // Explicit alias for clarity
+							entry: url,
 						}]),
 						catch: (error): ModuleFederationError =>
 							new ModuleFederationError({
@@ -138,7 +113,7 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 							}),
 					});
 
-					console.log(`[MF] ✅ Registered ${pluginId} (${isManifestMode ? 'MF 2.0' : 'MF 1.5'})`);
+					console.log(`[MF] ✅ Registered ${pluginId}`);
 				}),
 
 			loadRemoteConstructor: (pluginId: string, url: string) =>
@@ -156,14 +131,27 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 							}
 
 							// Support multiple export patterns: direct function, default export, named exports
-							const Constructor =
-								typeof container === "function"
-									? container  // Direct function export
-									: container.default
-									? container.default  // Default export
-									: Object.values(container).find(  // Named export fallback
-											(exp) => typeof exp === "function" && exp.prototype?.constructor === exp
-										);
+							let Constructor: any;
+							
+							if (typeof container === "function") {
+								// Direct function export
+								Constructor = container;
+							} else if (container.default) {
+								// Default export
+								Constructor = container.default;
+							} else {
+								// Named export fallback - prioritize exports with 'binding' property (plugin classes)
+								Constructor = Object.values(container).find(
+									(exp) => typeof exp === "function" && (exp as any).binding !== undefined
+								);
+								
+								// Fallback to any function export if no binding found
+								if (!Constructor) {
+									Constructor = Object.values(container).find(
+										(exp) => typeof exp === "function" && exp.prototype?.constructor === exp
+									);
+								}
+							}
 
 							if (!Constructor || typeof Constructor !== "function") {
 								const containerInfo = typeof container === "object"
