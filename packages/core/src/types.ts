@@ -21,7 +21,7 @@ export interface RegisteredPlugins { }
 /**
  * Base type for any plugin instance.
  */
-export type AnyPlugin = Plugin<AnyContractRouter, AnySchema, AnySchema, AnySchema, any>;
+export type AnyPlugin = Plugin<AnyContractRouter, AnySchema, AnySchema, AnySchema | undefined, any>;
 
 /**
  * Loaded plugin constructor with binding information
@@ -32,7 +32,7 @@ export type AnyPluginConstructor = {
 		contract: AnyContractRouter;
 		variables: AnySchema;
 		secrets: AnySchema;
-		context: AnySchema;
+		context: AnySchema | undefined;
 	};
 };
 
@@ -74,7 +74,7 @@ export type PluginSecrets<T> = T extends { binding: { secrets: infer S extends A
 /**
  * Extract context schema type from plugin binding
  */
-export type PluginContext<T> = T extends { binding: { context: infer C extends AnySchema } } ? C : never;
+export type PluginContext<T> = T extends { binding: { context: infer C extends AnySchema | undefined } } ? C : never;
 
 /**
  * Extract router type from plugin binding
@@ -98,7 +98,7 @@ export type RegisteredPlugin<K extends keyof R, R = RegisteredPlugins> =
     contract: infer C extends AnyContractRouter;
     variables: infer V extends AnySchema;
     secrets: infer S extends AnySchema;
-    context: infer TRequestContext extends AnySchema;
+    context: infer TRequestContext extends AnySchema | undefined;
   }
   ? Plugin<C, V, S, TRequestContext, any>
   : never
@@ -112,7 +112,7 @@ export type PluginConstructor<K extends keyof R, R = RegisteredPlugins> = Regist
 /**
  * Extract context input type from plugin binding (for client creation)
  */
-export type PluginContextInput<T> = InferSchemaInput<PluginContext<T>>;
+export type PluginContextInput<T> = PluginContext<T> extends AnySchema ? InferSchemaInput<PluginContext<T>> : never;
 
 /**
  * Extract config input type from plugin binding
@@ -127,7 +127,7 @@ export type PluginConfigInput<T> = {
  * Extract deps context type from plugin instance (used for initialization)
  */
 export type ContextOf<T extends AnyPlugin> =
-  T extends Plugin<AnyContractRouter, AnySchema, AnySchema, AnySchema, infer TDeps>
+  T extends Plugin<AnyContractRouter, AnySchema, AnySchema, AnySchema | undefined, infer TDeps>
   ? TDeps
   : never;
 
@@ -197,7 +197,7 @@ type VerifyPluginBinding<K extends keyof R, R = RegisteredPlugins> =
     contract: AnyContractRouter;
     variables: AnySchema;
     secrets: AnySchema;
-    context: AnySchema;
+    context: AnySchema | undefined;
   }
   ? true
   : `❌ Plugin "${K & string}" is not properly registered. Ensure it extends plugin binding layout { contract, variables, secrets, context }.`

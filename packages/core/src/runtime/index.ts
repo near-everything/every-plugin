@@ -94,7 +94,7 @@ export class PluginRuntime<R = RegisteredPlugins> {
 		// Create client factory that accepts request context
 		const createClient = (context?: any) => {
 			const router = initialized.plugin.createRouter(initialized.context);
-			return createRouterClient(router, { context });
+			return createRouterClient(router, { context: context ?? {} });
 		};
 
 		return {

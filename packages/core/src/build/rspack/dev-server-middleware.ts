@@ -52,6 +52,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
         }
       });
 
+      // @ts-expect-error we don't know the plugin id
       const loaded = await runtime.usePlugin(pluginId, devConfig?.config);
 
       cleanup = async () => {

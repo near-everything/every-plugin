@@ -3,10 +3,12 @@ import type { Context, Implementer, Router } from "@orpc/server";
 import { implement } from "@orpc/server";
 import { Effect, type Scope } from "effect";
 
+type ContextOutput<T> = T extends AnySchema ? InferSchemaOutput<T> : {};
+
 /**
  * Helper type that correctly constructs the config schema type
  */
-export type PluginConfigFor<V extends AnySchema, S extends AnySchema, TRequestContext extends AnySchema> = {
+export type PluginConfigFor<V extends AnySchema, S extends AnySchema, TRequestContext extends AnySchema | undefined> = {
 	variables: V;
 	secrets: S;
 	context: TRequestContext;
@@ -19,7 +21,7 @@ export interface LoadedPluginWithBinding<
 	TContract extends AnyContractRouter,
 	TVariables extends AnySchema,
 	TSecrets extends AnySchema,
-	TRequestContext extends AnySchema,
+	TRequestContext extends AnySchema | undefined,
 	TDeps extends Context = Record<never, never>
 > {
 	new(): Plugin<TContract, TVariables, TSecrets, TRequestContext, TDeps>;
@@ -38,7 +40,7 @@ export interface Plugin<
 	TContract extends AnyContractRouter,
 	TVariables extends AnySchema,
 	TSecrets extends AnySchema,
-	TRequestContext extends AnySchema,
+	TRequestContext extends AnySchema | undefined,
 	TDeps extends Context = Record<never, never>
 > {
 	readonly id: string;
@@ -67,27 +69,27 @@ export interface Plugin<
 export function createPlugin<
 	V extends AnySchema,
 	S extends AnySchema,
-	TRequestContext extends AnySchema,
 	TContract extends AnyContractRouter,
+	TRequestContext extends AnySchema | undefined = undefined,
 	TDeps extends Context = Record<never, never>
 >(config: {
 	variables: V;
 	secrets: S;
-	context: TRequestContext;
 	contract: TContract;
+	context?: TRequestContext;
 	initialize?: (
 		config: { variables: InferSchemaOutput<V>; secrets: InferSchemaOutput<S> }
 	) => Effect.Effect<TDeps, Error, Scope.Scope>;
 	createRouter: (
 		deps: TDeps,
-		builder: Implementer<TContract, InferSchemaOutput<TRequestContext>, InferSchemaOutput<TRequestContext>>
+		builder: Implementer<TContract, ContextOutput<TRequestContext>, ContextOutput<TRequestContext>>
 	) => Router<TContract, any>;
 	shutdown?: (deps: TDeps) => Effect.Effect<void, Error, never>;
 }) {
 	const configSchema: PluginConfigFor<V, S, TRequestContext> = {
 		variables: config.variables,
 		secrets: config.secrets,
-		context: config.context
+		context: config.context as TRequestContext
 	};
 
 	class CreatedPlugin implements Plugin<TContract, V, S, TRequestContext, TDeps> {
@@ -122,7 +124,7 @@ export function createPlugin<
 		}
 
 		createRouter(deps: TDeps): Router<TContract, any> {
-			const builder = implement(config.contract).$context<InferSchemaOutput<TRequestContext>>();
+			const builder = implement(config.contract).$context<ContextOutput<TRequestContext>>();
 			const router = config.createRouter(deps, builder);
 			return router as Router<TContract, any>;
 		}
@@ -142,7 +144,7 @@ export function createPlugin<
 		contract: config.contract,
 		variables: config.variables,
 		secrets: config.secrets,
-		context: config.context
+		context: config.context as TRequestContext
 	};
 
 	return PluginConstructor as LoadedPluginWithBinding<TContract, V, S, TRequestContext, TDeps>;
