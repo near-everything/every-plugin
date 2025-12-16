@@ -11,14 +11,16 @@
   },
   "peerDependencies": {
     "typescript": "^5.9.3",
-    "every-plugin": "workspace:*"
+    "every-plugin": "workspace:*",
+    "effect": "^3.19.0",
+    "zod": "^4.0.0",
+    "@orpc/contract": "^1.12.0",
+    "@orpc/server": "^1.12.0"
   },
   "devDependencies": {
     "@effect/language-service": "^0.41.1",
     "@module-federation/node": "^2.7.15",
     "@orpc/client": "^1.12.3",
-    "@orpc/contract": "^1.12.2",
-    "@orpc/server": "^1.12.2",
     "@rspack/cli": "^1.6.6",
     "@rspack/core": "^1.6.6",
     "@types/node": "^24.10.1",

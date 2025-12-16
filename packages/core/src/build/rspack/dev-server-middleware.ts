@@ -40,6 +40,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
       const { OpenAPIReferencePlugin } = await import('@orpc/openapi/plugins');
       const { ZodToJsonSchemaConverter } = await import('@orpc/zod/zod4');
       const { onError } = await import('every-plugin/orpc');
+      const { formatORPCError } = await import('every-plugin/errors');
 
 
       const pluginId = devConfig?.pluginId || pluginInfo.normalizedName;
@@ -69,66 +70,10 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
         }
       };
 
-      const formatError = (error: any, context: string) => {
-        const lines: string[] = [`\n🔴 ${context} Error: ${error.message || 'Unknown error'}`];
-
-        if (error.cause?.issues && Array.isArray(error.cause.issues)) {
-          lines.push('\n📋 Validation Issues:');
-          error.cause.issues.forEach((issue: any, index: number) => {
-            lines.push(`  ${index + 1}. ${issue.path?.join('.') || 'root'}`);
-            lines.push(`     ├─ Code: ${issue.code || 'unknown'}`);
-            lines.push(`     ├─ Message: ${issue.message || 'No message'}`);
-            if (issue.expected !== undefined) {
-              lines.push(`     ├─ Expected: ${JSON.stringify(issue.expected)}`);
-            }
-            if (issue.received !== undefined) {
-              lines.push(`     └─ Received: ${JSON.stringify(issue.received)}`);
-            } else {
-              lines.push(`     └─ (end)`);
-            }
-          });
-        }
-
-        if (error.data && typeof error.data === 'object' && Object.keys(error.data).length > 0) {
-          lines.push('\n📊 Error Data:');
-          try {
-            const dataStr = JSON.stringify(error.data, null, 2);
-            dataStr.split('\n').forEach(line => {
-              lines.push(`  ${line}`);
-            });
-          } catch {
-            lines.push(`  ${String(error.data)}`);
-          }
-        }
-
-        if (error.cause?.data) {
-          lines.push('\n📦 Request Data:');
-          try {
-            const dataStr = JSON.stringify(error.cause.data, null, 2);
-            dataStr.split('\n').forEach(line => {
-              lines.push(`  ${line}`);
-            });
-          } catch {
-            lines.push(`  ${String(error.cause.data)}`);
-          }
-        }
-
-        if (error.code) {
-          lines.push(`\n⚠️  Error Code: ${error.code}`);
-        }
-
-        if (error.status) {
-          lines.push(`📍 Status: ${error.status}`);
-        }
-
-        lines.push('');
-        console.error(lines.join('\n'));
-      };
-
       handlers.rpc = new RPCHandler(loaded.router, {
         interceptors: [
           onError((error: any) => {
-            formatError(error, 'RPC');
+            formatORPCError(error);
           }),
         ]
       });
@@ -141,7 +86,7 @@ export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, de
         ],
         interceptors: [
           onError((error: any) => {
-            formatError(error, 'OpenAPI');
+            formatORPCError(error);
           }),
         ]
       });

@@ -32,6 +32,7 @@ const createModuleFederationInstance = Effect.cached(
 					shared: {
 						"every-plugin": {
 							version: pkg.version,
+							get: () => import("every-plugin").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
 								requiredVersion: getMajorVersionRange(pkg.version),
@@ -41,6 +42,7 @@ const createModuleFederationInstance = Effect.cached(
 						},
 						effect: {
 							version: pkg.dependencies.effect,
+							get: () => import("effect").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
 								requiredVersion: getMajorVersionRange(pkg.dependencies.effect),
@@ -50,6 +52,7 @@ const createModuleFederationInstance = Effect.cached(
 						},
 						zod: {
 							version: pkg.dependencies.zod,
+							get: () => import("zod").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
 								requiredVersion: getMajorVersionRange(pkg.dependencies.zod),
@@ -59,6 +62,7 @@ const createModuleFederationInstance = Effect.cached(
 						},
 						"@orpc/contract": {
 							version: pkg.dependencies["@orpc/contract"],
+							get: () => import("@orpc/contract").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
 								requiredVersion: getMajorVersionRange(pkg.dependencies["@orpc/contract"]),
@@ -68,6 +72,7 @@ const createModuleFederationInstance = Effect.cached(
 						},
 						"@orpc/server": {
 							version: pkg.dependencies["@orpc/server"],
+							get: () => import("@orpc/server").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
 								requiredVersion: getMajorVersionRange(pkg.dependencies["@orpc/server"]),

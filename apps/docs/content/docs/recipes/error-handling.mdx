@@ -1,0 +1,432 @@
+---
+title: Error Handling Patterns
+description: Advanced error handling patterns for plugins
+---
+
+## Centralized Error Formatting
+
+**Use the built-in error formatting utilities:**
+
+```typescript
+import { formatORPCError, createErrorHandler } from "every-plugin/errors";
+import { onError } from "@orpc/server";
+
+export function createErrorHandler(options?: {
+  onError?: (error: any) => void
+}) {
+  return onError((error) => {
+    // Built-in console formatting with helpful context
+    formatORPCError(error);
+    options?.onError?.(error);
+  });
+}
+```
+
+**Or define your own error formatting:**
+
+```typescript
+import { ORPCError, ValidationError } from "every-plugin/orpc";
+import { onError } from "@orpc/server";
+
+export function formatPluginError(error: unknown): string {
+  if (error instanceof ORPCError) {
+    const lines = [
+      `Error: ${error.code}`,
+      `Message: ${error.message}`,
+    ];
+
+    if (error.data) {
+      lines.push(`Details: ${JSON.stringify(error.data, null, 2)}`);
+    }
+
+    if (error.cause instanceof ValidationError) {
+      lines.push('Validation Issues:');
+      error.cause.issues.forEach(issue => {
+        lines.push(`  - ${issue.path?.join('.')}: ${issue.message}`);
+      });
+    }
+
+    return lines.join('\n');
+  }
+
+  return String(error);
+}
+
+export function createErrorHandler(options?: {
+  onError?: (error: ORPCError) => void
+}) {
+  return onError((error) => {
+    console.error(formatPluginError(error));
+    options?.onError?.(error);
+  });
+}
+```
+
+**Usage with Runtime:**
+
+```typescript
+import { RPCHandler } from "@orpc/server/fetch";
+import { createErrorHandler } from "./lib/errors";
+
+const { router } = await runtime.usePlugin("my-plugin", config);
+
+const handler = new RPCHandler(router, {
+  interceptors: [
+    createErrorHandler({
+      onError: (error) => {
+        if (error.code === 'INTERNAL_SERVER_ERROR') {
+          Sentry.captureException(error);
+        }
+      }
+    }),
+  ],
+});
+```
+
+## Retry Logic with Exponential Backoff
+
+Implement retry logic for transient failures:
+
+```typescript
+import { ORPCError } from "every-plugin/orpc";
+
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  options: {
+    maxRetries?: number;
+    initialDelayMs?: number;
+    maxDelayMs?: number;
+    shouldRetry?: (error: unknown) => boolean;
+  } = {}
+): Promise<T> {
+  const {
+    maxRetries = 3,
+    initialDelayMs = 1000,
+    maxDelayMs = 30000,
+    shouldRetry = (error) => {
+      if (error instanceof ORPCError) {
+        return ['SERVICE_UNAVAILABLE', 'TIMEOUT', 'TOO_MANY_REQUESTS'].includes(error.code);
+      }
+      return false;
+    }
+  } = options;
+
+  let lastError: unknown;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      
+      if (!shouldRetry(error) || attempt === maxRetries) {
+        throw error;
+      }
+
+      let delayMs = initialDelayMs * Math.pow(2, attempt);
+      
+      if (error instanceof ORPCError && error.data?.retryAfter) {
+        delayMs = error.data.retryAfter * 1000;
+      }
+      
+      delayMs = Math.min(delayMs, maxDelayMs);
+      
+      console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delayMs}ms`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+  
+  throw lastError;
+}
+```
+
+**Usage:**
+
+```typescript
+const { createClient } = await runtime.usePlugin("unreliable-api", config);
+const client = createClient();
+
+const result = await retryWithBackoff(
+  () => client.getData({ id: "123" }),
+  { maxRetries: 3, initialDelayMs: 1000 }
+);
+```
+
+## Error Monitoring Integration
+
+Integrate with monitoring services like Sentry:
+
+```typescript
+import * as Sentry from "@sentry/node";
+import { ORPCError } from "every-plugin/orpc";
+import { onError } from "@orpc/server";
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV,
+});
+
+export const sentryErrorHandler = onError((error) => {
+  if (error instanceof ORPCError) {
+    Sentry.withScope((scope) => {
+      scope.setTag("error.code", error.code);
+      scope.setTag("error.status", error.status);
+      
+      scope.setContext("error_data", error.data || {});
+      
+      if (error.code === 'BAD_REQUEST') {
+        scope.setLevel('warning');
+      } else if (['INTERNAL_SERVER_ERROR', 'SERVICE_UNAVAILABLE'].includes(error.code)) {
+        scope.setLevel('error');
+      }
+      
+      Sentry.captureException(error);
+    });
+  }
+});
+```
+
+**Usage:**
+
+```typescript
+import { RPCHandler } from "@orpc/server/fetch";
+import { sentryErrorHandler } from "./lib/monitoring";
+
+const handler = new RPCHandler(router, {
+  interceptors: [sentryErrorHandler],
+});
+```
+
+## Custom Error Types
+
+Create domain-specific error types for your plugins:
+
+```typescript
+import { oc } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+
+const base = oc.errors({
+  // Authentication errors
+  INVALID_CREDENTIALS: {
+    status: 401,
+    message: 'Invalid username or password',
+  },
+  SESSION_EXPIRED: {
+    status: 401,
+    message: 'Your session has expired',
+    data: z.object({ loginUrl: z.string() }),
+  },
+  
+  // Authorization errors
+  INSUFFICIENT_PERMISSIONS: {
+    status: 403,
+    data: z.object({
+      required: z.array(z.string()),
+      current: z.array(z.string()),
+    }),
+  },
+  
+  // Resource errors
+  RESOURCE_NOT_FOUND: {
+    status: 404,
+    data: z.object({
+      resourceType: z.string(),
+      resourceId: z.string(),
+    }),
+  },
+  RESOURCE_CONFLICT: {
+    status: 409,
+    message: 'Resource already exists',
+    data: z.object({ conflictingId: z.string() }),
+  },
+  
+  // Rate limiting
+  RATE_LIMITED: {
+    status: 429,
+    data: z.object({
+      retryAfter: z.number(),
+      limit: z.number(),
+      remaining: z.number(),
+    }),
+  },
+  
+  // External service errors
+  EXTERNAL_SERVICE_ERROR: {
+    status: 502,
+    data: z.object({
+      service: z.string(),
+      reason: z.string().optional(),
+    }),
+  },
+});
+
+export default createPlugin({
+  contract: base.router({
+    // Your routes here
+  }),
+  // ... rest of plugin
+});
+```
+
+## Error Recovery Patterns
+
+Implement graceful degradation:
+
+```typescript
+export default createPlugin({
+  contract,
+  variables: z.object({
+    enableCache: z.boolean().default(true),
+    fallbackUrl: z.string().optional(),
+  }),
+  secrets: z.object({ apiKey: z.string() }),
+
+  initialize: (config) => Effect.gen(function* () {
+    const cache = new Map();
+    const service = new MyService(config.secrets.apiKey);
+    return { service, cache, config: config.variables };
+  }),
+
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input }) => {
+      try {
+        const data = await Effect.runPromise(
+          context.service.getData(input.id)
+        );
+        
+        if (context.config.enableCache) {
+          context.cache.set(input.id, data);
+        }
+        
+        return { data, source: 'api' };
+      } catch (error) {
+        if (context.config.enableCache && context.cache.has(input.id)) {
+          console.warn('Using cached data due to API failure');
+          return {
+            data: context.cache.get(input.id),
+            source: 'cache'
+          };
+        }
+        
+        if (context.config.fallbackUrl) {
+          console.warn('Using fallback service');
+          try {
+            const response = await fetch(
+              `${context.config.fallbackUrl}/data/${input.id}`
+            );
+            const data = await response.json();
+            return { data, source: 'fallback' };
+          } catch (fallbackError) {
+            console.error('Fallback also failed');
+          }
+        }
+        
+        throw error;
+      }
+    })
+  })
+});
+```
+
+## Error Context Enrichment
+
+Add useful context to errors for debugging:
+
+```typescript
+import { ORPCError } from "every-plugin/orpc";
+import { onError } from "@orpc/server";
+
+export const enrichErrorContext = onError((error) => {
+  if (error instanceof ORPCError) {
+    error.data = {
+      ...error.data,
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      version: process.env.APP_VERSION,
+    };
+  }
+});
+```
+
+## Testing Error Scenarios
+
+Test error handling thoroughly:
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { createPluginRuntime } from "every-plugin/runtime";
+import { ORPCError } from "every-plugin/orpc";
+
+describe("Error Handling", () => {
+  it("should handle rate limiting", async () => {
+    const runtime = createPluginRuntime({
+      registry: { "test-plugin": { module: TestPlugin } },
+    });
+
+    const { createClient } = await runtime.usePlugin("test-plugin", config);
+    const client = createClient();
+
+    try {
+      for (let i = 0; i < 100; i++) {
+        await client.getData({ id: `${i}` });
+      }
+      expect.fail("Should have been rate limited");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ORPCError);
+      expect((error as ORPCError).code).toBe("RATE_LIMITED");
+      expect((error as ORPCError).data).toHaveProperty("retryAfter");
+    }
+  });
+
+  it("should retry on transient failures", async () => {
+    let attempts = 0;
+    const client = {
+      getData: async () => {
+        attempts++;
+        if (attempts < 3) {
+          throw new ORPCError("SERVICE_UNAVAILABLE", {
+            data: { retryAfter: 1 }
+          });
+        }
+        return { data: "success" };
+      }
+    };
+
+    const result = await retryWithBackoff(() => client.getData());
+    expect(result.data).toBe("success");
+    expect(attempts).toBe(3);
+  });
+
+  it("should not retry on permanent failures", async () => {
+    let attempts = 0;
+    const client = {
+      getData: async () => {
+        attempts++;
+        throw new ORPCError("UNAUTHORIZED", {
+          message: "Invalid API key"
+        });
+      }
+    };
+
+    await expect(
+      retryWithBackoff(() => client.getData())
+    ).rejects.toThrow("UNAUTHORIZED");
+    
+    expect(attempts).toBe(1);
+  });
+});
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Error Handling Guide" href="/docs/guides/error-handling">
+    Core error handling concepts
+  </Card>
+  <Card title="Middleware" href="/docs/recipes/middleware">
+    Authentication middleware patterns
+  </Card>
+  <Card title="Patterns" href="/docs/recipes/patterns">
+    Rate limiting and health checks
+  </Card>
+</Cards>

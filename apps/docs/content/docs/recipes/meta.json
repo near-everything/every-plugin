@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "middleware",
+    "error-handling",
     "event-broadcasting",
     "serverless-streaming",
     "scaling",

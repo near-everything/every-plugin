@@ -1,0 +1,256 @@
+---
+title: Error Handling
+description: Handle and format errors in your plugin system
+---
+
+## Overview
+
+every-plugin provides error handling at multiple levels:
+
+1. **Plugin-level** - Type-safe errors defined in your plugin contract
+2. **Handler-level** - Interceptors for consistent error formatting
+3. **Client-level** - Error catching and display
+
+## Type-Safe Plugin Errors
+
+Define expected errors in your plugin contract using `.errors()`:
+
+```typescript
+import { oc, ORPCError } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+
+const base = oc.errors({
+  RATE_LIMITED: {
+    status: 429,
+    data: z.object({
+      retryAfter: z.number(),
+      remainingRequests: z.number(),
+      limitType: z.enum(['requests', 'bandwidth'])
+    }),
+  },
+  SERVICE_UNAVAILABLE: {
+    status: 503,
+    data: z.object({ retryAfter: z.number() }),
+  },
+  INVALID_API_KEY: {
+    status: 401,
+    message: 'Invalid or expired API key',
+  },
+});
+
+const contract = base.router({
+  getData: base.route({ method: 'POST', path: '/getData' })
+    .input(z.object({ id: z.string() }))
+    .output(z.object({ data: z.string() })),
+});
+```
+
+## Throwing Type-Safe Errors
+
+In your handlers, errors defined in the contract are available via the builder:
+
+```typescript
+export default createPlugin({
+  contract,
+  variables: z.object({ timeout: z.number().default(30000) }),
+  secrets: z.object({ apiKey: z.string() }),
+
+  initialize: (config) => Effect.gen(function* () {
+    const service = new MyService(config.secrets.apiKey);
+    return { service };
+  }),
+
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input }) => {
+      // Rate limit check
+      const rateLimitStatus = await checkRateLimit();
+      if (rateLimitStatus.remaining <= 0) {
+        throw new ORPCError('RATE_LIMITED', {
+          message: "Rate limit exceeded",
+          data: {
+            retryAfter: rateLimitStatus.resetIn,
+            remainingRequests: 0,
+            limitType: 'requests'
+          }
+        });
+      }
+
+      // Service availability check
+      if (!context.service.isAvailable()) {
+        throw new ORPCError('SERVICE_UNAVAILABLE', {
+          data: { retryAfter: 60 }
+        });
+      }
+
+      const data = await Effect.runPromise(
+        context.service.getData(input.id)
+      );
+
+      return { data };
+    })
+  })
+});
+```
+
+## Handler Error Interceptors
+
+When creating handlers for your plugins, use `onError` interceptors for consistent error handling and logging:
+
+```typescript
+import { RPCHandler, OpenAPIHandler } from "@orpc/server/fetch";
+import { onError } from "@orpc/server";
+
+const { router } = await runtime.usePlugin("my-plugin", config);
+
+const handler = new RPCHandler(router, {
+  interceptors: [
+    onError((error) => {
+      console.error('[Plugin Error]', error.code, error.message);
+      
+      // Optional: Report to monitoring service
+      if (error.code !== 'BAD_REQUEST') {
+        reportToSentry(error);
+      }
+    }),
+  ],
+});
+```
+
+## Client-Side Error Handling
+
+Use `isDefinedError` to handle type-safe errors on the client:
+
+```typescript
+import { isDefinedError } from "every-plugin/orpc";
+
+try {
+  const { createClient } = await runtime.usePlugin("my-plugin", config);
+  const client = createClient();
+  const result = await client.getData({ id: "123" });
+} catch (error) {
+  if (isDefinedError(error)) {
+    switch (error.code) {
+      case 'RATE_LIMITED':
+        console.log(`Retry after ${error.data.retryAfter}s`);
+        console.log(`Remaining: ${error.data.remainingRequests}`);
+        break;
+      case 'SERVICE_UNAVAILABLE':
+        console.log('Service down, try later');
+        break;
+      case 'INVALID_API_KEY':
+        console.log('Please check your API key');
+        break;
+    }
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+## Validation Errors
+
+Input validation errors are automatically thrown with code `BAD_REQUEST`. Customize them with interceptors:
+
+```typescript
+import { ValidationError, ORPCError, onError } from "@orpc/server";
+
+const handler = new RPCHandler(router, {
+  clientInterceptors: [
+    onError((error) => {
+      if (
+        error instanceof ORPCError &&
+        error.code === 'BAD_REQUEST' &&
+        error.cause instanceof ValidationError
+      ) {
+        throw new ORPCError('INPUT_VALIDATION_FAILED', {
+          status: 422,
+          message: 'Please check your input',
+          data: {
+            issues: error.cause.issues.map(i => ({
+              path: i.path?.join('.'),
+              message: i.message
+            }))
+          },
+          cause: error.cause,
+        });
+      }
+    }),
+  ],
+});
+```
+
+## Error Utilities
+
+every-plugin provides built-in error utilities that you can use, or you can define your own error handling logic.
+
+### Using Built-in Error Formatting
+
+Import and use the built-in `formatORPCError` utility for consistent error formatting:
+
+```typescript
+import { formatORPCError, isRetryableORPCCode } from "every-plugin/errors";
+
+try {
+  const result = await client.getData({ id: "123" });
+} catch (error) {
+  // Automatic console formatting with helpful context
+  formatORPCError(error);
+
+  // Check if error is retryable
+  if (isRetryableORPCCode(error.code)) {
+    console.log("This error is retryable");
+  }
+}
+```
+
+**Or define your own error formatting:**
+
+```typescript
+import { ORPCError } from "every-plugin/orpc";
+
+function formatMyError(error: unknown): void {
+  if (error instanceof ORPCError) {
+    console.log(`[${error.code}] ${error.message}`);
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+### Built-in Error Formatting Output
+
+every-plugin automatically formats oRPC errors to the console with helpful context:
+
+```typescript
+// Rate limit error formatting:
+╭─ oRPC Error ────────────────────────────────
+│  Rate limit exceeded
+│  Code: RATE_LIMITED (429)
+│
+│  Retry after: 60 seconds
+│  Remaining: 0 requests
+│  → Wait before retrying
+╰──────────────────────────────────────────────
+
+// Validation error formatting:
+╭─ oRPC Validation Error ──────────────────────
+│  Expected object, received string
+│
+│  Issues (2):
+│    1. name: Required
+│    2. email: Invalid email
+│
+│  Data preview: { id: "123", invalid: "data" }
+╰──────────────────────────────────────────────
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Error Handling Recipes" href="/docs/recipes/error-handling">
+    Advanced error handling patterns
+  </Card>
+  <Card title="Middleware" href="/docs/recipes/middleware">
+    Authentication and authorization middleware
+  </Card>
+</Cards>

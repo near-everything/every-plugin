@@ -97,3 +97,13 @@ export const CommonPluginErrors = {
 		})
 	}
 } as const;
+
+export {
+	formatORPCError,
+	isRetryableORPCCode,
+	wrapORPCError,
+	toPluginRuntimeError,
+	PluginRuntimeError,
+	ModuleFederationError,
+	ValidationError,
+} from "./runtime/errors";

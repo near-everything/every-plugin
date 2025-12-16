@@ -1,7 +1,8 @@
 import type { AnyContractRouter, AnySchema, InferSchemaOutput } from "@orpc/contract";
 import type { Context, Implementer, Router } from "@orpc/server";
-import { implement } from "@orpc/server";
+import { implement, onError, os } from "@orpc/server";
 import { Effect, type Scope } from "effect";
+import { formatORPCError } from "./runtime/errors";
 
 type ContextOutput<T> = T extends AnySchema ? InferSchemaOutput<T> : {};
 
@@ -124,7 +125,12 @@ export function createPlugin<
 		}
 
 		createRouter(deps: TDeps): Router<TContract, any> {
-			const builder = implement(config.contract).$context<ContextOutput<TRequestContext>>();
+			const base = os
+				.$context<ContextOutput<TRequestContext>>()
+				.use(onError((error) => {
+					formatORPCError(error);
+				}));
+			const builder = implement(config.contract, base);
 			const router = config.createRouter(deps, builder);
 			return router as Router<TContract, any>;
 		}
