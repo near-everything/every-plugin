@@ -90,12 +90,16 @@ export class PluginRuntime<R = RegisteredPlugins> {
 		}
 
 		const initialized = await this.runPromise(cachedPlugin);
-		const router = initialized.plugin.createRouter(initialized.context);
-		const client = createRouterClient(router);
+
+		// Create client factory that accepts request context
+		const createClient = (context?: any) => {
+			const router = initialized.plugin.createRouter(initialized.context);
+			return createRouterClient(router, { context });
+		};
 
 		return {
-			router: router as PluginRouterType<R[K]>,
-			client: client as PluginClientType<R[K]>,
+			createClient: createClient as any,
+			router: initialized.plugin.createRouter(initialized.context) as PluginRouterType<R[K]>,
 			metadata: initialized.metadata,
 			initialized: initialized as InitializedPlugin<RegisteredPlugin<K, R>>
 		} as UsePluginResult<K, R>;
@@ -233,7 +237,7 @@ function normalizeRegistry(registry: Record<string, PluginRegistryEntry>): Plugi
  * });
  * 
  * // Types are automatically inferred from module entries!
- * const { client } = await runtime.usePlugin("telegram", config);
+ * const { router } = await runtime.usePlugin("telegram", config);
  * ```
  */
 export function createPluginRuntime<

@@ -93,7 +93,8 @@ describe("Plugin Router Access Methods", () => {
   it("should work via direct client calls", { timeout: 10000 }, async () => {
     const result = await runtime.usePlugin("test-plugin", TEST_CONFIG);
 
-    const { client } = result;
+    const { createClient } = result;
+    const client = createClient();
 
     const getByIdResult = await client.getById({ id: "direct-test-123" });
 

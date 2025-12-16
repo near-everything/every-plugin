@@ -141,7 +141,8 @@ export default createPlugin({
 let lastEventId: string | undefined;
 
 async function streamActivities(config: any) {
-  const { client } = await runtime.usePlugin("user-activity-stream");
+  const { createClient } = await runtime.usePlugin("user-activity-stream");
+  const client = createClient();
 
   while (true) {
     try {

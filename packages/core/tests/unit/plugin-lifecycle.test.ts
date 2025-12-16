@@ -26,25 +26,25 @@ describe("Plugin Lifecycle Unit Tests", () => {
     },
   });
 
-  it("should handle complete plugin lifecycle", { timeout: 4000 }, async () => {
-    const result = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+	it("should handle complete plugin lifecycle", { timeout: 4000 }, async () => {
+		const result = await runtime.usePlugin("test-plugin", TEST_CONFIG);
 
-    expect(result).toBeDefined();
-    expect(result.client).toBeDefined();
-    expect(result.router).toBeDefined();
-    expect(result.metadata).toBeDefined();
-    expect(result.initialized).toBeDefined();
-    expect(result.initialized.plugin).toBeDefined();
-    expect(result.initialized.plugin.id).toBe("test-plugin");
-    expect(result.initialized.config).toBeDefined();
-    expect(result.initialized.config.secrets.apiKey).toBe("test-api-key-value");
-  });
+		expect(result).toBeDefined();
+		expect(result.createClient).toBeDefined();
+		expect(result.router).toBeDefined();
+		expect(result.metadata).toBeDefined();
+		expect(result.initialized).toBeDefined();
+		expect(result.initialized.plugin).toBeDefined();
+		expect(result.initialized.plugin.id).toBe("test-plugin");
+		expect(result.initialized.config).toBeDefined();
+		expect(result.initialized.config.secrets.apiKey).toBe("test-api-key-value");
+	});
 
   it("should handle usePlugin convenience method", { timeout: 4000 }, async () => {
     const result = await runtime.usePlugin("test-plugin", TEST_CONFIG);
 
     expect(result).toBeDefined();
-    expect(result.client).toBeDefined();
+    expect(result.createClient).toBeDefined();
     expect(result.router).toBeDefined();
     expect(result.metadata).toBeDefined();
     expect(result.initialized).toBeDefined();

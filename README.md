@@ -38,11 +38,12 @@ const runtime = createPluginRuntime({
   secrets: {API_KEY: "secret-value" }
 });
 
-const { client } = await runtime.usePlugin("data-source", {
+const { createClient } = await runtime.usePlugin("data-source", {
   secrets: { apiKey: "{{API_KEY}}" },
   variables: { timeout: 30000 }
 });
 
+const client = createClient();
 const result = await client.search({ query: "typescript", limit: 20 });
 console.log(`Found ${result.items.length} items`);
 
@@ -71,7 +72,8 @@ export default createPlugin({
   }
 });
 
-const { client } = await runtime.usePlugin("plugin-id", config);
+const { createClient } = await runtime.usePlugin("plugin-id", config);
+const client = createClient();
 const data = await client.getData({ id: "123" });
 ```
 
@@ -95,9 +97,10 @@ await runtime.shutdown();
 `usePlugin()` returns an `EveryPlugin` with three ways to work with plugins:
 
 ```typescript
-const { client, router, metadata } = await runtime.usePlugin(...);
+const { createClient, router, metadata } = await runtime.usePlugin(...);
 
 // 1. Client - Direct typed procedure calls
+const client = createClient();
 const data = await client.getData({ id: "123" });
 
 // 2. Router - Mount as HTTP endpoints
@@ -131,7 +134,8 @@ const runtime = createLocalPluginRuntime(
   { "plugin-id": PluginImplementation }
 );
 
-const { client } = await runtime.usePlugin("plugin-id", config);
+const { createClient } = await runtime.usePlugin("plugin-id", config);
+const client = createClient();
 ```
 
 ### Secret Management with Template Injection
@@ -147,7 +151,7 @@ const runtime = createPluginRuntime({
   }
 });
 
-const { client } = await runtime.usePlugin("plugin-id", {
+const { createClient } = await runtime.usePlugin("plugin-id", {
   secrets: {
     apiKey: "{{API_KEY}}",
     dbUrl: "{{DATABASE_URL}}"
@@ -156,6 +160,8 @@ const { client } = await runtime.usePlugin("plugin-id", {
     timeout: 30000
   }
 });
+
+const client = createClient();
 ```
 
 ### Plugins Can Be Sophisticated
@@ -245,11 +251,12 @@ const runtime = createPluginRuntime({
   }
 });
 
-const { client } = await runtime.usePlugin("social-feed", {
+const { createClient } = await runtime.usePlugin("social-feed", {
   secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
   variables: { timeout: 30000 }
 });
 
+const client = createClient();
 const posts = await client.search({ query: "typescript", limit: 10 });
 console.log(`Found ${posts.items.length} posts`);
 
@@ -261,16 +268,17 @@ await runtime.shutdown();
 For continuous data processing with async iterators:
 
 ```typescript
-const { client } = await runtime.usePlugin("social-feed", {
+const { createClient } = await runtime.usePlugin("social-feed", {
   secrets: { apiKey: "{{SOCIAL_API_KEY}}" },
   variables: { timeout: 30000 }
 });
 
+const client = createClient();
 const stream = await client.streamItems({ query: "typescript" });
 
 for await (const item of stream) {
   console.log("Received item:", item);
-  
+
   if (item.id === "target-id") break;
 }
 ```
@@ -281,7 +289,8 @@ Handle errors gracefully with try-catch:
 
 ```typescript
 try {
-  const { client } = await runtime.usePlugin("social-feed", config);
+  const { createClient } = await runtime.usePlugin("social-feed", config);
+  const client = createClient();
   const result = await client.search({ query: "typescript" });
   console.log(result);
 } catch (error) {
@@ -306,8 +315,9 @@ const runtime = createPluginRuntime({
 
 const processJob = async (job: Job) => {
   const { pluginId, config, input } = job.data;
-  
-  const { client } = await runtime.usePlugin(pluginId, config);
+
+  const { createClient } = await runtime.usePlugin(pluginId, config);
+  const client = createClient();
   return await client.process(input);
 };
 
@@ -324,17 +334,20 @@ process.on("SIGTERM", async () => {
 Chain multiple plugins for complex workflows:
 
 ```typescript
-const { client: source } = await runtime.usePlugin("data-source", {
+const { createClient: createSourceClient } = await runtime.usePlugin("data-source", {
   secrets: { apiKey: "{{SOURCE_API_KEY}}" }
 });
+const source = createSourceClient();
 
-const { client: processor } = await runtime.usePlugin("transformer", {
+const { createClient: createProcessorClient } = await runtime.usePlugin("transformer", {
   variables: { format: "json" }
 });
+const processor = createProcessorClient();
 
-const { client: distributor } = await runtime.usePlugin("webhook", {
+const { createClient: createDistributorClient } = await runtime.usePlugin("webhook", {
   secrets: { webhookUrl: "{{WEBHOOK_URL}}" }
 });
+const distributor = createDistributorClient();
 
 const rawData = await source.fetch({ query: "typescript" });
 const processed = await processor.transform({ items: rawData.items });

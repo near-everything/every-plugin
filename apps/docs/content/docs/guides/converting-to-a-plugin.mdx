@@ -424,7 +424,7 @@ const runtime = createPluginRuntime({
   }
 });
 
-const { client } = await runtime.usePlugin("my-plugin", {
+const { router } = await runtime.usePlugin("my-plugin", {
   secrets: { apiKey: "{{API_KEY}}" },
   variables: { 
     baseUrl: "https://api.example.com",

@@ -21,7 +21,7 @@ export interface RegisteredPlugins { }
 /**
  * Base type for any plugin instance.
  */
-export type AnyPlugin = Plugin<AnyContractRouter, AnySchema, AnySchema, any>;
+export type AnyPlugin = Plugin<AnyContractRouter, AnySchema, AnySchema, AnySchema, any>;
 
 /**
  * Loaded plugin constructor with binding information
@@ -32,7 +32,7 @@ export type AnyPluginConstructor = {
 		contract: AnyContractRouter;
 		variables: AnySchema;
 		secrets: AnySchema;
-		context: Context;
+		context: AnySchema;
 	};
 };
 
@@ -72,9 +72,9 @@ export type PluginVariables<T> = T extends { binding: { variables: infer V exten
 export type PluginSecrets<T> = T extends { binding: { secrets: infer S extends AnySchema } } ? S : never;
 
 /**
- * Extract context type from plugin binding
+ * Extract context schema type from plugin binding
  */
-export type PluginContext<T> = T extends { binding: { context: infer C extends Context } } ? C : never;
+export type PluginContext<T> = T extends { binding: { context: infer C extends AnySchema } } ? C : never;
 
 /**
  * Extract router type from plugin binding
@@ -98,11 +98,21 @@ export type RegisteredPlugin<K extends keyof R, R = RegisteredPlugins> =
     contract: infer C extends AnyContractRouter;
     variables: infer V extends AnySchema;
     secrets: infer S extends AnySchema;
-    context: infer TContext extends Context;
+    context: infer TRequestContext extends AnySchema;
   }
-  ? Plugin<C, V, S, TContext>
+  ? Plugin<C, V, S, TRequestContext, any>
   : never
   : never;
+
+/**
+ * Extract plugin constructor type from registry entry
+ */
+export type PluginConstructor<K extends keyof R, R = RegisteredPlugins> = RegisteredPlugin<K, R>;
+
+/**
+ * Extract context input type from plugin binding (for client creation)
+ */
+export type PluginContextInput<T> = InferSchemaInput<PluginContext<T>>;
 
 /**
  * Extract config input type from plugin binding
@@ -114,11 +124,11 @@ export type PluginConfigInput<T> = {
 
 
 /**
- * Extract context type from plugin instance
+ * Extract deps context type from plugin instance (used for initialization)
  */
 export type ContextOf<T extends AnyPlugin> =
-  T extends Plugin<AnyContractRouter, AnySchema, AnySchema, infer TContext>
-  ? TContext
+  T extends Plugin<AnyContractRouter, AnySchema, AnySchema, AnySchema, infer TDeps>
+  ? TDeps
   : never;
 
 /**
@@ -187,7 +197,7 @@ type VerifyPluginBinding<K extends keyof R, R = RegisteredPlugins> =
     contract: AnyContractRouter;
     variables: AnySchema;
     secrets: AnySchema;
-    context: Context;
+    context: AnySchema;
   }
   ? true
   : `❌ Plugin "${K & string}" is not properly registered. Ensure it extends plugin binding layout { contract, variables, secrets, context }.`
@@ -200,7 +210,7 @@ type VerifyPluginBinding<K extends keyof R, R = RegisteredPlugins> =
 */
 export type UsePluginResult<K extends keyof R, R = RegisteredPlugins> = VerifyPluginBinding<K, R> extends true
   ? {
-    readonly client: PluginClientType<R[K]>;
+    readonly createClient: (context?: PluginContextInput<R[K]>) => PluginClientType<R[K]>;
     readonly router: PluginRouterType<R[K]>;
     readonly metadata: PluginMetadata;
     readonly initialized: InitializedPlugin<RegisteredPlugin<K, R>>;

@@ -150,12 +150,13 @@ const runtime = createPluginRuntime({
   secrets: { API_KEY: "test-key" }
 });
 
-const { client } = await runtime.usePlugin("my-plugin", {
+const { createClient } = await runtime.usePlugin("my-plugin", {
   secrets: { apiKey: "{{API_KEY}}" },
   variables: { baseUrl: "https://api.example.com" }
 });
 
 // Test your procedures
+const client = createClient();
 const result = await client.getData({ id: "test" });
 console.log(result);
 

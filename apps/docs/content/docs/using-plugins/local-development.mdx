@@ -29,10 +29,12 @@ const runtime = createPluginRuntime({
 });
 
 // Get fully typed client with automatic type inference
-const { client } = await runtime.usePlugin("data-source", {
+const { createClient } = await runtime.usePlugin("data-source", {
   secrets: { apiKey: "{{API_KEY}}" },
   variables: { timeout: 30000 }
 });
+
+const client = createClient();
 
 // Call procedures with full type safety
 const result = await client.getData({ id: "123" });
@@ -60,7 +62,8 @@ const runtime = createPluginRuntime({
 });
 
 // Full type safety without manual bindings
-const { client } = await runtime.usePlugin("data-source", config);
+const { createClient } = await runtime.usePlugin("data-source", config);
+const client = createClient();
 //                                         ^-- Autocomplete for "data-source" | "transformer"
 
 const result = await client.getData({ id: "123" });
@@ -140,10 +143,12 @@ const runtime = createPluginRuntime({
   }
 });
 
-const { client } = await runtime.usePlugin("my-plugin", {
+const { createClient } = await runtime.usePlugin("my-plugin", {
   secrets: { apiKey: "{{API_KEY}}" },
   variables: { baseUrl: "http://localhost:8080" }
 });
+
+const client = createClient();
 
 // Test your plugin
 const result = await client.getData({ id: "test-123" });
@@ -198,13 +203,15 @@ const runtime = createPluginRuntime({
 });
 
 // Use plugins locally during development
-const { client: source } = await runtime.usePlugin("data-source", {
+const { createClient: createSource } = await runtime.usePlugin("data-source", {
   secrets: { apiKey: "{{API_KEY}}" }
 });
+const source = createSource();
 
-const { client: transformer } = await runtime.usePlugin("transformer", {
+const { createClient: createTransformer } = await runtime.usePlugin("transformer", {
   variables: { format: "json" }
 });
+const transformer = createTransformer();
 
 // Execute pipeline
 const data = await source.fetch({ query: "test" });
@@ -229,22 +236,24 @@ describe("MyPlugin", () => {
   });
 
   it("should fetch data correctly", async () => {
-    const { client } = await runtime.usePlugin("my-plugin", {
+    const { createClient } = await runtime.usePlugin("my-plugin", {
       secrets: { apiKey: "{{API_KEY}}" },
       variables: { baseUrl: "http://localhost:1337" }
     });
+    const client = createClient();
 
     const result = await client.getData({ id: "test-123" });
-    
+
     expect(result).toHaveProperty("data");
     expect(result.data).toBe("test-data");
   });
-  
+
   it("should handle errors", async () => {
-    const { client } = await runtime.usePlugin("my-plugin", {
+    const { createClient } = await runtime.usePlugin("my-plugin", {
       secrets: { apiKey: "invalid-key" },
       variables: { baseUrl: "http://localhost:1337" }
     });
+    const client = createClient();
 
     await expect(
       client.getData({ id: "invalid" })
@@ -273,7 +282,8 @@ const runtime = createPluginRuntime({
 });
 
 // Same API for both
-const { client } = await runtime.usePlugin("my-plugin", config);
+const { createClient } = await runtime.usePlugin("my-plugin", config);
+const client = createClient();
 ```
 
 Or use hybrid approach with module precedence:
@@ -305,7 +315,8 @@ const runtime = createPluginRuntime({
 });
 
 // Test locally before deploying
-const { client } = await runtime.usePlugin("plugin-1", config);
+const { createClient } = await runtime.usePlugin("plugin-1", config);
+const client = createClient();
 await client.testOperation();
 
 // Use remote entries for production

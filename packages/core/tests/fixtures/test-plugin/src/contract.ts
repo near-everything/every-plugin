@@ -125,6 +125,7 @@ export const testContract = oc.router({
 		.output(z.object({
 			configValue: z.string(),
 			inputValue: z.string(),
+			userId: z.string().optional(),
 		}))
 		.errors(CommonPluginErrors),
 

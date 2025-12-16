@@ -20,7 +20,7 @@ const runtime = createPluginRuntime({
 });
 
 // Plugin code loads from CDN at runtime
-const { client } = await runtime.usePlugin("data-source", {
+const { createClient } = await runtime.usePlugin("data-source", {
   secrets: { apiKey: "{{API_KEY}}" }
 });
 ```
@@ -47,10 +47,13 @@ const runtime = createPluginRuntime({
 });
 
 // Get typed client
-const { client } = await runtime.usePlugin("data-source", {
+const { createClient } = await runtime.usePlugin("data-source", {
   secrets: { apiKey: "{{API_KEY}}" },
   variables: { timeout: 30000 }
 });
+
+// Add context (e.g., authentication)
+const client = createClient({ userId: "user-123", sessionId: "session-123" });
 
 // Call procedures
 const result = await client.search({ query: "typescript", limit: 20 });
@@ -102,7 +105,7 @@ const runtime = createPluginRuntime({
 });
 
 // Runtime handles initialization, resource management, and cleanup
-const { client } = await runtime.usePlugin("plugin-id", config);
+const { router } = await runtime.usePlugin("plugin-id", config);
 
 await runtime.shutdown(); // Automatic resource cleanup
 ```
@@ -112,9 +115,10 @@ await runtime.shutdown(); // Automatic resource cleanup
 `usePlugin()` returns an `EveryPlugin` with three ways to work with plugins:
 
 ```typescript
-const { client, router, metadata } = await runtime.usePlugin("plugin-id", config);
+const { createClient, router, metadata } = await runtime.usePlugin("plugin-id", config);
 
 // 1. Client - Direct procedure calls
+const client = createClient();
 const data = await client.getData({ id: "123" });
 
 // 2. Router - Mount as HTTP endpoints
@@ -153,7 +157,7 @@ const runtime = createPluginRuntime({
 });
 
 // Identical API for all loading strategies
-const { client } = await runtime.usePlugin("local-plugin", config);
+const { router } = await runtime.usePlugin("local-plugin", config);
 ```
 
 ### Secret Management
@@ -170,7 +174,7 @@ const runtime = createPluginRuntime({
 });
 
 // Templates get replaced with actual values
-const { client } = await runtime.usePlugin("plugin-id", {
+const { router } = await runtime.usePlugin("plugin-id", {
   secrets: {
     apiKey: "{{API_KEY}}",      // Replaced at runtime
     dbUrl: "{{DATABASE_URL}}"

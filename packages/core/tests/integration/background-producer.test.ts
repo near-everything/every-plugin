@@ -31,10 +31,11 @@ describe.sequential("Background Producer Integration Tests", () => {
     Effect.gen(function* () {
       console.log("🚀 Testing background producer/consumer with real Module Federation");
 
-      const { client } = yield* Effect.promise(() =>
+      const { createClient } = yield* Effect.promise(() =>
         runtime.usePlugin("test-plugin", BACKGROUND_CONFIG)
       );
 
+      const client = createClient();
       console.log("✅ Plugin initialized with background producer enabled");
 
       // Ping to confirm basic connectivity
@@ -105,10 +106,11 @@ describe.sequential("Background Producer Integration Tests", () => {
     Effect.gen(function* () {
       console.log("🚀 Testing multiple consumers simultaneously");
 
-      const { client } = yield* Effect.promise(() =>
+      const { createClient } = yield* Effect.promise(() =>
         runtime.usePlugin("test-plugin", BACKGROUND_CONFIG)
       );
 
+      const client = createClient();
       // Test multiple consumers reading from same publisher
       console.log("🔄 Starting multiple consumer streams");
 

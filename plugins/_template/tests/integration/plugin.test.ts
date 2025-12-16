@@ -3,8 +3,8 @@ import { getPluginClient } from "../setup";
 
 describe("Template Plugin Integration Tests", () => {
   describe("getById procedure", () => {
-    it("should fetch item successfully", async () => {
-      const client = await getPluginClient();
+    it("should fetch item successfully when authenticated", async () => {
+      const client = await getPluginClient({ userId: "user123" });
 
       const result = await client.getById({ id: "test-123" });
 
@@ -13,10 +13,19 @@ describe("Template Plugin Integration Tests", () => {
         title: "Item test-123",
         createdAt: expect.any(String),
       });
+      expect(result.userId).toBe("user123");
+    });
+
+    it("should reject unauthorized access without userId", async () => {
+      const client = await getPluginClient();
+
+      await expect(
+        client.getById({ id: "test-123" })
+      ).rejects.toThrow("User ID required");
     });
 
     it("should handle not found error", async () => {
-      const client = await getPluginClient();
+      const client = await getPluginClient({ userId: "user123" });
 
       await expect(
         client.getById({ id: "not-found" })

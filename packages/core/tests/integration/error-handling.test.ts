@@ -105,11 +105,12 @@ describe("Error Handling Integration Tests", () => {
 				secrets: SECRETS_CONFIG,
 			});
 
-			const { client } = await runtime.usePlugin("test-plugin", {
+			const { createClient } = await runtime.usePlugin("test-plugin", {
 				variables: { baseUrl: "http://localhost:1337", timeout: 5000 },
 				secrets: { apiKey: "test-api-key-value" },
 			});
 
+			const client = createClient();
 			try {
 				await client.throwError({ errorType: "UNAUTHORIZED" });
 				expect.fail("Should have thrown ORPCError");
@@ -129,11 +130,12 @@ describe("Error Handling Integration Tests", () => {
 				secrets: SECRETS_CONFIG,
 			});
 
-			const { client } = await runtime.usePlugin("test-plugin", {
+			const { createClient } = await runtime.usePlugin("test-plugin", {
 				variables: { baseUrl: "http://localhost:1337", timeout: 5000 },
 				secrets: { apiKey: "test-api-key-value" },
 			});
 
+			const client = createClient();
 			try {
 				await client.throwError({ errorType: "RATE_LIMITED" });
 				expect.fail("Should have thrown ORPCError");
@@ -154,11 +156,12 @@ describe("Error Handling Integration Tests", () => {
 				secrets: SECRETS_CONFIG,
 			});
 
-			const { client } = await runtime.usePlugin("test-plugin", {
+			const { createClient } = await runtime.usePlugin("test-plugin", {
 				variables: { baseUrl: "http://localhost:1337", timeout: 5000 },
 				secrets: { apiKey: "test-api-key-value" },
 			});
 
+			const client = createClient();
 			try {
 				await client.throwError({ errorType: "SERVICE_UNAVAILABLE" });
 				expect.fail("Should have thrown ORPCError");
@@ -178,11 +181,12 @@ describe("Error Handling Integration Tests", () => {
 				secrets: SECRETS_CONFIG,
 			});
 
-			const { client } = await runtime.usePlugin("test-plugin", {
+			const { createClient } = await runtime.usePlugin("test-plugin", {
 				variables: { baseUrl: "http://localhost:1337", timeout: 5000 },
 				secrets: { apiKey: "test-api-key-value" },
 			});
 
+			const client = createClient();
 			try {
 				await client.throwError({ errorType: "FORBIDDEN" });
 				expect.fail("Should have thrown ORPCError");
@@ -202,11 +206,12 @@ describe("Error Handling Integration Tests", () => {
 				secrets: SECRETS_CONFIG,
 			});
 
-			const { client } = await runtime.usePlugin("test-plugin", {
+			const { createClient } = await runtime.usePlugin("test-plugin", {
 				variables: { baseUrl: "http://localhost:1337", timeout: 5000 },
 				secrets: { apiKey: "test-api-key-value" },
 			});
 
+			const client = createClient();
 			const customMessage = "Custom error message for testing";
 
 			try {

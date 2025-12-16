@@ -1,0 +1,334 @@
+---
+title: Middleware
+description: Authentication middleware with context injection
+---
+
+Use middleware to protect routes with authentication by injecting request context via `createClient({ userId: "..." })`:
+
+```typescript
+import { createPlugin } from "every-plugin";
+import { Effect } from "every-plugin/effect";
+import { ORPCError } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+
+const contract = oc.router({
+  publicRoute: oc.route({ method: 'GET', path: '/public' })
+    .input(z.object({ message: z.string() }))
+    .output(z.object({ response: z.string() })),
+
+  privateRoute: oc.route({ method: 'GET', path: '/private' })
+    .input(z.object({ message: z.string() }))
+    .output(z.object({ response: z.string(), userId: z.string() })),
+});
+
+export default createPlugin({
+  contract,
+
+  // Define context schema
+  context: z.object({
+    userId: z.string().optional(),
+    sessionId: z.string().optional(),
+  }),
+
+  variables: z.object({ baseUrl: z.string() }),
+  secrets: z.object({ apiKey: z.string() }),
+
+  initialize: (config) => Effect.gen(function* () {
+    // Plugin initialization
+    return { apiKey: config.secrets.apiKey };
+  }),
+
+  createRouter: (context, builder) => {
+    // Authentication middleware
+    const requireAuth = builder.middleware(async ({ context, next }) => {
+      if (!context.userId) {
+        throw new ORPCError('UNAUTHORIZED', {
+          message: 'Authentication required',
+          data: { authType: 'userId' }
+        });
+      }
+      return next({ context });
+    });
+
+    return {
+      // Public route - no auth required
+      publicRoute: builder.publicRoute.handler(async ({ input }) => {
+        return { response: `Public: ${input.message}` };
+      }),
+
+      // Private route - requires authentication
+      privateRoute: builder.privateRoute
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          // context.userId is now guaranteed to be defined
+          return {
+            response: `Private: ${input.message}`,
+            userId: context.userId, // TypeScript knows this is non-null
+          };
+        }),
+    };
+  }
+});
+```
+
+## Client Usage
+
+Use `createClient()` for public routes and `createClient({ userId: "..." })` for authenticated routes:
+
+```typescript
+const { createClient } = await runtime.usePlugin("auth-plugin", config);
+
+// Public routes work without context
+const client = createClient();
+const publicResult = await client.publicRoute({ message: "hello" });
+console.log(publicResult); // { response: "Public: hello" }
+
+// Private routes require context injection
+const authClient = createClient({ userId: "user123", sessionId: "sess456" });
+const privateResult = await authClient.privateRoute({ message: "secret" });
+console.log(privateResult); // { response: "Private: secret", userId: "user123" }
+
+// This will throw UNAUTHORIZED
+try {
+  await client.privateRoute({ message: "secret" }); // No context provided
+} catch (error) {
+  console.log(error.code); // "UNAUTHORIZED"
+}
+```
+
+## Advanced Middleware Patterns
+
+### Role-Based Access Control
+
+```typescript
+const contract = oc.router({
+  adminRoute: oc.route({ method: 'POST', path: '/admin' })
+    .output(z.object({ data: z.string() })),
+
+  userRoute: oc.route({ method: 'POST', path: '/user' })
+    .output(z.object({ data: z.string() })),
+});
+
+// Extend context with roles
+context: z.object({
+  userId: z.string().optional(),
+  roles: z.array(z.string()).optional(),
+}),
+
+createRouter: (context, builder) => {
+  const requireAdmin = builder.middleware(async ({ context, next }) => {
+    if (!context.roles?.includes('admin')) {
+      throw new ORPCError('FORBIDDEN', {
+        message: 'Admin access required',
+        data: { requiredRoles: ['admin'] }
+      });
+    }
+    return next({ context });
+  });
+
+  const requireUser = builder.middleware(async ({ context, next }) => {
+    if (!context.userId) {
+      throw new ORPCError('UNAUTHORIZED', {
+        message: 'User authentication required'
+      });
+    }
+    return next({ context });
+  });
+
+  return {
+    adminRoute: builder.adminRoute
+      .use(requireAdmin)
+      .handler(async ({ context }) => {
+        // User has admin role
+        return { data: "Admin only data" };
+      }),
+
+    userRoute: builder.userRoute
+      .use(requireUser)
+      .handler(async ({ context }) => {
+        // User is authenticated (has userId)
+        return { data: "User data" };
+      }),
+  };
+}
+```
+
+### Usage with Different Roles
+
+```typescript
+const { createClient } = await runtime.usePlugin("rbac-plugin", config);
+
+// Regular user
+const userClient = createClient({
+  userId: "user123",
+  roles: ["user"]
+});
+
+const userData = await userClient.userRoute();
+console.log(userData); // Works
+
+try {
+  await userClient.adminRoute(); // Forbidden
+} catch (error) {
+  console.log(error.code); // "FORBIDDEN"
+}
+
+// Admin user
+const adminClient = createClient({
+  userId: "admin456",
+  roles: ["user", "admin"]
+});
+
+const adminData = await adminClient.adminRoute(); // Works
+const userData2 = await adminClient.userRoute(); // Also works
+```
+
+### Request Context from HTTP
+
+When mounting plugins as HTTP endpoints, inject context from request headers:
+
+```typescript
+import { RPCHandler } from "@orpc/server/node";
+
+const { router } = await runtime.usePlugin("auth-plugin", config);
+const rpcHandler = new RPCHandler(router);
+
+const server = createServer(async (req, res) => {
+  // Extract context from request
+  const requestContext = {
+    userId: req.headers['x-user-id'] as string,
+    sessionId: req.headers['x-session-id'] as string,
+    roles: req.headers['x-user-roles']?.split(','),
+  };
+
+  const result = await rpcHandler.handle(req, res, {
+    prefix: '/api',
+    context: requestContext // Injected into middleware
+  });
+
+  if (result.matched) return;
+  res.statusCode = 404;
+  res.end('Not found');
+});
+```
+
+## Middleware Composition
+
+Chain multiple middleware for complex authorization:
+
+```typescript
+createRouter: (context, builder) => {
+  // Base authentication
+  const authenticate = builder.middleware(async ({ context, next }) => {
+    if (!context.userId) {
+      throw new ORPCError('UNAUTHORIZED');
+    }
+    return next({ context });
+  });
+
+  // Resource ownership check
+  const requireOwnership = (resourceId: string) =>
+    builder.middleware(async ({ context, next }) => {
+      // Check if user owns the resource
+      const isOwner = await checkOwnership(context.userId, resourceId);
+      if (!isOwner) {
+        throw new ORPCError('FORBIDDEN', {
+          message: 'Resource access denied'
+        });
+      }
+      return next({ context });
+    });
+
+  // Rate limiting
+  const rateLimit = builder.middleware(async ({ context, next }) => {
+    const allowed = await checkRateLimit(context.userId);
+    if (!allowed) {
+      throw new ORPCError('RATE_LIMITED', {
+        data: { retryAfter: 60 }
+      });
+    }
+    return next({ context });
+  });
+
+  return {
+    updateResource: builder.updateResource
+      .use(authenticate)
+      .use(requireOwnership('resource123'))
+      .use(rateLimit)
+      .handler(async ({ input, context }) => {
+        // All checks passed
+        return await updateResource(input);
+      }),
+  };
+}
+```
+
+## Error Handling in Middleware
+
+Middleware can transform errors or add additional context:
+
+```typescript
+const errorHandler = builder.middleware(async ({ context, next }) => {
+  try {
+    return await next({ context });
+  } catch (error) {
+    // Add user context to error for logging
+    if (error instanceof ORPCError) {
+      error.data = {
+        ...error.data,
+        userId: context.userId,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    throw error;
+  }
+});
+
+// Apply to all routes
+const authenticatedRouter = builder
+  .use(errorHandler)
+  .use(authenticate);
+
+return {
+  route1: authenticatedRouter.route1.handler(/* ... */),
+  route2: authenticatedRouter.route2.handler(/* ... */),
+};
+```
+
+## Testing Middleware
+
+Test middleware by providing different contexts:
+
+```typescript
+describe("Auth Middleware", () => {
+  it("should allow authenticated requests", async () => {
+    const { createClient } = await runtime.usePlugin("auth-plugin", config);
+    const client = createClient({ userId: "test-user" });
+
+    const result = await client.privateRoute({ message: "test" });
+    expect(result.userId).toBe("test-user");
+  });
+
+  it("should reject unauthenticated requests", async () => {
+    const { createClient } = await runtime.usePlugin("auth-plugin", config);
+    const client = createClient(); // No context
+
+    await expect(
+      client.privateRoute({ message: "test" })
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED"
+    });
+  });
+});
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Event Broadcasting" href="/docs/recipes/event-broadcasting">
+    Real-time event broadcasting
+  </Card>
+  <Card title="Serverless Streaming" href="/docs/recipes/serverless-streaming">
+    Serverless-ready streams
+  </Card>
+</Cards>

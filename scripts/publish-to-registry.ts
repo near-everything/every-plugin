@@ -1,3 +1,4 @@
+import { create } from './../packages/cli/src/commands/create';
 #!/usr/bin/env bun
 /**
  * Script to publish plugin updates to the FastFS Registry
@@ -114,7 +115,7 @@ async function main() {
       }
     });
 
-    const { client } = await runtime.usePlugin("@data-provider/registry", {
+    const { createClient } = await runtime.usePlugin("@data-provider/registry", {
       variables: {
         network: "mainnet"
       },
@@ -123,6 +124,8 @@ async function main() {
         relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY
       }
     });
+
+    const client = createClient();
 
     console.log('📤 Submitting to relayer...');
     const result = await client.publish({ payload });

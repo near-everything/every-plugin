@@ -100,8 +100,8 @@ async function fetchWithRetry(
 }
 
 // Usage
-const { client } = await runtime.usePlugin("unreliable-api", config);
-const result = await fetchWithRetry(client, { id: "123" });
+const { createClient } = await runtime.usePlugin("unreliable-api", config);
+const result = await fetchWithRetry(createClient(), { id: "123" });
 ```
 
 ## Caching Layer
@@ -257,7 +257,8 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 // Usage
-const { client } = await runtime.usePlugin("my-plugin", config);
+const { createClient } = await runtime.usePlugin("my-plugin", config);
+const client = createClient();
 await executeWithTracking(client.getData({ id: "123" }));
 ```
 

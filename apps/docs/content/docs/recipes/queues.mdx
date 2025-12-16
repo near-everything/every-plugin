@@ -148,7 +148,8 @@ const worker = new Worker(
     console.log(`Processing job ${job.id} with ${pluginId}`);
 
     try {
-      const { client } = await runtime.usePlugin(pluginId, config);
+      const { createClient } = await runtime.usePlugin(pluginId, config);
+      const client = createClient();
       const result = await client.process(input);
       return result;
     } catch (error) {

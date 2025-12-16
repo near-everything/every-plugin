@@ -35,10 +35,11 @@ describe("Test Plugin", () => {
   });
 
   it("should fetch single item", async () => {
-    const { client } = await runtime.usePlugin("test-plugin", {
+    const { createClient } = await runtime.usePlugin("test-plugin", {
       secrets: { apiKey: "{{API_KEY}}" },
       variables: { baseUrl: "http://localhost:1337" }
     });
+    const client = createClient();
 
     const result = await client.getById({ id: "test-123" });
 
@@ -58,10 +59,11 @@ Module entries provide automatic type inference from the plugin constructor. No 
 
 ```typescript
 it("should fetch single item", async () => {
-  const { client } = await runtime.usePlugin("test-plugin", {
+  const { createClient } = await runtime.usePlugin("test-plugin", {
     secrets: { apiKey: "{{API_KEY}}" },
     variables: { baseUrl: "http://localhost:1337" }
   });
+  const client = createClient();
 
   const result = await client.getById({ id: "test-123" });
 
@@ -74,13 +76,14 @@ it("should fetch single item", async () => {
 
 ```typescript
 it("should fetch bulk items", async () => {
-  const { client } = await runtime.usePlugin("test-plugin", {
+  const { createClient } = await runtime.usePlugin("test-plugin", {
     secrets: { apiKey: "{{API_KEY}}" },
     variables: { baseUrl: "http://localhost:1337" }
   });
+  const client = createClient();
 
-  const result = await client.getBulk({ 
-    ids: ["item-1", "item-2", "item-3"] 
+  const result = await client.getBulk({
+    ids: ["item-1", "item-2", "item-3"]
   });
 
   expect(result).toHaveProperty("items");
@@ -93,12 +96,13 @@ it("should fetch bulk items", async () => {
 
 ```typescript
 it("should search and return results", async () => {
-  const { client } = await runtime.usePlugin("test-plugin", {
+  const { createClient } = await runtime.usePlugin("test-plugin", {
     secrets: { apiKey: "{{API_KEY}}" },
     variables: { baseUrl: "http://localhost:1337" }
   });
+  const client = createClient();
 
-  const result = await client.search({ 
+  const result = await client.search({
     query: "typescript",
     limit: 10
   });
@@ -115,12 +119,13 @@ Test streaming procedures with async iteration:
 
 ```typescript
 it("should stream items", async () => {
-  const { client } = await runtime.usePlugin("test-plugin", {
+  const { createClient } = await runtime.usePlugin("test-plugin", {
     secrets: { apiKey: "{{API_KEY}}" },
     variables: { baseUrl: "http://localhost:1337" }
   });
+  const client = createClient();
 
-  const stream = await client.streamItems({ 
+  const stream = await client.streamItems({
     query: "test",
     limit: 5
   });
@@ -142,12 +147,13 @@ it("should stream items", async () => {
 import { Stream, Effect } from "every-plugin/effect";
 
 it("should stream with Effect", async () => {
-  const { client } = await runtime.usePlugin("test-plugin", {
+  const { createClient } = await runtime.usePlugin("test-plugin", {
     secrets: { apiKey: "{{API_KEY}}" },
     variables: { baseUrl: "http://localhost:1337" }
   });
+  const client = createClient();
 
-  const streamResult = await client.streamItems({ 
+  const streamResult = await client.streamItems({
     query: "test",
     limit: 5
   });
@@ -172,10 +178,11 @@ it("should stream with Effect", async () => {
 import { CommonPluginErrors } from "every-plugin";
 
 it("should handle rate limit error", async () => {
-  const { client } = await runtime.usePlugin("test-plugin", {
+  const { createClient } = await runtime.usePlugin("test-plugin", {
     secrets: { apiKey: "{{API_KEY}}" },
     variables: { baseUrl: "http://localhost:1337" }
   });
+  const client = createClient();
 
   try {
     await client.triggerRateLimit();
@@ -188,10 +195,11 @@ it("should handle rate limit error", async () => {
 });
 
 it("should handle unauthorized error", async () => {
-  const { client } = await runtime.usePlugin("test-plugin", {
+  const { createClient } = await runtime.usePlugin("test-plugin", {
     secrets: { apiKey: "invalid-key" },
     variables: { baseUrl: "http://localhost:1337" }
   });
+  const client = createClient();
 
   await expect(
     client.getData({ id: "test" })
@@ -205,10 +213,11 @@ it("should handle unauthorized error", async () => {
 });
 
 it("should handle service unavailable", async () => {
-  const { client } = await runtime.usePlugin("test-plugin", {
+  const { createClient } = await runtime.usePlugin("test-plugin", {
     secrets: { apiKey: "{{API_KEY}}" },
     variables: { baseUrl: "http://invalid-host" }
   });
+  const client = createClient();
 
   await expect(
     client.getData({ id: "test" })
@@ -323,7 +332,7 @@ Test plugins with background producers:
 
 ```typescript
 it("should produce events in background", async () => {
-  const { client } = await runtime.usePlugin("background-plugin", {
+  const { createClient } = await runtime.usePlugin("background-plugin", {
     secrets: { apiKey: "{{API_KEY}}" },
     variables: {
       baseUrl: "http://localhost:1337",
@@ -332,6 +341,7 @@ it("should produce events in background", async () => {
       backgroundMaxItems: 5
     }
   });
+  const client = createClient();
 
   // Wait for background producer to generate events
   await new Promise(resolve => setTimeout(resolve, 1000));
@@ -369,13 +379,15 @@ describe("Plugin Integration", () => {
   });
 
   it("should process data through pipeline", async () => {
-    const { client: source } = await runtime.usePlugin("source", {
+    const { createClient: createSource } = await runtime.usePlugin("source", {
       secrets: { apiKey: "{{API_KEY}}" }
     });
+    const source = createSource();
 
-    const { client: transformer } = await runtime.usePlugin("transformer", {
+    const { createClient: createTransformer } = await runtime.usePlugin("transformer", {
       variables: { format: "json" }
     });
+    const transformer = createTransformer();
 
     // Fetch from source
     const sourceData = await source.getData({ id: "test" });
@@ -421,47 +433,52 @@ describe("Complete Plugin Test Suite", () => {
     });
 
     it("should fetch by ID", async () => {
-      const { client } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const { createClient } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const client = createClient();
       const result = await client.getById({ id: "test-123" });
-      
+
       expect(result.item?.externalId).toBe("test-123");
     });
 
     it("should handle bulk fetch", async () => {
-      const { client } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const { createClient } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const client = createClient();
       const result = await client.getBulk({ ids: ["1", "2", "3"] });
-      
+
       expect(result.items).toHaveLength(3);
     });
   });
 
   describe("Streaming", () => {
     it("should stream items", async () => {
-      const { client } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const { createClient } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const client = createClient();
       const stream = await client.streamItems({ query: "test", limit: 5 });
-      
+
       const items = [];
       for await (const item of stream) {
         items.push(item);
         if (items.length >= 5) break;
       }
-      
+
       expect(items.length).toBe(5);
     });
   });
 
   describe("Error Handling", () => {
     it("should handle invalid ID", async () => {
-      const { client } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
-      
+      const { createClient } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const client = createClient();
+
       await expect(
         client.getById({ id: "" })
       ).rejects.toThrow();
     });
 
     it("should handle rate limits", async () => {
-      const { client } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
-      
+      const { createClient } = await runtime.usePlugin("test-plugin", TEST_CONFIG);
+      const client = createClient();
+
       try {
         await client.triggerRateLimit();
         fail("Should throw");

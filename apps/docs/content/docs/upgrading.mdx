@@ -5,6 +5,178 @@ description: Migration guides for major version changes
 
 This guide covers breaking changes and migration steps for upgrading between major versions of every-plugin.
 
+## v0.6 → v0.7
+
+Version 0.7.0 introduces a `createClient` factory pattern that enables per-request context injection for authentication middleware and request-specific data.
+
+### What's New
+
+- 🔐 **Context Injection** - `createClient({ userId: "..." })` for per-request context
+- 🛡️ **Authentication Middleware** - Middleware can access request context for auth checks
+- 🏭 **Factory Pattern** - `createClient()` factory replaces direct `client` property
+- 📝 **Context Schema** - Plugins declare expected context shape with Zod
+
+### Breaking Changes
+
+#### 1. usePlugin API Changes
+
+**Before (v0.6):**
+```typescript
+const { client } = await runtime.usePlugin("my-plugin", config);
+const result = await client.getData({ id: "123" });
+```
+
+**After (v0.7):**
+```typescript
+const { createClient } = await runtime.usePlugin("my-plugin", config);
+const client = createClient(); // or createClient({ userId: "..." })
+const result = await client.getData({ id: "123" });
+```
+
+**Changes:**
+- `client` property replaced with `createClient` factory function
+- Factory accepts optional context parameter for authentication
+- All existing functionality preserved - just new API surface
+
+#### 2. Plugin Context Schema
+
+Plugins can now declare expected request context using Zod schemas:
+
+```typescript
+export default createPlugin({
+  // NEW: Context schema declaration
+  context: z.object({
+    userId: z.string().optional(),
+    sessionId: z.string().optional(),
+    roles: z.array(z.string()).optional(),
+  }),
+
+  // ... rest of plugin definition
+});
+```
+
+Context is validated and passed to route handlers via oRPC's context system. This enables type-safe middleware that can access request-specific data like user authentication, session information, or permissions.
+
+#### 3. Middleware Access to Context
+
+Middleware can now access request context for authentication:
+
+```typescript
+createRouter: (context, builder) => {
+  const requireAuth = builder.middleware(async ({ context, next }) => {
+    if (!context.userId) {
+      throw new ORPCError('UNAUTHORIZED', { message: 'User ID required' });
+    }
+    return next({ context: { ...context, userId: context.userId } });
+  });
+
+  return {
+    protectedRoute: builder.protectedRoute
+      .use(requireAuth)
+      .handler(async ({ input, context }) => {
+        // context.userId is now guaranteed non-null
+        return { data: "protected", userId: context.userId };
+      })
+  };
+}
+```
+
+### Migration Steps
+
+#### Step 1: Update usePlugin Calls
+
+Replace all `const { client } = ...` with `const { createClient } = ...; const client = createClient();`:
+
+```typescript
+// Before
+const { client } = await runtime.usePlugin("my-plugin", config);
+await client.getData({ id: "123" });
+
+// After
+const { createClient } = await runtime.usePlugin("my-plugin", config);
+const client = createClient(); // For public routes
+await client.getData({ id: "123" });
+
+// For authenticated routes
+const authClient = createClient({ userId: "user123" });
+await authClient.getProtectedData({ id: "123" });
+```
+
+#### Step 2: Update Plugin Definitions (Optional)
+
+If you want to add authentication middleware, declare a context schema:
+
+```typescript
+import { z } from "every-plugin/zod";
+
+export default createPlugin({
+  // Add context schema
+  context: z.object({
+    userId: z.string().optional(),
+    sessionId: z.string().optional(),
+  }),
+
+  // Update middleware to use context
+  createRouter: (deps, builder) => {
+    const requireAuth = builder.middleware(async ({ context, next }) => {
+      if (!context.userId) {
+        throw errors.UNAUTHORIZED({ message: 'Authentication required' });
+      }
+      return next({ context });
+    });
+
+    return {
+      publicRoute: builder.publicRoute.handler(async ({ input }) => {
+        // No auth needed
+        return { data: "public" };
+      }),
+
+      privateRoute: builder.privateRoute
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          // context.userId is available and typed
+          return { data: "private", userId: context.userId };
+        })
+    };
+  }
+});
+```
+
+#### Step 3: Update Tests
+
+All test files need to be updated to use the factory pattern:
+
+```typescript
+// Before
+const { client } = await runtime.usePlugin("test-plugin", config);
+const result = await client.getData({ id: "test" });
+
+// After
+const { createClient } = await runtime.usePlugin("test-plugin", config);
+const client = createClient();
+const result = await client.getData({ id: "test" });
+
+// For context tests
+const authClient = createClient({ userId: "test-user" });
+const protectedResult = await authClient.getProtectedData({ id: "test" });
+```
+
+### Backwards Compatibility
+
+- All existing plugins continue to work without changes
+- The factory pattern is backward-compatible for public routes
+- Context schema is optional - plugins without it work normally
+- Middleware without context access continues to work
+
+### Benefits
+
+- **Authentication Support**: Middleware can access user context for auth decisions
+- **Per-Request Context**: Different contexts for different users/sessions
+- **Type Safety**: Context is fully typed and validated
+- **Flexible**: Context can include user ID, session data, permissions, etc.
+
+---
+
 ## v0.5 → v0.6
 
 Version 0.6.0 includes important bug fixes, template improvements, and updated build tooling for better compatibility.
@@ -618,7 +790,8 @@ if (typeof process !== 'undefined') {
 ```typescript
 import { plugins, runtime } from "./plugins";
 
-const { client } = plugins.dataSource;  // Already initialized
+const { createClient } = plugins.dataSource;  // Already initialized
+const client = createClient();
 const results = await client.processData({ input: data });
 ```
 

@@ -61,9 +61,10 @@ export async function teardown() {
 export const PORT_POOL = {
   TEST_PLUGIN_SERVER: 3999,
   OPENAPI_TEST: 4001,
-  RPC_TEST: 4002, 
+  RPC_TEST: 4002,
   STREAMING_TEST: 4003,
-  OPENAPI_GEN_TEST: 4004
+  OPENAPI_GEN_TEST: 4004,
+  REQUEST_CONTEXT_TEST: 4005
 } as const;
 
 // Export test server URL for use in tests

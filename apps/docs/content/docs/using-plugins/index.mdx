@@ -35,10 +35,12 @@ const runtime = createPluginRuntime({
 Load and use a plugin:
 
 ```typescript
-const { client } = await runtime.usePlugin("data-source", {
+const { createClient } = await runtime.usePlugin("data-source", {
   secrets: { apiKey: "{{API_KEY}}" },
   variables: { timeout: 30000 }
 });
+
+const client = createClient();
 
 // Call procedures
 const item = await client.getById({ id: "123" });
@@ -118,9 +120,10 @@ const result = await client.workerTask(task.data);
 `usePlugin()` returns an `EveryPlugin` object with multiple access patterns:
 
 ```typescript
-const { client, router, metadata } = await runtime.usePlugin("data-source", config);
+const { createClient, router, metadata } = await runtime.usePlugin("data-source", config);
 
 // 1. Client - Direct procedure calls
+const client = createClient();
 const data = await client.getData({ id: "123" });
 
 // 2. Router - Mount as HTTP endpoints
@@ -200,10 +203,12 @@ Streaming procedures return async iterables:
 <Tab value="Direct Iteration">
 
 ```typescript
-const { client } = await runtime.usePlugin("social-feed", {
+const { createClient } = await runtime.usePlugin("social-feed", {
   secrets: { apiKey: "{{API_KEY}}" },
   variables: { timeout: 30000 }
 });
+
+const client = createClient();
 
 const stream = await client.streamPosts({ query: "typescript" });
 
@@ -219,8 +224,9 @@ for await (const post of stream) {
 ```typescript
 import { Stream } from "every-plugin/effect";
 
-const { client } = await runtime.usePlugin("social-feed", config);
+const { createClient } = await runtime.usePlugin("social-feed", config);
 
+const client = createClient();
 const stream = await client.streamPosts({ query: "typescript" });
 const effectStream = Stream.fromAsyncIterable(stream, error => error);
 
@@ -356,7 +362,7 @@ const runtime = createPluginRuntime<AppBindings>({
 });
 
 // Full type safety and autocomplete
-const { client } = await runtime.usePlugin("data-source", config);
+const { router } = await runtime.usePlugin("data-source", config);
 //                                         ^-- Autocomplete for plugin IDs
 ```
 
@@ -421,7 +427,8 @@ Handle plugin errors with try/catch:
 
 ```typescript
 try {
-  const { client } = await runtime.usePlugin("data-source", config);
+  const { createClient } = await runtime.usePlugin("data-source", config);
+  const client = createClient();
   const result = await client.getData({ id: "123" });
 } catch (error) {
   console.error("Plugin failed:", error);
@@ -454,7 +461,8 @@ process.on("SIGINT", async () => {
 const runtime = createPluginRuntime({...});
 
 // Reuse plugin instances when possible
-const { client } = await runtime.usePlugin("data-source", config);
+const { createClient } = await runtime.usePlugin("data-source", config);
+const client = createClient();
 
 // Always cleanup
 await runtime.shutdown();

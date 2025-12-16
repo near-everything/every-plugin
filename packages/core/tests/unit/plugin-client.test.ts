@@ -36,7 +36,8 @@ describe("Plugin Client Unit Tests", () => {
   });
 
   it("should create plugin client and access procedures", async () => {
-    const { client } = plugin;
+    const { createClient } = plugin;
+    const client = createClient();
 
     expect(typeof client.getById).toBe('function');
     expect(typeof client.getBulk).toBe('function');
@@ -52,7 +53,8 @@ describe("Plugin Client Unit Tests", () => {
   });
 
   it("should handle bulk operations", async () => {
-    const { client } = plugin;
+    const { createClient } = plugin;
+    const client = createClient();
 
     const bulkResult = await client.getBulk({ ids: ["bulk1", "bulk2", "bulk3"] });
 
@@ -65,7 +67,8 @@ describe("Plugin Client Unit Tests", () => {
   });
 
   it("should stream using plugin client directly", async () => {
-    const { client } = plugin;
+    const { createClient } = plugin;
+    const client = createClient();
 
     const streamResult = await client.simpleStream({ count: 3, prefix: "stream" });
 
@@ -88,7 +91,8 @@ describe("Plugin Client Unit Tests", () => {
   });
 
   it("should handle empty streams", async () => {
-    const { client } = plugin;
+    const { createClient } = plugin;
+    const client = createClient();
 
     const emptyResult = await client.emptyStream({ reason: "testing empty stream" });
 
@@ -101,7 +105,8 @@ describe("Plugin Client Unit Tests", () => {
   });
 
   it("should handle async iteration with custom processing", async () => {
-    const { client } = plugin;
+    const { createClient } = plugin;
+    const client = createClient();
 
     const asyncIterable = await client.simpleStream({ count: 2, prefix: "effect" });
 
@@ -122,7 +127,8 @@ describe("Plugin Client Unit Tests", () => {
   });
 
   it("should propagate oRPC errors correctly", async () => {
-    const { client } = plugin;
+    const { createClient } = plugin;
+    const client = createClient();
 
     await expect(
       client.throwError({ errorType: 'UNAUTHORIZED' })
@@ -130,11 +136,13 @@ describe("Plugin Client Unit Tests", () => {
   });
 
   it("should handle config-dependent procedures", async () => {
-    const { client } = plugin;
+    const { createClient } = plugin;
+    const client = createClient({ userId: "test-user-123" });
 
     const configResult = await client.requiresSpecialConfig({ checkValue: "test-input" });
 
     expect(configResult).toHaveProperty('configValue', 'http://localhost:1337');
     expect(configResult).toHaveProperty('inputValue', 'test-input');
+    expect(configResult).toHaveProperty('userId', 'test-user-123');
   });
 });

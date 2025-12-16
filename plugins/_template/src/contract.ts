@@ -1,6 +1,17 @@
-import { CommonPluginErrors } from "every-plugin";
 import { eventIterator, oc } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
+
+// Define specific errors thrown by this plugin
+const Errors = {
+  UNAUTHORIZED: {
+    status: 401,
+    message: "User ID required",
+  },
+  NOT_FOUND: {
+    status: 404,
+    message: "Failed to fetch item: Item not found",
+  },
+};
 
 // Schema for the data items this plugin provides
 export const ItemSchema = z.object({
@@ -30,7 +41,7 @@ export const contract = oc.router({
       method: 'GET',
       path: '/items/{id}',
       summary: 'Get item by ID',
-      description: 'Fetches a single item by its unique identifier. This is the primary method for retrieving individual items.',
+      description: 'Fetches a single item by its unique identifier. This is the primary method for retrieving individual items. Requires authentication.',
       tags: ['Items'],
     })
     .input(z.object({
@@ -38,8 +49,9 @@ export const contract = oc.router({
     }))
     .output(z.object({
       item: ItemSchema,
+      userId: z.string().describe('ID of the authenticated user who made the request'),
     }))
-    .errors(CommonPluginErrors),
+    .errors(Errors),
 
   // Search with server-side streaming
   search: oc
@@ -54,8 +66,7 @@ export const contract = oc.router({
       query: z.string().min(1, "Query is required").describe('Search query string'),
       limit: z.number().min(1).max(100).default(10).describe('Maximum number of results to return'),
     }))
-    .output(eventIterator(SearchResultSchema)) // Notice "eventIterator", this enables streaming
-    .errors(CommonPluginErrors),
+    .output(eventIterator(SearchResultSchema)), // Notice "eventIterator", this enables streaming
 
   // Health check procedure
   ping: oc
@@ -69,8 +80,7 @@ export const contract = oc.router({
     .output(z.object({
       status: z.literal('ok').describe('Always returns "ok" if the service is healthy'),
       timestamp: z.string().datetime().describe('ISO 8601 timestamp of when the ping was processed'),
-    }))
-    .errors(CommonPluginErrors),
+    })),
 
   // Background streaming with resume support (MemoryPublisher)
   listenBackground: oc
@@ -85,8 +95,7 @@ export const contract = oc.router({
       maxResults: z.number().min(1).max(100).optional().describe('Maximum number of events to return'),
       lastEventId: z.string().optional().describe('Resume from this event ID (for serverless resume)'),
     }))
-    .output(eventIterator(BackgroundEventSchema))
-    .errors(CommonPluginErrors),
+    .output(eventIterator(BackgroundEventSchema)),
 
   // Manual background event publishing
   enqueueBackground: oc
@@ -102,6 +111,5 @@ export const contract = oc.router({
     }))
     .output(z.object({
       ok: z.boolean().describe('True if the event was successfully enqueued'),
-    }))
-    .errors(CommonPluginErrors),
+    })),
 });

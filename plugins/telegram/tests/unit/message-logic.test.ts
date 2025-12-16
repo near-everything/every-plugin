@@ -1,3 +1,4 @@
+import { createClient } from '@libsql/client';
 import { createLocalPluginRuntime } from "every-plugin/testing";
 import type { Context } from "telegraf";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -64,13 +65,13 @@ describe("Telegram Message Logic Tests", () => {
 		it(
 			"should send message successfully",
 			async () => {
-				const { client } = await runtime.usePlugin(
+				const { createClient } = await runtime.usePlugin(
 					"@curatedotfun/telegram",
 					SHARED_TEST_CONFIG,
 				);
 
 				const testMessage = `Unit test message - ${new Date().toISOString()}`;
-
+				const client = createClient();
 				const result = await client.sendMessage({
 					chatId: TEST_CHAT_ID,
 					text: testMessage,
@@ -133,10 +134,12 @@ describe("Telegram Message Logic Tests", () => {
 		it(
 			"should handle malformed webhook data gracefully",
 			async () => {
-				const { client } = await runtime.usePlugin(
+				const { createClient } = await runtime.usePlugin(
 					"@curatedotfun/telegram",
 					SHARED_TEST_CONFIG,
 				);
+
+				const client = createClient();
 
 				// Send malformed data
 				// @ts-expect-error malformed, type errors are good

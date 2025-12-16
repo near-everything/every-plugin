@@ -135,9 +135,11 @@ export default createPlugin({
 
 ```typescript
 // Subscribe to notifications
-const { client } = await runtime.usePlugin("notification-service", {
+const { createClient } = await runtime.usePlugin("notification-service", {
   variables: { enabled: true }
 });
+
+const client = createClient();
 
 const stream = await client.subscribeNotifications({
   types: ['system', 'user'],

@@ -26,7 +26,7 @@ const runtime = createPluginRuntime({
 });
 
 // Plugin is loaded remotely - no npm install!
-const { client } = await runtime.usePlugin("my-plugin", config);
+const { router } = await runtime.usePlugin("my-plugin", config);
 ```
 
 This enables:
@@ -62,7 +62,8 @@ Type bindings give you IDE autocomplete and compile-time checks, but they're opt
 
 ```typescript
 // Without bindings - works perfectly, just no autocomplete
-const { client } = await runtime.usePlugin("my-plugin", config);
+const { createClient } = await runtime.usePlugin("my-plugin", config);
+const client = createClient();
 const result = await client.getData({ id: "123" });
 // ✅ Still type-safe at runtime
 // ❌ No IDE autocomplete
@@ -76,7 +77,8 @@ const runtime = createPluginRuntime({
   }
 });
 
-const { client } = await runtime.usePlugin("my-plugin", config);
+const { createClient } = await runtime.usePlugin("my-plugin", config);
+const client = createClient();
 //                                         ^-- IDE suggests plugin IDs
 const result = await client.getData({ id: "123" });
 //                          ^-- Autocomplete shows procedures
@@ -134,7 +136,7 @@ const runtime = createPluginRuntime({
 });
 
 // Types automatically inferred - no augmentation needed!
-const { client } = await runtime.usePlugin("data-source", config);
+const { router } = await runtime.usePlugin("data-source", config);
 ```
 
 ### Option B: Module Augmentation (Remote Plugins)
@@ -159,7 +161,7 @@ const runtime = createPluginRuntime({
 });
 
 // Now get autocomplete
-const { client } = await runtime.usePlugin("data-source", config);
+const { router } = await runtime.usePlugin("data-source", config);
 ```
 
 </Steps>
@@ -227,7 +229,7 @@ const runtime = createPluginRuntime({
 });
 
 // Full autocomplete - types inferred from module entries
-const { client } = await runtime.usePlugin("data-source", config);
+const { router } = await runtime.usePlugin("data-source", config);
 //                                         ^-- IDE knows this from registry
 
 // Extract types from runtime

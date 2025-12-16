@@ -48,10 +48,12 @@ src/
      { "your-plugin": YourPlugin }
    );
 
-   const { client } = await runtime.usePlugin("your-plugin", {
+   const { createClient } = await runtime.usePlugin("your-plugin", {
      variables: { baseUrl: "https://api.example.com", timeout: 10000 },
      secrets: { apiKey: "your-key" }
    });
+
+   const client = createClient();
 
    const result = await client.getById({ id: "123" });
    ```
@@ -83,13 +85,15 @@ const runtime = createPluginRuntime({
   secrets: { API_KEY: process.env.API_KEY }
 });
 
-const { client } = await runtime.usePlugin("template", {
+const { createClient } = await runtime.usePlugin("template", {
   variables: { 
     baseUrl: "https://api.example.com",
     timeout: 5000 
   },
   secrets: { apiKey: "{{API_KEY}}" }
 });
+
+const client = createClient();
 
 // Single fetch
 const item = await client.getById({ id: "item-123" });

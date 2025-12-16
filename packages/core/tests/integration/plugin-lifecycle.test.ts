@@ -45,7 +45,8 @@ describe("Plugin Lifecycle Integration Tests", () => {
   }, 15000);
 
   it("should execute getById with real plugin", async () => {
-    const { client } = await pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+    const { createClient } = await pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+    const client = createClient();
 
     const result = await client.getById({ id: "integration-test-id" });
 
@@ -56,7 +57,8 @@ describe("Plugin Lifecycle Integration Tests", () => {
   }, 10000);
 
   it("should execute getBulk with real plugin", async () => {
-    const { client } = await pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+    const { createClient } = await pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+    const client = createClient();
 
     const result = await client.getBulk({ ids: ["bulk1", "bulk2", "bulk3"] });
 
@@ -70,7 +72,8 @@ describe("Plugin Lifecycle Integration Tests", () => {
   }, 10000);
 
   it("should handle streaming with real plugin", async () => {
-    const { client } = await pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+    const { createClient } = await pluginRuntime.usePlugin("test-plugin", TEST_CONFIG);
+    const client = createClient();
 
     const result = await client.simpleStream({ count: 3, prefix: "integration" });
 

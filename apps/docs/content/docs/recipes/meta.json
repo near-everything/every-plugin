@@ -2,6 +2,7 @@
   "title": "Recipes",
   "pages": [
     "index",
+    "middleware",
     "event-broadcasting",
     "serverless-streaming",
     "scaling",

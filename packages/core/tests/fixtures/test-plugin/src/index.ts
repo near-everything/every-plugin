@@ -1,6 +1,6 @@
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
-import { MemoryPublisher } from "every-plugin/orpc";
+import { MemoryPublisher, ORPCError } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 import { TestClient } from "./client";
 import { testContract } from "./contract";
@@ -30,6 +30,10 @@ export const TestPlugin = createPlugin({
 	}),
 	secrets: z.object({
 		apiKey: z.string(),
+	}),
+	context: z.object({
+		userId: z.string().optional(),
+		sessionId: z.string().optional(),
 	}),
 	contract: testContract,
 	initialize: (config) =>
@@ -101,8 +105,16 @@ export const TestPlugin = createPlugin({
 				customClient: config.variables.client,
 			};
 		}),
-	createRouter: (context, builder) => {
-		const { client, publisher, customClient } = context;
+	createRouter: (deps, builder) => {
+		const { client, publisher, customClient } = deps;
+
+		// Middleware for authentication
+		const requireAuth = builder.middleware(async ({ context, next }) => {
+			if (!context.userId) {
+				throw new ORPCError('UNAUTHORIZED', { message: 'User ID required' });
+			}
+			return next({ context: { ...context, userId: context.userId } });
+		});
 
 		return {
 			getById: builder.getById.handler(async ({ input }) => {
@@ -161,12 +173,16 @@ export const TestPlugin = createPlugin({
 				}
 			}),
 
-			requiresSpecialConfig: builder.requiresSpecialConfig.handler(async ({ input }) => {
-				return {
-					configValue: client.getConfigValue(),
-					inputValue: input.checkValue,
-				};
-			}),
+			requiresSpecialConfig: builder.requiresSpecialConfig
+				.use(requireAuth)
+				.handler(async ({ input, context }) => {
+					// context.userId is now guaranteed to be non-null due to middleware
+					return {
+						configValue: client.getConfigValue(),
+						inputValue: input.checkValue,
+						userId: context.userId,
+					};
+				}),
 
 			listenBackground: builder.listenBackground.handler(async function* ({ input, signal, lastEventId }) {
 				let count = 0;

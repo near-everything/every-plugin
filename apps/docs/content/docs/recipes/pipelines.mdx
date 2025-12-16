@@ -6,20 +6,22 @@ description: Stream processing and batch processing patterns
 Chain multiple plugins for data transformation:
 
 ```typescript
-// Source plugin streams raw data
-const { client: source } = await runtime.usePlugin("data-source", {
+const { createClient: createSource } = await runtime.usePlugin("data-source", {
   secrets: { apiKey: "{{SOURCE_API_KEY}}" }
 });
+const source = createSource();
 
 // Transformer plugin processes data
-const { client: transformer } = await runtime.usePlugin("transformer", {
+const { createClient: createTransformer } = await runtime.usePlugin("transformer", {
   variables: { format: "json", validate: true }
 });
+const transformer = createTransformer();
 
 // Distributor plugin sends to destinations
-const { client: distributor } = await runtime.usePlugin("distributor", {
+const { createClient: createDistributor } = await runtime.usePlugin("distributor", {
   secrets: { webhook: "{{WEBHOOK_URL}}" }
 });
+const distributor = createDistributor();
 
 // Stream through pipeline
 const stream = await source.streamData({ query: "realtime" });
@@ -47,9 +49,10 @@ Process items in batches for efficiency:
 
 ```typescript
 async function processBatch(items: any[]) {
-  const { client } = await runtime.usePlugin("batch-processor", {
+  const { createClient } = await runtime.usePlugin("batch-processor", {
     variables: { batchSize: 10 }
   });
+  const client = createClient();
 
   return await client.processBatch({ items });
 }
@@ -126,15 +129,17 @@ export default createPlugin({
 });
 
 // Usage with different tenants
-const { client: tenant1 } = await runtime.usePlugin("multi-tenant-api", {
+const { createClient: createTenant1 } = await runtime.usePlugin("multi-tenant-api", {
   secrets: { masterApiKey: "{{MASTER_API_KEY}}" },
   variables: { tenantId: "tenant-1" }
 });
+const tenant1 = createTenant1();
 
-const { client: tenant2 } = await runtime.usePlugin("multi-tenant-api", {
+const { createClient: createTenant2 } = await runtime.usePlugin("multi-tenant-api", {
   secrets: { masterApiKey: "{{MASTER_API_KEY}}" },
   variables: { tenantId: "tenant-2" }
 });
+const tenant2 = createTenant2();
 ```
 
 ## Next Steps

@@ -1,6 +1,6 @@
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
-import { getEventMeta, MemoryPublisher } from "every-plugin/orpc";
+import { getEventMeta, MemoryPublisher, ORPCError } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 
 import { contract } from "./contract";
@@ -32,6 +32,11 @@ export default createPlugin({
 
   secrets: z.object({
     apiKey: z.string().min(1, "API key is required"),
+  }),
+
+  context: z.object({
+    userId: z.string().optional(),
+    sessionId: z.string().optional(),
   }),
 
   contract, // START HERE: define your oRPC contract in ./contract
@@ -94,11 +99,28 @@ export default createPlugin({
     // builder is pre-configured from oRPC: implement(contract).$context<TContext>()
     const { service, publisher } = context;
 
+    // Middleware for authentication
+    const requireAuth = builder.middleware(async ({ context, next }) => {
+      if (!context.userId) {
+        throw new ORPCError('UNAUTHORIZED', { message: 'User ID required' });
+      }
+      return next({ context: { ...context, userId: context.userId } });
+    });
+
     return {
-      getById: builder.getById.handler(async ({ input }) => {
-        const item = await Effect.runPromise(service.getById(input.id));
-        return { item };
-      }),
+      getById: builder.getById
+        .use(requireAuth)
+        .handler(async ({ input, context }) => {
+          try {
+            const item = await Effect.runPromise(service.getById(input.id));
+            return { item, userId: context.userId };
+          } catch (error) {
+            if (error instanceof Error && error.message.includes('Item not found')) {
+              throw new ORPCError('NOT_FOUND', { message: 'Failed to fetch item: Item not found' });
+            }
+            throw error;
+          }
+        }),
 
       search: builder.search.handler(async function* ({ input }) {
         const generator = await Effect.runPromise(
