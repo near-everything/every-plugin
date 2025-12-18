@@ -2,8 +2,13 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { siwn } from "better-near-auth";
+import fs from "node:fs";
+import path from "node:path";
 import { db } from "../db";
 import * as schema from "../db/schema/auth";
+
+const configPath = process.env.BOS_CONFIG_PATH ?? path.resolve(process.cwd(), 'bos.config.json');
+const bosConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -15,7 +20,7 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   plugins: [
     siwn({
-      recipient: process.env.PUBLIC_ACCOUNT_ID || "every.near"
+      recipient: bosConfig.account
     }),
   ],
   account: {

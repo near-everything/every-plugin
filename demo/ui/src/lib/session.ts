@@ -7,6 +7,6 @@ export const sessionQueryOptions = queryOptions({
     const { data: session } = await authClient.getSession();
     return session;
   },
-  staleTime: 1000 * 60 * 5,
+  staleTime: 0,
   gcTime: 1000 * 60 * 10,
 });

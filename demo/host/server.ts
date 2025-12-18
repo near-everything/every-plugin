@@ -15,18 +15,6 @@ import config from './rsbuild.config';
 import { initializePlugins } from './src/runtime';
 import { loadBosConfig } from './src/config';
 import { createRouter } from './src/routers';
-
-// Populate process.env with values from rsbuild config source.define
-if (config.source?.define) {
-  for (const [key, value] of Object.entries(config.source.define)) {
-    if (key.startsWith('process.env.')) {
-      const envKey = key.replace('process.env.', '');
-      if (process.env[envKey] === undefined) {
-        process.env[envKey] = JSON.parse(value as string);
-      }
-    }
-  }
-}
 import { auth } from './src/lib/auth';
 import { db } from './src/db';
 import * as schema from './src/db/schema/auth';

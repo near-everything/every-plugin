@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { authClient } from "../../lib/auth-client";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ export const Route = createFileRoute("/_layout/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const router = useRouter();
   const { redirect } = Route.useSearch();
 
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
@@ -67,7 +68,8 @@ function LoginPage() {
         {
           onSuccess: () => {
             setIsSigningInWithNear(false);
-            queryClient.invalidateQueries();
+            queryClient.invalidateQueries({ queryKey: ['session'] });
+            router.invalidate();
             navigate({ to: redirect ?? "/", replace: true });
             toast.success(`Signed in as: ${accountId}`);
           },
@@ -106,7 +108,8 @@ function LoginPage() {
     try {
       await authClient.signOut();
       await authClient.near.disconnect();
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ['session'] });
+      router.invalidate();
       setIsDisconnectingWallet(false);
       toast.success("Wallet disconnected successfully");
     } catch (error) {

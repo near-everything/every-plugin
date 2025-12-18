@@ -1,8 +1,9 @@
-import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useRouter } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { sessionQueryOptions } from "../lib/session";
 import { authClient } from "../lib/auth-client";
 import { ThemeToggle } from "../components/theme-toggle";
+import { queryClient } from "../utils/orpc";
 
 export const Route = createFileRoute("/_layout")({
   beforeLoad: async ({ context }) => {
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/_layout")({
 });
 
 function Layout() {
+  const router = useRouter();
   const { data: session } = useSuspenseQuery(sessionQueryOptions);
   const accountId = session?.user?.id;
 
@@ -19,6 +21,8 @@ function Layout() {
     try {
       await authClient.signOut();
       await authClient.near.disconnect();
+      queryClient.invalidateQueries({ queryKey: ['session'] });
+      router.invalidate();
       window.location.href = "/";
     } catch (error) {
       console.error("Sign out error:", error);
