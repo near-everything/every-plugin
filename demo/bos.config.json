@@ -1,0 +1,31 @@
+{
+  "account": "demo.everything.near",
+  "app": {
+    "host": {
+      "title": "App",
+      "development": "http://localhost:3001",
+      "production": "https://demo.everything.dev"
+    },
+    "ui": {
+      "name": "ui",
+      "development": "http://localhost:3002",
+      "production": "https://elliot-braem-1215-ui-ping-checkout-pingpayio-4ce2a4952-ze.zephyrcloud.app",
+      "exposes": {
+        "App": "./App",
+        "components": "./components",
+        "providers": "./providers",
+        "types": "./types"
+      }
+    },
+    "api": {
+      "name": "api",
+      "development": "http://localhost:3014",
+      "production": "https://elliot-braem-1212-api-near-merch-stor-6a4c96dde-ze.zephyrcloud.app",
+      "variables": {},
+      "secrets": [
+        "DATABASE_URL",
+        "DATABASE_AUTH_TOKEN"
+      ]
+    }
+  }
+}

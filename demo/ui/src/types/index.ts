@@ -1,0 +1,1 @@
+export type { Network } from "near-kit";

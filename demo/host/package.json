@@ -1,0 +1,49 @@
+{
+  "name": "host",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "BOS_CONFIG_PATH=../bos.config.json tsx server.ts",
+    "build": "rsbuild build",
+    "preview": "NODE_ENV=production BOS_CONFIG_PATH=../bos.config.json tsx server.ts",
+    "typecheck": "tsc --noEmit",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@hot-labs/near-connect": "^0.6.11",
+    "@libsql/client": "^0.15.15",
+    "@module-federation/enhanced": "^0.21.6",
+    "@module-federation/rsbuild-plugin": "^0.21.6",
+    "@module-federation/runtime": "^0.21.6",
+    "@orpc/openapi": "^1.12.2",
+    "@orpc/server": "^1.12.2",
+    "@orpc/zod": "^1.12.2",
+    "@t3-oss/env-core": "^0.13.8",
+    "@tanstack/react-query": "^5.90.11",
+    "@tanstack/react-router": "^1.139.14",
+    "better-auth": "^1.4.6",
+    "better-near-auth": "^0.3.1",
+    "dotenv": "^17.2.3",
+    "drizzle-kit": "^0.31.8",
+    "drizzle-orm": "^0.45.0",
+    "every-plugin": "^0.8.3",
+    "hono": "^4.6.0",
+    "near-kit": "^0.6.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "^1.6.12",
+    "@rsbuild/plugin-react": "^1.4.2",
+    "@types/node": "^22.19.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "zephyr-rsbuild-plugin": "^0.1.2"
+  }
+}

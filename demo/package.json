@@ -1,0 +1,30 @@
+{
+  "name": "monorepo",
+  "private": true,
+  "workspaces": [
+    "api",
+    "host",
+    "ui"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "dev:ui": "USE_REMOTE_API=true turbo dev --filter=host --filter=ui",
+    "dev:api": "USE_REMOTE_UI=true turbo dev --filter=host --filter=api",
+    "start": "turbo preview --filter=host",
+    "build": "turbo build",
+    "build:api": "turbo build --filter=api",
+    "build:host": "turbo build --filter=host",
+    "build:ui": "turbo build --filter=ui",
+    "deploy": "NODE_ENV=production turbo build --filter=ui --filter=api",
+    "typecheck": "turbo typecheck",
+    "db:push": "turbo db:push",
+    "db:studio": "turbo db:studio",
+    "db:generate": "turbo db:generate",
+    "db:migrate": "turbo db:migrate",
+    "db:sync": "bun run scripts/sync-db.ts"
+  },
+  "devDependencies": {
+    "turbo": "^2.6.3"
+  },
+  "packageManager": "bun@1.2.20"
+}

@@ -1,0 +1,610 @@
+# Technical Guide for LLMs
+
+This is the technical guide for a Module Federation monorepo demonstrating every-plugin architecture, runtime-loaded configuration, and NEAR Protocol integration.
+
+For contribution guidelines, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## Architecture Overview
+
+This is a **Module Federation monorepo** with runtime-loaded configuration:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Host (Server)                        │
+│  - Hono.js + oRPC router                                │
+│  - Runtime config loader (bos.config.json)              │
+│  - Module Federation host                               │
+│  - every-plugin runtime                                 │
+└─────────────────────────────────────────────────────────┘
+            ↓                         ↓
+┌───────────────────────┐ ┌───────────────────────┐
+│    UI Remote          │ │    API Plugin         │
+│  - React 19           │ │  - every-plugin       │
+│  - TanStack Router    │ │  - oRPC contract      │
+│  - Module Federation  │ │  - Effect services    │
+└───────────────────────┘ └───────────────────────┘
+```
+
+**Key Characteristics:**
+- ✅ Runtime-loaded configuration (no rebuild for URL changes)
+- ✅ Independent deployment of UI, API, and Host
+- ✅ Type-safe RPC with oRPC
+- ✅ NEAR Protocol authentication via Better-Auth
+- ✅ CDN-ready with Module Federation
+
+## Configuration System: bos.config.json
+
+The **entire system** is configured via `bos.config.json` - a runtime-loaded JSON file:
+
+```json
+{
+  "account": "example.near",
+  "app": {
+    "host": {
+      "title": "App Title",
+      "development": "http://localhost:3001",
+      "production": "https://example.com"
+    },
+    "ui": {
+      "name": "ui",
+      "development": "http://localhost:3002",
+      "production": "https://cdn.example.com/ui/remoteEntry.js"
+    },
+    "api": {
+      "name": "api",
+      "development": "http://localhost:3014",
+      "production": "https://cdn.example.com/api/remoteEntry.js",
+      "variables": {},
+      "secrets": ["DATABASE_URL", "DATABASE_AUTH_TOKEN"]
+    }
+  }
+}
+```
+
+**Why this approach?**
+- Environment switching via `NODE_ENV` (no rebuild needed)
+- CDN URLs can be updated without code changes
+- Secrets use template injection (`{{VAR_NAME}}`)
+- Single source of truth for all configurations
+
+**Implementation:** See `host/src/config.ts` for the loader.
+
+## Module Federation Setup
+
+### UI Remote (ui/)
+
+**Technology:** Rsbuild + `@module-federation/rsbuild-plugin`
+
+The UI is a **React 19 application** built with:
+- TanStack Router (file-based routing)
+- TanStack Query (data fetching)
+- Tailwind CSS v4 (styling)
+- shadcn/ui (component library)
+
+**Exposed Modules:**
+```typescript
+exposes: {
+  './App': './src/bootstrap.tsx',        // Main application
+  './Router': './src/router.tsx',        // TanStack Router instance
+  './components': './src/components/index.ts',  // Reusable components
+  './providers': './src/providers/index.tsx',   // Context providers
+}
+```
+
+**Shared Dependencies (singleton):**
+- `react`, `react-dom`
+- `@tanstack/react-query`, `@tanstack/react-router`
+- `@hot-labs/near-connect`, `near-kit`
+
+**Build Config:** `ui/rsbuild.config.ts`
+- Uses `pluginModuleFederation` for federation
+- Uses `withZephyr` for automatic CDN deployment
+- Auto-updates `bos.config.json` on deployment
+
+**How Host Loads UI:**
+```typescript
+// host/src/main.tsx
+const config = await loadBosConfig();  // Reads bos.config.json
+
+createInstance({
+  name: 'host',
+  remotes: [{
+    name: config.ui.name,              // "ui"
+    entry: `${config.ui.url}/remoteEntry.js`  // From config!
+  }]
+});
+
+const RemoteApp = await loadRemote(`${config.ui.name}/App`);
+```
+
+**Key Point:** No hardcoded URLs. Everything derived from `bos.config.json`.
+
+### API Plugin (api/)
+
+**Technology:** Rspack + `every-plugin`
+
+The API is an **every-plugin** that exposes an oRPC router. See [every-plugin template guide](https://github.com/near-everything/every-plugin/blob/main/plugins/_template/LLM.txt) for plugin development patterns.
+
+**Structure:**
+```
+api/
+├── src/
+│   ├── contract.ts      # oRPC route definitions
+│   ├── index.ts         # createPlugin() implementation
+│   ├── schema.ts        # Zod schemas for validation
+│   ├── services/        # Business logic (Effect-based)
+│   └── db/              # Database schema (Drizzle)
+└── plugin.dev.ts        # Dev server config
+```
+
+**Plugin Definition:**
+```typescript
+// api/src/index.ts
+export default createPlugin({
+  variables: z.object({
+    network: z.enum(['mainnet', 'testnet']),
+    contractId: z.string()
+  }),
+  
+  secrets: z.object({
+    DATABASE_URL: z.string(),
+    DATABASE_AUTH_TOKEN: z.string()
+  }),
+  
+  contract,  // oRPC contract from contract.ts
+  
+  initialize: (config) => Effect.gen(function* () {
+    // Create services with config
+    const db = createDb(config.secrets.DATABASE_URL);
+    const service = new MyService(db);
+    
+    return { service };
+  }),
+  
+  createRouter: (context, builder) => ({
+    getData: builder.getData.handler(async ({ input }) => {
+      return await Effect.runPromise(
+        context.service.getData(input)
+      );
+    }),
+  })
+});
+```
+
+**How Host Loads API:**
+```typescript
+// host/src/runtime.ts
+const config = await loadBosConfig();  // Reads bos.config.json
+
+const runtime = createPluginRuntime({
+  registry: {
+    [config.api.name]: {
+      remote: config.api.url,      // From config!
+      variables: config.api.variables,
+      secrets: config.api.secrets
+    }
+  }
+});
+
+const { client, router } = await runtime.usePlugin(config.api.name, {
+  variables: config.api.variables,
+  secrets: config.api.secrets
+});
+
+// Router is merged into main oRPC router
+```
+
+**Build Config:** `api/rspack.config.cjs`
+- Uses `EveryPluginDevServer` for development
+- Uses `withZephyr` for CDN deployment
+- Auto-updates `bos.config.json` on deployment
+
+**Key Point:** Plugins are independently deployable with their own contract, services, and database schema.
+
+## UI Styling Guidelines
+
+### Semantic Tailwind Classes
+
+This project uses **Tailwind CSS v4** with semantic color classes defined via CSS variables. Always use semantic classes instead of hardcoded colors.
+
+**Available Semantic Colors:**
+```typescript
+// Backgrounds and surfaces
+bg-background       // Main background
+bg-card            // Card backgrounds
+bg-popover         // Popover/dropdown backgrounds
+bg-primary         // Primary action color
+bg-secondary       // Secondary elements
+bg-muted           // Muted/disabled states
+bg-accent          // Accent highlights
+bg-destructive     // Destructive actions (delete, errors)
+
+// Text colors (use corresponding -foreground variants)
+text-foreground           // Main text on background
+text-card-foreground      // Text on card
+text-primary-foreground   // Text on primary
+text-secondary-foreground // Text on secondary
+text-muted-foreground     // Muted/helper text
+text-accent-foreground    // Text on accent
+text-destructive-foreground // Text on destructive
+
+// Borders and inputs
+border-border      // Border color
+border-input       // Input border color
+ring-ring          // Focus ring color
+```
+
+**Custom Brand Colors:**
+```css
+/* Available as CSS variables */
+--near-green: #00ec97;
+--near-green-hover: #00d66f;
+--near-green-light: #d4fced;
+--near-blue: #3d7fff;
+--near-purple: #635bff;
+```
+
+**Example Usage:**
+```tsx
+// ✅ Good: Semantic classes
+<button className="bg-primary text-primary-foreground hover:bg-primary/90">
+  Submit
+</button>
+
+<div className="bg-card text-card-foreground border border-border rounded-lg">
+  <h2 className="text-foreground">Title</h2>
+  <p className="text-muted-foreground">Description</p>
+</div>
+
+// ❌ Bad: Hardcoded colors
+<button className="bg-blue-600 text-white">
+  Submit
+</button>
+```
+
+**Key Benefits:**
+- Automatic dark mode support (colors switch via `.dark` class)
+- Consistent design system
+- Uses oklch color space for better color perception
+- Theme customization via CSS variables
+
+**Border Radius:**
+```typescript
+rounded-sm   // calc(var(--radius) - 4px)
+rounded-md   // calc(var(--radius) - 2px)
+rounded-lg   // var(--radius)
+rounded-xl   // calc(var(--radius) + 4px)
+```
+
+## NEAR Protocol Integration
+
+### Authentication: Better-Auth + better-near-auth
+
+The project uses **Better-Auth** with the **better-near-auth** plugin for NEAR Protocol authentication.
+
+**Host Setup:**
+```typescript
+// host/src/lib/auth.ts
+import { betterAuth } from "better-auth";
+import { nearAuth } from "better-near-auth";
+
+export const auth = betterAuth({
+  database: /* drizzle adapter */,
+  plugins: [
+    nearAuth({
+      network: 'mainnet',
+    })
+  ]
+});
+```
+
+**Client Setup:**
+```typescript
+// ui/src/lib/auth-client.ts
+import { createAuthClient } from "better-auth/react";
+import { nearAuthClient } from "better-near-auth/client";
+
+export const authClient = createAuthClient({
+  plugins: [nearAuthClient()]
+});
+```
+
+### NEAR Client: near-kit
+
+**near-kit** provides a unified interface for NEAR Protocol operations. Full documentation: https://kit.near.tools/llms-full.txt
+
+**How it's exposed:**
+
+Via **better-near-auth**, you get access to a near-kit client through `getNearClient()`:
+
+```typescript
+// After authentication
+const { data: session } = authClient.useSession();
+
+if (session?.user?.walletAddress) {
+  const nearClient = await getNearClient({
+    network: 'mainnet',
+    accountId: session.user.walletAddress
+  });
+  
+  // Now use near-kit methods
+  const balance = await nearClient.getBalance(session.user.walletAddress);
+  
+  // Call contracts
+  await nearClient.callContract({
+    contractId: 'social.near',
+    method: 'set',
+    args: { data: { ... } }
+  });
+}
+```
+
+See [better-near-auth LLM.txt](https://github.com/elliotBraem/better-near-auth/blob/main/LLM.txt) for complete authentication patterns.
+
+**Key near-kit features:**
+- ✅ Unified API for mainnet/testnet
+- ✅ Account management (create, import, export)
+- ✅ Contract calls (view, change methods)
+- ✅ Transaction signing
+- ✅ Balance queries
+- ✅ Storage deposit management
+- ✅ Meta-transaction support (via relayer)
+
+## Database Schema
+
+**Host Database** (Better-Auth):
+- `host/src/db/schema/auth.ts` - User accounts, sessions, verification tokens
+
+**API Database**:
+- `api/src/db/schema.ts` - Application-specific data
+
+Both use **Drizzle ORM** with **SQLite** (libsql).
+
+**Migrations:**
+```bash
+# Host migrations
+bun --filter host db:push
+
+# API migrations  
+bun --filter api db:push
+```
+
+## Development Workflow
+
+### Local Development
+
+**Start all services:**
+```bash
+bun dev
+# Starts:
+# - API: http://localhost:3014
+# - UI: http://localhost:3002
+# - Host: http://localhost:3001
+```
+
+**Individual services:**
+```bash
+bun dev:api   # API only (port 3014)
+bun dev:ui    # UI only (port 3002)
+bun dev:host  # Host only (port 3001)
+```
+
+**Environment switching:**
+```bash
+# Use local remotes (default)
+bun dev:host
+
+# Use production remotes
+NODE_ENV=production bun dev:host
+```
+
+The host reads `NODE_ENV` and loads URLs from `bos.config.json`:
+- `development` → `http://localhost:3002`, `http://localhost:3014`
+- `production` → CDN URLs
+
+### Deployment
+
+**Deploy UI:**
+```bash
+cd ui
+bun build
+# 1. Builds to dist/
+# 2. Uploads to CDN via zephyr-rsbuild-plugin
+# 3. Auto-updates bos.config.json with production URL
+```
+
+**Deploy API:**
+```bash
+cd api
+bun build
+# 1. Builds to dist/
+# 2. Uploads to CDN via zephyr-rspack-plugin
+# 3. Auto-updates bos.config.json with production URL
+```
+
+**Deploy Host:**
+```bash
+cd host
+bun build
+# 1. Builds server bundle to dist/
+# 2. Deploy to hosting provider (Vercel, Railway, etc.)
+# 3. Ensure bos.config.json is accessible at runtime
+```
+
+**Key Point:** UI and API are **independently deployable** without rebuilding the host!
+
+## Type Safety
+
+### oRPC Contract
+
+The API contract provides **end-to-end type safety**:
+
+```typescript
+// api/src/contract.ts
+export const contract = oc.router({
+  getData: oc.route({ method: 'GET', path: '/data' })
+    .input(z.object({
+      id: z.string()
+    }))
+    .output(z.object({
+      data: DataSchema
+    }))
+});
+
+// ui/src/integrations/api/
+// TypeScript knows the exact input/output types!
+const { data } = await client.getData({ id: '123' });
+// data is typed!
+```
+
+### Module Federation Types
+
+Shared dependencies ensure singleton React/TanStack instances:
+
+```typescript
+// Both ui and host use the same React instance
+import { useState } from 'react';  // Singleton
+
+// Type imports work across remote boundaries
+import type { Data } from 'ui/types';
+```
+
+## Testing
+
+**Unit Tests:**
+```bash
+bun test          # All workspaces
+bun test:api      # API only
+bun test:ui       # UI only
+```
+
+**Integration Tests:**
+See `api/tests/` for plugin testing patterns.
+
+## Common Patterns
+
+### Adding a New API Endpoint
+
+1. **Define in contract** (`api/src/contract.ts`):
+```typescript
+export const contract = oc.router({
+  myNewEndpoint: oc.route({ method: 'POST', path: '/my-endpoint' })
+    .input(MyInputSchema)
+    .output(MyOutputSchema)
+    .errors(CommonPluginErrors)
+});
+```
+
+2. **Create service** (`api/src/services/my-service.ts`):
+```typescript
+export class MyService {
+  doSomething(input: MyInput) {
+    return Effect.tryPromise({
+      try: async () => {
+        // Implementation
+        return result;
+      },
+      catch: (error: unknown) => new Error(`Failed: ${error}`)
+    });
+  }
+}
+```
+
+3. **Add handler** (`api/src/index.ts`):
+```typescript
+createRouter: (context, builder) => ({
+  myNewEndpoint: builder.myNewEndpoint.handler(async ({ input }) => {
+    return await Effect.runPromise(
+      context.myService.doSomething(input)
+    );
+  })
+})
+```
+
+4. **Use in UI** (`ui/src/integrations/api/`):
+```typescript
+export const useMyEndpoint = () => {
+  return useMutation({
+    mutationFn: (input: MyInput) => 
+      client.myNewEndpoint(input)
+  });
+};
+```
+
+### Adding a New UI Page
+
+1. **Create route file** (`ui/src/routes/my-page.tsx`):
+```tsx
+import { createFileRoute } from '@tanstack/react-router';
+
+export const Route = createFileRoute('/my-page')({
+  component: MyPage
+});
+
+function MyPage() {
+  return (
+    <div className="bg-background text-foreground">
+      <h1 className="text-2xl font-bold">My Page</h1>
+      <p className="text-muted-foreground">Description</p>
+    </div>
+  );
+}
+```
+
+2. **TanStack Router auto-generates** route tree on save.
+
+3. **Navigate**: `<Link to="/my-page">Go</Link>`
+
+### Configuring a New Environment
+
+1. **Add to bos.config.json**:
+```json
+{
+  "app": {
+    "host": {
+      "staging": "https://staging.example.com"
+    },
+    "ui": {
+      "staging": "https://cdn.example.com/ui-staging/remoteEntry.js"
+    }
+  }
+}
+```
+
+2. **Update config types** (`host/src/config.ts`):
+```typescript
+type Environment = 'development' | 'production' | 'staging';
+```
+
+3. **Use**: `NODE_ENV=staging bun dev:host`
+
+## Related Documentation
+
+- **every-plugin Guide**: https://github.com/near-everything/every-plugin/blob/main/plugins/_template/LLM.txt
+- **near-kit Full Documentation**: https://kit.near.tools/llms-full.txt
+- **better-near-auth Guide**: https://github.com/elliotBraem/better-near-auth/blob/main/LLM.txt
+- **Contributing Guide**: [CONTRIBUTING.md](./CONTRIBUTING.md)
+
+## Troubleshooting
+
+**Module Federation Issues:**
+- Clear browser cache
+- Check `bos.config.json` URLs are accessible
+- Verify shared dependencies versions match in `package.json`
+
+**Type Errors:**
+- Run `bun typecheck` in each workspace
+- Ensure oRPC contract is up-to-date
+- Check Module Federation type exports
+
+**Build Errors:**
+- Check all dependencies are installed: `bun install`
+- Clear dist folders: `rm -rf */dist`
+- Rebuild: `bun build`
+
+**Runtime Config Not Loading:**
+- Ensure `bos.config.json` is in host root
+- Check file is accessible at runtime (not in .gitignore)
+- Verify NODE_ENV matches a key in config
+
+For more help, see [CONTRIBUTING.md](./CONTRIBUTING.md) or open an issue.

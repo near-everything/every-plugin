@@ -1,0 +1,44 @@
+{
+  "name": "api",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.15",
+    "drizzle-kit": "^0.31.8",
+    "drizzle-orm": "^0.45.0",
+    "near-kit": "^0.6.3"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.41.1",
+    "@module-federation/node": "^2.7.15",
+    "@rspack/cli": "^1.6.6",
+    "@rspack/core": "^1.6.6",
+    "@types/node": "^24.10.1",
+    "dotenv": "^17.2.3",
+    "every-plugin": "^0.8.3",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.2.4",
+    "zephyr-rspack-plugin": "^0.1.2"
+  },
+  "scripts": {
+    "build": "rspack build",
+    "dev": "rspack serve",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  }
+}
