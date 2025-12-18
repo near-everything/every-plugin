@@ -9,7 +9,7 @@ export const Route = createFileRoute("/_layout/_authenticated/_admin")({
     // Check if user has admin role
     const user = session?.user as { role?: string };
     if (user.role !== "admin") {
-      toast.error("Must be role admin to visit this page");
+      toast.error("Must be role admin to visit this page", { id: "admin-role-required" });
       throw redirect({
         to: "/",
       });
