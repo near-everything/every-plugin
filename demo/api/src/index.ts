@@ -1,19 +1,19 @@
+import { eq } from 'drizzle-orm';
 import { createPlugin } from 'every-plugin';
 import { Effect } from 'every-plugin/effect';
 import { ORPCError } from 'every-plugin/orpc';
 import { z } from 'every-plugin/zod';
 import { contract } from './contract';
-import { Database, DatabaseLive } from './store';
 import { kvStore } from './db/schema';
-import { eq } from 'drizzle-orm';
+import { Database, DatabaseLive } from './store';
 
 export default createPlugin({
   variables: z.object({
   }),
 
   secrets: z.object({
-    DATABASE_URL: z.string().default('file:./api.db'),
-    DATABASE_AUTH_TOKEN: z.string().optional(),
+    API_DATABASE_URL: z.string().default('file:./api.db'),
+    API_DATABASE_AUTH_TOKEN: z.string().optional(),
   }),
 
   context: z.object({
@@ -24,7 +24,7 @@ export default createPlugin({
 
   initialize: (config) =>
     Effect.gen(function* () {
-      const dbLayer = DatabaseLive(config.secrets.DATABASE_URL, config.secrets.DATABASE_AUTH_TOKEN);
+      const dbLayer = DatabaseLive(config.secrets.API_DATABASE_URL, config.secrets.API_DATABASE_AUTH_TOKEN);
       const db = yield* Effect.provide(Database, dbLayer);
 
       console.log('[API] Plugin initialized');
@@ -32,9 +32,9 @@ export default createPlugin({
       return { db };
     }),
 
-  shutdown: (context) =>
+  shutdown: (_context) =>
     Effect.gen(function* () {
-      console.log('[API] Plugin shutting down');
+      yield* Effect.promise(async () => console.log('[API] Plugin shutdown'));
     }),
 
   createRouter: (context, builder) => {
@@ -104,7 +104,7 @@ export default createPlugin({
         .use(requireAuth)
         .handler(async ({ input, context }) => {
           const now = new Date();
-          
+
           const [existing] = await db
             .select()
             .from(kvStore)

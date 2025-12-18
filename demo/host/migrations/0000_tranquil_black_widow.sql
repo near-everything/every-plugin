@@ -35,6 +35,7 @@ CREATE TABLE `session` (
 	`ip_address` text,
 	`user_agent` text,
 	`user_id` text NOT NULL,
+	`impersonated_by` text,
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
@@ -45,6 +46,10 @@ CREATE TABLE `user` (
 	`email` text NOT NULL,
 	`email_verified` integer DEFAULT false NOT NULL,
 	`image` text,
+	`role` text DEFAULT 'user',
+	`banned` integer DEFAULT false,
+	`ban_reason` text,
+	`ban_expires` integer,
 	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
 	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
 );

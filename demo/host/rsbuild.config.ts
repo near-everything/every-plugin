@@ -1,9 +1,9 @@
-import { defineConfig } from '@rsbuild/core';
-import { pluginReact } from '@rsbuild/plugin-react';
-import { pluginModuleFederation } from '@module-federation/rsbuild-plugin';
-import { withZephyr } from 'zephyr-rsbuild-plugin';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pluginModuleFederation } from '@module-federation/rsbuild-plugin';
+import { defineConfig } from '@rsbuild/core';
+import { pluginReact } from '@rsbuild/plugin-react';
+import { withZephyr } from 'zephyr-rsbuild-plugin';
 import pkg from './package.json';
 
 const __dirname = import.meta.dirname;
@@ -96,6 +96,7 @@ export default defineConfig({
   },
   html: {
     template: './index.html',
+    title: bosConfig.app.host.title,
     templateParameters: {
       title: bosConfig.app.host.title,
       description: bosConfig.app.host.description,

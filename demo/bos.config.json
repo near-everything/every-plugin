@@ -3,13 +3,14 @@
   "app": {
     "host": {
       "title": "App",
+      "description": "Demo application",
       "development": "http://localhost:3001",
       "production": "https://demo.everything.dev"
     },
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1219-ui-ping-checkout-pingpayio-e4e5df2c2-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1239-ui-every-plugin-near-everything-59024a9c0-ze.zephyrcloud.app",
       "exposes": {
         "App": "./App",
         "components": "./components",
@@ -20,11 +21,11 @@
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://elliot-braem-1218-api-ping-checkout-pingpayio-446da2056-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1237-api-every-plugin-near-everythin-6e3ba930d-ze.zephyrcloud.app",
       "variables": {},
       "secrets": [
-        "DATABASE_URL",
-        "DATABASE_AUTH_TOKEN"
+        "API_DATABASE_URL",
+        "API_DATABASE_AUTH_TOKEN"
       ]
     }
   }

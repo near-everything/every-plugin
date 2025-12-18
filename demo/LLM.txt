@@ -55,7 +55,7 @@ The **entire system** is configured via `bos.config.json` - a runtime-loaded JSO
       "development": "http://localhost:3014",
       "production": "https://cdn.example.com/api/remoteEntry.js",
       "variables": {},
-      "secrets": ["DATABASE_URL", "DATABASE_AUTH_TOKEN"]
+      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN"]
     }
   }
 }
@@ -147,15 +147,15 @@ export default createPlugin({
   }),
   
   secrets: z.object({
-    DATABASE_URL: z.string(),
-    DATABASE_AUTH_TOKEN: z.string()
+    API_DATABASE_URL: z.string(),
+    API_DATABASE_AUTH_TOKEN: z.string()
   }),
   
   contract,  // oRPC contract from contract.ts
   
   initialize: (config) => Effect.gen(function* () {
     // Create services with config
-    const db = createDb(config.secrets.DATABASE_URL);
+    const db = createDb(config.secrets.API_DATABASE_URL);
     const service = new MyService(db);
     
     return { service };

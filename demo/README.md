@@ -92,7 +92,7 @@ All runtime configuration lives in `bos.config.json`:
       "development": "http://localhost:3014",
       "production": "https://cdn.example.com/api/remoteEntry.js",
       "variables": {},
-      "secrets": ["DATABASE_URL", "DATABASE_AUTH_TOKEN"]
+      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN"]
     }
   }
 }

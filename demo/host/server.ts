@@ -1,24 +1,24 @@
 import 'dotenv/config';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
-import { createRsbuild, logger } from '@rsbuild/core';
 import { OpenAPIHandler } from '@orpc/openapi/fetch';
 import { OpenAPIReferencePlugin } from '@orpc/openapi/plugins';
 import { onError } from '@orpc/server';
-import { formatORPCError } from 'every-plugin/errors';
 import { RPCHandler } from '@orpc/server/fetch';
 import { BatchHandlerPlugin } from '@orpc/server/plugins';
 import { ZodToJsonSchemaConverter } from '@orpc/zod/zod4';
+import { createRsbuild, logger } from '@rsbuild/core';
+import { eq } from 'drizzle-orm';
+import { formatORPCError } from 'every-plugin/errors';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import config from './rsbuild.config';
-import { initializePlugins } from './src/runtime';
 import { loadBosConfig } from './src/config';
-import { createRouter } from './src/routers';
-import { auth } from './src/lib/auth';
 import { db } from './src/db';
 import * as schema from './src/db/schema/auth';
-import { eq } from 'drizzle-orm';
+import { auth } from './src/lib/auth';
+import { createRouter } from './src/routers';
+import { initializePlugins } from './src/runtime';
 
 async function createContext(req: Request) {
   const session = await auth.api.getSession({ headers: req.headers });
@@ -47,6 +47,18 @@ async function startServer() {
   const bosConfig = await loadBosConfig();
   const plugins = await initializePlugins();
   const router = createRouter(plugins);
+
+  // Setup graceful shutdown handlers
+  const shutdown = async () => {
+    console.log('[Plugins] Shutting down plugin runtime...');
+    if (plugins.runtime) {
+      await plugins.runtime.shutdown();
+    }
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 
   const rpcHandler = new RPCHandler(router, {
     plugins: [new BatchHandlerPlugin()],

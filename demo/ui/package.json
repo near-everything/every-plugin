@@ -38,7 +38,7 @@
     "@tanstack/react-router-devtools": "^1.139.14",
     "@tanstack/react-table": "^8.21.3",
     "better-auth": "^1.4.5",
-    "better-near-auth": "^0.3.1",
+    "better-near-auth": "^0.3.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",

@@ -64,14 +64,14 @@ Each domain can be its own plugin with independent:
 ```json
 {
   "api": {
-      "development": "http://localhost:3014/remoteEntry.js",
-      "production": "https://cdn.example.com/api/remoteEntry.js",
-      "variables": {
-      },
-      "secrets": [
-        "DATABASE_URL",
-        "DATABASE_AUTH_TOKEN"
-      ]
-    }
+    "development": "http://localhost:3014/remoteEntry.js",
+    "production": "https://cdn.example.com/api/remoteEntry.js",
+    "variables": {
+    },
+    "secrets": [
+      "API_DATABASE_URL",
+      "API_DATABASE_AUTH_TOKEN"
+    ]
+  }
 }
 ```

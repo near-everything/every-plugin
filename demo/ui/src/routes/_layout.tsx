@@ -1,4 +1,9 @@
-import { createFileRoute, Link, Outlet, useRouter } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  useRouter,
+} from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { sessionQueryOptions } from "../lib/session";
 import { authClient } from "../lib/auth-client";
@@ -21,7 +26,7 @@ function Layout() {
     try {
       await authClient.signOut();
       await authClient.near.disconnect();
-      queryClient.invalidateQueries({ queryKey: ['session'] });
+      queryClient.invalidateQueries({ queryKey: ["session"] });
       router.invalidate();
       window.location.href = "/";
     } catch (error) {
@@ -41,6 +46,7 @@ function Layout() {
                   {accountId}
                 </span>
                 <button
+                  type="button"
                   onClick={handleSignOut}
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
                 >
@@ -48,8 +54,8 @@ function Layout() {
                 </button>
               </>
             ) : (
-              <Link 
-                to="/login" 
+              <Link
+                to="/login"
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
               >
                 login
@@ -60,13 +66,15 @@ function Layout() {
       </header>
 
       <main className="flex-1">
-        <Outlet />
+        <div className="max-w-3xl mx-auto px-6 py-12">
+          <Outlet />
+        </div>
       </main>
 
       <footer className="border-t border-border/50">
         <div className="max-w-5xl mx-auto px-6 py-4">
-          <a 
-            href="/api" 
+          <a
+            href="/api"
             className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
           >
             api

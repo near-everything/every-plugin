@@ -1,30 +1,30 @@
-import { useEffect } from 'react';
-import { Outlet, createRootRouteWithContext, useMatches } from '@tanstack/react-router';
-import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
-import { TanStackDevtools } from '@tanstack/react-devtools';
-
-import TanStackQueryDevtools from '../integrations/tanstack-query/devtools';
-
-import type { QueryClient } from '@tanstack/react-query';
+import { TanStackDevtools } from "@tanstack/react-devtools";
+import type { QueryClient } from "@tanstack/react-query";
+import {
+  createRootRouteWithContext,
+  Outlet,
+  useMatches,
+} from "@tanstack/react-router";
+import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
+import { useEffect } from "react";
+import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 
 interface MyRouterContext {
   queryClient: QueryClient;
 }
 
 const routeTitles: Record<string, string> = {
-  '/': 'Home',
-  '/social': 'Social',
-  '/graph': 'Graph',
+  "/": "Home",
 };
 
 function TitleSync() {
   const matches = useMatches();
-  const currentPath = matches[matches.length - 1]?.pathname || '/';
+  const currentPath = matches[matches.length - 1]?.pathname || "/";
 
   useEffect(() => {
-    const title = routeTitles[currentPath] || 'App';
+    const title = routeTitles[currentPath] || "App";
     window.dispatchEvent(
-      new CustomEvent('near:title-change', {
+      new CustomEvent("near:title-change", {
         detail: { title },
       })
     );
@@ -40,11 +40,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       <Outlet />
       <TanStackDevtools
         config={{
-          position: 'bottom-right',
+          position: "bottom-right",
         }}
         plugins={[
           {
-            name: 'Tanstack Router',
+            name: "Tanstack Router",
             render: <TanStackRouterDevtoolsPanel />,
           },
           TanStackQueryDevtools,

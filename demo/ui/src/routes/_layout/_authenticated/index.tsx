@@ -1,19 +1,23 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 import { authClient } from "../../../lib/auth-client";
 import { apiClient } from "../../../utils/orpc";
-import { toast } from "sonner";
 
-export const Route = createFileRoute("/_layout/_authenticated/dashboard")({
+export type ProtectedResult = Awaited<ReturnType<typeof apiClient.protected>>;
+export type SetValueResult = Awaited<ReturnType<typeof apiClient.setValue>>;
+export type GetValueResult = Awaited<ReturnType<typeof apiClient.getValue>>;
+
+export const Route = createFileRoute("/_layout/_authenticated/")({
   component: Dashboard,
 });
 
 function Dashboard() {
   const [kvKey, setKvKey] = useState("mykey");
   const [kvValue, setKvValue] = useState("myvalue");
-  const [protectedData, setProtectedData] = useState<any>(null);
-  const [kvResult, setKvResult] = useState<any>(null);
+  const [protectedData, setProtectedData] = useState<ProtectedResult | null>(null);
+  const [kvResult, setKvResult] = useState<SetValueResult | GetValueResult | null>(null);
 
   const accountId = authClient.near.getAccountId();
 
@@ -23,7 +27,7 @@ function Dashboard() {
       setProtectedData(data);
       toast.success("Protected endpoint called");
     },
-    onError: (error: any) => {
+    onError: (error) => {
       console.error("Error calling protected:", error);
       toast.error(error.message || "Failed to call protected endpoint");
     },
@@ -34,9 +38,9 @@ function Dashboard() {
       apiClient.setValue({ key, value }),
     onSuccess: (data) => {
       setKvResult(data);
-      toast.success(`Key "${kvKey}" ${data.created ? "created" : "updated"}`);
+      toast.success(`Key "${kvKey}" ${data?.created ? "created" : "updated"}`);
     },
-    onError: (error: any) => {
+    onError: (error) => {
       console.error("Error setting value:", error);
       toast.error(error.message || "Failed to set value");
     },
@@ -48,23 +52,12 @@ function Dashboard() {
       setKvResult(data);
       toast.success(`Retrieved value for "${kvKey}"`);
     },
-    onError: (error: any) => {
+    onError: (error) => {
       console.error("Error getting value:", error);
       toast.error(error.message || "Failed to get value");
       setKvResult(null);
     },
   });
-
-  const handleSignOut = async () => {
-    try {
-      await authClient.signOut();
-      await authClient.near.disconnect();
-      window.location.href = "/login";
-    } catch (error) {
-      console.error("Sign out error:", error);
-      toast.error("Failed to sign out");
-    }
-  };
 
   const isLoading =
     protectedMutation.isPending ||
@@ -72,21 +65,23 @@ function Dashboard() {
     getValueMutation.isPending;
 
   return (
-    <div className="min-h-screen px-6 py-12">
-      <div className="max-w-3xl mx-auto space-y-8">
-        <div className="flex items-center justify-between pb-4 border-b border-border/50">
-          <span className="text-xs text-muted-foreground font-mono">{accountId}</span>
-          <button
-            onClick={handleSignOut}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-          >
-            sign out
-          </button>
-        </div>
+    <div className="space-y-8">
+      <div className="flex items-center justify-between pb-4 border-b border-border/50">
+        <span className="text-xs text-muted-foreground font-mono">
+          {accountId}
+        </span>
+        <Link
+          to="/dashboard"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+        >
+          admin
+        </Link>
+      </div>
 
-        <div className="space-y-6">
+      <div className="space-y-6">
           <div className="space-y-3">
             <button
+              type="button"
               onClick={() => protectedMutation.mutate()}
               disabled={isLoading}
               className="w-full px-5 py-3 text-sm font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-left"
@@ -124,13 +119,17 @@ function Dashboard() {
 
             <div className="flex gap-2">
               <button
-                onClick={() => setValueMutation.mutate({ key: kvKey, value: kvValue })}
+              type="button"
+                onClick={() =>
+                  setValueMutation.mutate({ key: kvKey, value: kvValue })
+                }
                 disabled={isLoading || !kvKey || !kvValue}
                 className="flex-1 px-4 py-2.5 text-sm font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {setValueMutation.isPending ? "setting..." : "set"}
               </button>
               <button
+              type="button"
                 onClick={() => getValueMutation.mutate({ key: kvKey })}
                 disabled={isLoading || !kvKey}
                 className="flex-1 px-4 py-2.5 text-sm font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
@@ -148,7 +147,6 @@ function Dashboard() {
             )}
           </div>
         </div>
-      </div>
     </div>
   );
 }

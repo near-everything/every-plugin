@@ -1,9 +1,10 @@
 
-import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { siwn } from "better-near-auth";
 import fs from "node:fs";
 import path from "node:path";
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { admin } from "better-auth/plugins";
+import { siwn } from "better-near-auth";
 import { db } from "../db";
 import * as schema from "../db/schema/auth";
 
@@ -21,6 +22,10 @@ export const auth = betterAuth({
   plugins: [
     siwn({
       recipient: bosConfig.account
+    }),
+    admin({
+      defaultRole: "user",
+      adminRoles: ["admin"],
     }),
   ],
   account: {
