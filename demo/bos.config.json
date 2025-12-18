@@ -9,7 +9,7 @@
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1215-ui-ping-checkout-pingpayio-4ce2a4952-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1219-ui-ping-checkout-pingpayio-e4e5df2c2-ze.zephyrcloud.app",
       "exposes": {
         "App": "./App",
         "components": "./components",
@@ -20,7 +20,7 @@
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://elliot-braem-1212-api-near-merch-stor-6a4c96dde-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1218-api-ping-checkout-pingpayio-446da2056-ze.zephyrcloud.app",
       "variables": {},
       "secrets": [
         "DATABASE_URL",
