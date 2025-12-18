@@ -114,6 +114,7 @@ export default defineConfig({
       '/api': 'http://localhost:3000',
       '/__runtime-config': 'http://localhost:3000',
     },
+    historyApiFallback: true,
   },
   tools: {
     rspack: {
