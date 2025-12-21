@@ -1,12 +1,12 @@
-import { defineConfig } from "@rsbuild/core";
-import { pluginReact } from "@rsbuild/plugin-react";
-import { pluginModuleFederation } from "@module-federation/rsbuild-plugin";
-import { TanStackRouterRspack } from "@tanstack/router-plugin/rspack";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import pkg from "./package.json";
+import { pluginModuleFederation } from "@module-federation/rsbuild-plugin";
+import { defineConfig } from "@rsbuild/core";
+import { pluginReact } from "@rsbuild/plugin-react";
+import { TanStackRouterRspack } from "@tanstack/router-plugin/rspack";
 import { withZephyr } from "zephyr-rsbuild-plugin";
+import pkg from "./package.json";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -169,6 +169,9 @@ export default defineConfig({
     },
   },
   output: {
+    distPath: {
+      root: 'dist',
+    },
     assetPrefix: "auto",
     // assetPrefix: isProduction
     //   ? `${bosConfig.app.ui.production}/`

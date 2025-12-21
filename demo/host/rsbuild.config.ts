@@ -128,6 +128,6 @@ export default defineConfig({
     distPath: {
       root: 'dist',
     },
-    assetPrefix: 'auto',
+    assetPrefix: '/',
   },
 });
