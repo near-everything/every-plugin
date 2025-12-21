@@ -1,5 +1,5 @@
-import { Component, type CSSProperties, type FC, type ReactNode } from "react";
 import type { ErrorInfo } from "react";
+import { Component, type CSSProperties, type FC, type ReactNode } from "react";
 
 export interface AppStateViewProps {
   kind: "loading" | "error" | "notFound";
@@ -101,6 +101,7 @@ export const Button: FC<{
   children: ReactNode;
 }> = ({ variant = "primary", onClick, children }) => (
   <button
+    type="button"
     onClick={onClick}
     style={variant === "primary" ? primaryButtonStyle : secondaryButtonStyle}
   >
@@ -137,8 +138,12 @@ export const AppStateView: FC<AppStateViewProps> = ({
               {kind === "notFound" && (message || "Page Not Found")}
             </h1>
             <p style={messageStyle}>
-              {kind === "error" && (submessage || "The application encountered an unexpected error.")}
-              {kind === "notFound" && (submessage || "The page you're looking for doesn't exist or has been moved.")}
+              {kind === "error" &&
+                (submessage ||
+                  "The application encountered an unexpected error.")}
+              {kind === "notFound" &&
+                (submessage ||
+                  "The page you're looking for doesn't exist or has been moved.")}
             </p>
           </>
         )}
@@ -192,16 +197,19 @@ export const AppStateView: FC<AppStateViewProps> = ({
 };
 
 export const Loading: FC = () => (
-  <div style={{
-    width: "100%",
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    opacity: 0.7,
-  }} />
+  <div
+    style={{
+      width: "100%",
+      height: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      opacity: 0.7,
+    }}
+  />
 );
 
+// biome-ignore lint/suspicious/noShadowRestrictedNames: <explanation>
 export const Error: FC<{
   message?: string;
   submessage?: string;
@@ -220,17 +228,21 @@ export const Error: FC<{
 
     {errorDetails && (
       <details style={detailsStyle}>
-        <summary style={{ cursor: "pointer", fontWeight: 500, marginBottom: "0.5rem" }}>
+        <summary
+          style={{ cursor: "pointer", fontWeight: 500, marginBottom: "0.5rem" }}
+        >
           Technical Details
         </summary>
-        <pre style={{
-          margin: 0,
-          overflow: "auto",
-          fontSize: "0.75rem",
-          color: "#888",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}>
+        <pre
+          style={{
+            margin: 0,
+            overflow: "auto",
+            fontSize: "0.75rem",
+            color: "#888",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
           {errorDetails}
         </pre>
       </details>
@@ -245,7 +257,6 @@ export const Error: FC<{
     </div>
   </div>
 );
-
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -304,7 +315,9 @@ export class ErrorBoundary extends Component<
       return (
         <div style={pageStyle}>
           <Error
-            message={isNetworkError ? "Connection Error" : "Something went wrong"}
+            message={
+              isNetworkError ? "Connection Error" : "Something went wrong"
+            }
             submessage={
               isNetworkError
                 ? "Unable to load the remote application. Please check your connection and try again."
