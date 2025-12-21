@@ -117,10 +117,6 @@ export default defineConfig({
   },
   html: {
     template: "./index.html",
-    templateParameters: {
-      title: bosConfig.app.host.title,
-      description: bosConfig.app.host.description,
-    },
   },
   dev: {
     lazyCompilation: false,

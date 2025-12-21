@@ -1,13 +1,13 @@
+import { useSuspenseQuery } from "@tanstack/react-query";
 import {
   createFileRoute,
   Link,
   Outlet,
   useRouter,
 } from "@tanstack/react-router";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { sessionQueryOptions } from "../lib/session";
-import { authClient } from "../lib/auth-client";
 import { ThemeToggle } from "../components/theme-toggle";
+import { authClient } from "../lib/auth-client";
+import { sessionQueryOptions } from "../lib/session";
 import { queryClient } from "../utils/orpc";
 
 export const Route = createFileRoute("/_layout")({
@@ -35,9 +35,9 @@ function Layout() {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col bg-background">
-      <header className="border-b border-border/50">
-        <div className="max-w-5xl mx-auto px-6 py-4">
+    <div className="h-dvh w-full flex flex-col bg-background text-foreground overflow-hidden">
+      <header className="shrink-0 border-b border-border/50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-end gap-4">
             <ThemeToggle />
             {accountId ? (
@@ -65,14 +65,14 @@ function Layout() {
         </div>
       </header>
 
-      <main className="flex-1">
-        <div className="max-w-3xl mx-auto px-6 py-12">
+      <main className="flex-1 min-h-0 overflow-auto">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
           <Outlet />
         </div>
       </main>
 
-      <footer className="border-t border-border/50">
-        <div className="max-w-5xl mx-auto px-6 py-4">
+      <footer className="shrink-0 border-t border-border/50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <a
             href="/api"
             className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"

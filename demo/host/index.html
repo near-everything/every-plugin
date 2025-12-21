@@ -33,6 +33,9 @@
         touch-action: manipulation;
       }
       #root { min-height: 100vh; }
+      @supports (min-height: 100dvh) {
+        #root { min-height: 100dvh; }
+      }
       
       /* Loading skeleton - scoped, replaced when app mounts */
       .loading-skeleton {

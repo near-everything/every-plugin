@@ -10,7 +10,7 @@
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1273-ui-every-plugin-near-everything-7c1b7d1d6-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1274-ui-every-plugin-near-everything-ad27a8586-ze.zephyrcloud.app",
       "exposes": {
         "App": "./App",
         "components": "./components",

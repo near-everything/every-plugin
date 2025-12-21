@@ -1,40 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  
-  <!-- Favicon -->
-  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-  <link rel="manifest" href="/manifest.json" />
-  
-  <!-- Theme -->
-  <meta name="theme-color" content="#000000" />
-  
-  <!-- SEO Meta Tags -->
-  <title><%= title %></title>
-  <meta name="description" content="<%= description %>" />
-  <!-- Open Graph / Facebook -->
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="<%= title %>" />
-  <meta property="og:description" content="<%= description %>" />
-  <meta property="og:image" content="/logo_full.png" />
-  
-  <!-- Twitter -->
-  <meta property="twitter:card" content="summary_large_image" />
-  <meta property="twitter:title" content="<%= title %>" />
-  <meta property="twitter:description" content="<%= description %>" />
-  <meta property="twitter:image" content="/logo_full.png" />
-  <meta name="robots" content="index, follow" />
-</head>
-
-<body style="background-color: var(--background); color: var(--foreground);">
-  <div id="app"></div>
-  <script type="module" src="/src/main.tsx"></script>
-</body>
-
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="format-detection" content="telephone=no" />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Preconnect to font origins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Theme -->
+    <meta name="theme-color" content="#171717" />
+    
+    <!-- Theme flash prevention - runs before any render -->
+    <script>
+      (function() {
+        var t = localStorage.getItem('theme');
+        if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+    
+    <style>
+      /* Minimal shell reset - matches host for dev consistency */
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      html { height: 100%; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+      body { 
+        min-height: 100%; 
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+      #app { min-height: 100vh; }
+      @supports (min-height: 100dvh) {
+        #app { min-height: 100dvh; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
