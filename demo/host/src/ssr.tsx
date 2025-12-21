@@ -191,6 +191,9 @@ export function createSSRHtml(
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   
+  <link rel="preload" href="${config.ui.url}/static/css/index.css" as="style" />
+  <link rel="stylesheet" href="${config.ui.url}/static/css/index.css" />
+  
 ${tags}
   
   <script>

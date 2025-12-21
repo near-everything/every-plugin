@@ -13,23 +13,33 @@ interface MyRouterContext {
   queryClient: QueryClient;
 }
 
+function getAssetBase(): string {
+  if (typeof window !== 'undefined' && window.__RUNTIME_CONFIG__?.ui?.url) {
+    return window.__RUNTIME_CONFIG__.ui.url;
+  }
+  return '';
+}
+
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-  head: () => ({
-    meta: [
-      { title: "demo.everything" },
-      { name: "description", content: "Demo application showcasing Module Federation with SSR, TanStack Router, and oRPC" },
-      { name: "theme-color", content: "#171717" },
-      { name: "application-name", content: "Every Plugin Demo" },
-      { name: "apple-mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
-    ],
-    links: [
-      { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },
-      { rel: "icon", type: "image/svg+xml", href: "/icon.svg" },
-      { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
-      { rel: "manifest", href: "/manifest.json" },
-    ],
-  }),
+  head: () => {
+    const assetBase = getAssetBase();
+    return {
+      meta: [
+        { title: "demo.everything" },
+        { name: "description", content: "Demo application showcasing Module Federation with SSR, TanStack Router, and oRPC" },
+        { name: "theme-color", content: "#171717" },
+        { name: "application-name", content: "Every Plugin Demo" },
+        { name: "mobile-web-app-capable", content: "yes" },
+        { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      ],
+      links: [
+        { rel: "icon", type: "image/x-icon", href: `${assetBase}/favicon.ico` },
+        { rel: "icon", type: "image/svg+xml", href: `${assetBase}/icon.svg` },
+        { rel: "apple-touch-icon", sizes: "180x180", href: `${assetBase}/apple-touch-icon.png` },
+        { rel: "manifest", href: `${assetBase}/manifest.json` },
+      ],
+    };
+  },
   component: RootComponent,
 });
 

@@ -103,7 +103,7 @@ export default defineConfig({
   plugins,
   source: {
     define: {
-      "process.env.PUBLIC_ACCOUNT_ID": JSON.stringify(bosConfig.account),
+      "import.meta.env.PUBLIC_ACCOUNT_ID": JSON.stringify(bosConfig.account),
     },
     entry: {
       index: "./src/main.tsx",

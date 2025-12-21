@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { authClient } from "../../lib/auth-client";
 import { toast } from "sonner";
+import { authClient } from "../../lib/auth-client";
 import { queryClient } from "../../utils/orpc";
 
 type SearchParams = {
@@ -36,7 +36,7 @@ function LoginPage() {
     setIsConnectingWallet(true);
     try {
       await authClient.requestSignIn.near(
-        { recipient: process.env.PUBLIC_ACCOUNT_ID || "every.near" },
+        { recipient: import.meta.env.PUBLIC_ACCOUNT_ID || "every.near" },
         {
           onSuccess: () => {
             setIsConnectingWallet(false);
@@ -64,7 +64,7 @@ function LoginPage() {
     setIsSigningInWithNear(true);
     try {
       await authClient.signIn.near(
-        { recipient: process.env.PUBLIC_ACCOUNT_ID || "every.near" },
+        { recipient: import.meta.env.PUBLIC_ACCOUNT_ID || "every.near" },
         {
           onSuccess: () => {
             setIsSigningInWithNear(false);
@@ -129,6 +129,7 @@ function LoginPage() {
       <div className="w-full max-w-sm space-y-3">
         {!accountId ? (
           <button
+            type="button"
             onClick={handleWalletConnect}
             disabled={isLoading}
             className="w-full px-6 py-4 text-sm font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
@@ -138,13 +139,17 @@ function LoginPage() {
         ) : (
           <>
             <button
+              type="button"
               onClick={handleNearSignIn}
               disabled={isLoading}
               className="w-full px-6 py-4 text-sm font-mono border border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSigningInWithNear ? "signing in..." : `sign in as ${accountId}`}
+              {isSigningInWithNear
+                ? "signing in..."
+                : `sign in as ${accountId}`}
             </button>
             <button
+              type="button"
               onClick={handleWalletDisconnect}
               disabled={isLoading}
               className="w-full px-6 py-3 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
