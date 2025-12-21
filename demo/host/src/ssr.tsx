@@ -211,7 +211,7 @@ ${tags}
   <link rel="preload" href="${config.ui.url}/remoteEntry.js" as="script" />
   
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; }
     html { height: 100%; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     body { 
       min-height: 100%; 
