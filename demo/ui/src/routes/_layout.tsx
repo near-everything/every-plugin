@@ -65,8 +65,8 @@ function Layout() {
         </div>
       </header>
 
-      <main className="flex-1 w-full min-h-0 overflow-auto">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <main className="flex-1 w-full min-h-0 overflow-auto flex justify-center">
+        <div className="w-full max-w-3xl px-4 sm:px-6 py-8 sm:py-12">
           <Outlet />
         </div>
       </main>
