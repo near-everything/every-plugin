@@ -20,9 +20,61 @@ export interface SSRRenderOptions {
   config: RuntimeConfig;
 }
 
+export interface HeadMeta {
+  title?: string;
+  name?: string;
+  property?: string;
+  content?: string;
+  charSet?: string;
+}
+
+export interface HeadLink {
+  rel: string;
+  href: string;
+  type?: string;
+  sizes?: string;
+  crossorigin?: string;
+}
+
+export interface HeadData {
+  meta?: HeadMeta[];
+  links?: HeadLink[];
+}
+
 export interface SSRRenderResult {
   stream: ReadableStream;
   dehydratedState: unknown;
+  headData: HeadData;
+}
+
+function extractHeadData(router: any): HeadData {
+  const meta: HeadMeta[] = [];
+  const links: HeadLink[] = [];
+  
+  try {
+    const matches = router.state?.matches || [];
+    
+    for (const match of matches) {
+      const headFn = match.route?.options?.head;
+      if (typeof headFn === 'function') {
+        const headResult = headFn({
+          params: match.params,
+          loaderData: match.loaderData,
+        });
+        
+        if (headResult?.meta) {
+          meta.push(...headResult.meta);
+        }
+        if (headResult?.links) {
+          links.push(...headResult.links);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[SSR] Failed to extract head data:', error);
+  }
+  
+  return { meta, links };
 }
 
 export async function renderToStream(options: SSRRenderOptions): Promise<SSRRenderResult> {
@@ -39,6 +91,8 @@ export async function renderToStream(options: SSRRenderOptions): Promise<SSRRend
 
   await router.load();
 
+  const headData = extractHeadData(router);
+
   const App = createElement(
     QueryClientProvider,
     { client: queryClient },
@@ -53,7 +107,7 @@ export async function renderToStream(options: SSRRenderOptions): Promise<SSRRend
 
   const dehydratedState = dehydrate(queryClient);
 
-  return { stream, dehydratedState };
+  return { stream, dehydratedState, headData };
 }
 
 function getUiOrigin(url: string): string {
@@ -64,10 +118,48 @@ function getUiOrigin(url: string): string {
   }
 }
 
+function renderMetaTags(headData: HeadData): { title: string; tags: string } {
+  const tags: string[] = [];
+  let title = '';
+  
+  if (headData.meta) {
+    for (const meta of headData.meta) {
+      if (meta.title) {
+        title = meta.title;
+        continue;
+      }
+      
+      const attrs: string[] = [];
+      if (meta.name) attrs.push(`name="${meta.name}"`);
+      if (meta.property) attrs.push(`property="${meta.property}"`);
+      if (meta.content) attrs.push(`content="${meta.content.replace(/"/g, '&quot;')}"`);
+      if (meta.charSet) attrs.push(`charset="${meta.charSet}"`);
+      
+      if (attrs.length > 0) {
+        tags.push(`  <meta ${attrs.join(' ')} />`);
+      }
+    }
+  }
+  
+  if (headData.links) {
+    for (const link of headData.links) {
+      const attrs: string[] = [`rel="${link.rel}"`, `href="${link.href}"`];
+      if (link.type) attrs.push(`type="${link.type}"`);
+      if (link.sizes) attrs.push(`sizes="${link.sizes}"`);
+      if (link.crossorigin) attrs.push(`crossorigin="${link.crossorigin}"`);
+      
+      tags.push(`  <link ${attrs.join(' ')} />`);
+    }
+  }
+  
+  return { title, tags: tags.join('\n') };
+}
+
 export function createSSRHtml(
   bodyContent: string,
   dehydratedState: unknown,
-  config: RuntimeConfig
+  config: RuntimeConfig,
+  headData?: HeadData
 ): string {
   const clientConfig = {
     env: config.env,
@@ -79,16 +171,27 @@ export function createSSRHtml(
   };
 
   const uiOrigin = getUiOrigin(config.ui.url);
+  
+  const { title, tags } = headData 
+    ? renderMetaTags(headData) 
+    : { title: config.title, tags: '' };
+  
+  const pageTitle = title || config.title;
 
   return `<!DOCTYPE html>
 <html lang="en" data-ssr="true">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="format-detection" content="telephone=no" />
+  <title>${pageTitle}</title>
   
   <link rel="preconnect" href="${uiOrigin}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  
+${tags}
   
   <script>
     (function() {
@@ -105,11 +208,14 @@ export function createSSRHtml(
   <link rel="preload" href="${config.ui.url}/remoteEntry.js" as="script" />
   
   <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    html, body, #root { height: 100%; width: 100%; margin: 0; padding: 0; }
-    html { -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; }
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.5; background-color: #fff; color: #171717; }
-    html.dark body { background-color: #171717; color: #fafafa; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { height: 100%; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body { 
+      min-height: 100%; 
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    #root { min-height: 100vh; }
   </style>
 </head>
 <body>

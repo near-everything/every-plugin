@@ -181,7 +181,7 @@ async function startServer() {
       if (ssrEnabled) {
         try {
           const url = new URL(c.req.url).pathname + new URL(c.req.url).search;
-          const { stream, dehydratedState } = await renderToStream({
+          const { stream, dehydratedState, headData } = await renderToStream({
             url,
             config: bosConfig,
           });
@@ -199,7 +199,7 @@ async function startServer() {
             new Uint8Array(chunks.reduce((acc, chunk) => [...acc, ...chunk], [] as number[]))
           );
           
-          const html = createSSRHtml(bodyContent, dehydratedState, bosConfig);
+          const html = createSSRHtml(bodyContent, dehydratedState, bosConfig, headData);
           return c.html(html);
         } catch (error) {
           logger.error('[SSR] Render failed, falling back to CSR:', error);

@@ -16,7 +16,7 @@ interface MyRouterContext {
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   head: () => ({
     meta: [
-      { title: "everything.demo" },
+      { title: "demo.everything" },
       { name: "description", content: "Demo application showcasing Module Federation with SSR, TanStack Router, and oRPC" },
       { name: "theme-color", content: "#171717" },
       { name: "application-name", content: "Every Plugin Demo" },

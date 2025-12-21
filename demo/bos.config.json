@@ -2,7 +2,7 @@
   "account": "demo.everything.near",
   "app": {
     "host": {
-      "title": "App",
+      "title": "demo.everything",
       "description": "Demo application",
       "development": "http://localhost:3001",
       "production": "https://demo.everything.dev"
@@ -10,7 +10,7 @@
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1272-ui-every-plugin-near-everything-10d75d261-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1273-ui-every-plugin-near-everything-7c1b7d1d6-ze.zephyrcloud.app",
       "exposes": {
         "App": "./App",
         "components": "./components",
