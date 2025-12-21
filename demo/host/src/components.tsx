@@ -33,7 +33,9 @@ interface Registry {
 
 const Providers = lazy(async () => {
   const config = getRuntimeConfig();
-  const module = await loadRemote<{ default: FC<{ children: React.ReactNode }> }>(`${config.ui.name}/providers`);
+  const module = await loadRemote<{
+    default: FC<{ children: React.ReactNode }>;
+  }>(`${config.ui.name}/providers`);
   if (!module) throw new Error(`Failed to load ${config.ui.name}/providers`);
   return module;
 });
@@ -106,8 +108,6 @@ const inlineLoaderStyle: CSSProperties = {
   fontSize: "12px",
 };
 
-
-
 const errorBadgeStyle: CSSProperties = {
   fontSize: "11px",
   color: "#dc2626",
@@ -125,11 +125,7 @@ interface ComponentCardProps {
   index: number;
 }
 
-const ComponentCard: FC<ComponentCardProps> = ({
-  title,
-  Component,
-  props,
-}) => {
+const ComponentCard: FC<ComponentCardProps> = ({ title, Component, props }) => {
   const [showProps, setShowProps] = useState(false);
   const hasProps = Object.keys(props).length > 0;
 
@@ -139,6 +135,7 @@ const ComponentCard: FC<ComponentCardProps> = ({
         <span style={cardTitleStyle}>{`<${title} />`}</span>
         {hasProps && (
           <button
+            type="button"
             onClick={() => setShowProps(!showProps)}
             style={propsToggleStyle}
           >
@@ -177,8 +174,6 @@ const ComponentCard: FC<ComponentCardProps> = ({
     </div>
   );
 };
-
-
 
 const pageContainerStyle: CSSProperties = {
   display: "flex",
@@ -251,7 +246,9 @@ export const Components: FC = () => {
   const [ready, setReady] = useState(false);
   const [registry, setRegistry] = useState<Registry | null>(null);
   const [registryError, setRegistryError] = useState<string | null>(null);
-  const [config, setConfig] = useState<ReturnType<typeof getRuntimeConfig> | null>(null);
+  const [config, setConfig] = useState<ReturnType<
+    typeof getRuntimeConfig
+  > | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setReady(true), 50);
@@ -311,9 +308,7 @@ export const Components: FC = () => {
         `}
       </style>
       <ErrorBoundary>
-        <Suspense
-          fallback={<Loading />}
-        >
+        <Suspense fallback={<Loading />}>
           <Providers>
             <div style={scrollContainerStyle}>
               <div style={contentWrapperStyle}>

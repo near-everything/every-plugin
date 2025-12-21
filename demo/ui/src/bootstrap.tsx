@@ -1,4 +1,5 @@
 import { createRouter, RouterProvider } from "@tanstack/react-router";
+import { HydrationBoundary, type DehydratedState } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { StrictMode } from "react";
 import { Toaster } from "sonner";
@@ -9,7 +10,14 @@ import { routeTree } from "./routeTree.gen.ts";
 
 import "./styles.css";
 
+declare global {
+  interface Window {
+    __DEHYDRATED_STATE__?: DehydratedState;
+  }
+}
+
 const TanStackQueryProviderContext = TanStackQueryProvider.getContext();
+const dehydratedState = typeof window !== 'undefined' ? window.__DEHYDRATED_STATE__ : undefined;
 function NotFoundComponent() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -74,10 +82,12 @@ export function App() {
   return (
     <StrictMode>
       <TanStackQueryProvider.Provider {...TanStackQueryProviderContext}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <RouterProvider router={router} />
-          <Toaster position="bottom-right" richColors closeButton />
-        </ThemeProvider>
+        <HydrationBoundary state={dehydratedState}>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+            <RouterProvider router={router} />
+            <Toaster position="bottom-right" richColors closeButton />
+          </ThemeProvider>
+        </HydrationBoundary>
       </TanStackQueryProvider.Provider>
     </StrictMode>
   );

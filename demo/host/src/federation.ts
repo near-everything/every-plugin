@@ -13,32 +13,41 @@ interface RuntimeConfig {
   rpcBase: string;
 }
 
+declare global {
+  interface Window {
+    __RUNTIME_CONFIG__?: RuntimeConfig;
+  }
+}
+
 let runtimeConfig: RuntimeConfig | null = null;
 
 export function getRuntimeConfig(): RuntimeConfig {
   if (!runtimeConfig) {
-    throw new Error('Runtime config not initialized');
+    throw new Error('Runtime config not initialized. Ensure window.__RUNTIME_CONFIG__ is set.');
   }
   return runtimeConfig;
 }
 
 export async function initializeFederation() {
-  const config = await fetch('/__runtime-config').then((r) => r.json()) as RuntimeConfig;
-  runtimeConfig = config;
+  if (!window.__RUNTIME_CONFIG__) {
+    throw new Error('Runtime config not found. SSR should always inline __RUNTIME_CONFIG__.');
+  }
+  
+  runtimeConfig = window.__RUNTIME_CONFIG__;
 
   console.log('[Federation] Registering dynamic remote:', {
-    name: config.ui.name,
-    entry: `${config.ui.url}/remoteEntry.js`,
-    alias: config.ui.name,
+    name: runtimeConfig.ui.name,
+    entry: `${runtimeConfig.ui.url}/remoteEntry.js`,
+    alias: runtimeConfig.ui.name,
   });
 
   registerRemotes([
     {
-      name: config.ui.name,
-      entry: `${config.ui.url}/remoteEntry.js`,
-      alias: config.ui.name,
+      name: runtimeConfig.ui.name,
+      entry: `${runtimeConfig.ui.url}/remoteEntry.js`,
+      alias: runtimeConfig.ui.name,
     },
   ]);
 
-  return config;
+  return runtimeConfig;
 }

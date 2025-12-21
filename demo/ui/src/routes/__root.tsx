@@ -1,55 +1,47 @@
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import type { QueryClient } from "@tanstack/react-query";
 import {
+  ClientOnly,
   createRootRouteWithContext,
+  HeadContent,
   Outlet,
-  useMatches,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
-import { useEffect } from "react";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 
 interface MyRouterContext {
   queryClient: QueryClient;
 }
 
-const routeTitles: Record<string, string> = {
-  "/": "Home",
-};
-
-function TitleSync() {
-  const matches = useMatches();
-  const currentPath = matches[matches.length - 1]?.pathname || "/";
-
-  useEffect(() => {
-    const title = routeTitles[currentPath] || "App";
-    window.dispatchEvent(
-      new CustomEvent("near:title-change", {
-        detail: { title },
-      })
-    );
-  }, [currentPath]);
-
-  return null;
-}
-
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-  component: () => (
-    <>
-      <TitleSync />
-      <Outlet />
-      <TanStackDevtools
-        config={{
-          position: "bottom-right",
-        }}
-        plugins={[
-          {
-            name: "Tanstack Router",
-            render: <TanStackRouterDevtoolsPanel />,
-          },
-          TanStackQueryDevtools,
-        ]}
-      />
-    </>
-  ),
+  head: () => ({
+    meta: [
+      { title: "App" },
+      { name: "description", content: "Demo application" },
+    ],
+  }),
+  component: RootComponent,
 });
+
+function RootComponent() {
+  return (
+    <>
+      <HeadContent />
+      <Outlet />
+      <ClientOnly>
+        <TanStackDevtools
+          config={{
+            position: "bottom-right",
+          }}
+          plugins={[
+            {
+              name: "Tanstack Router",
+              render: <TanStackRouterDevtoolsPanel />,
+            },
+            TanStackQueryDevtools,
+          ]}
+        />
+      </ClientOnly>
+    </>
+  );
+}

@@ -5,7 +5,19 @@ import { QueryCache, QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { contract } from '../../../api/src/contract';
 
-export const API_URL = `${window.location.origin}/api/rpc`;
+export type ApiContract = typeof contract;
+export type ApiClient = ContractRouterClient<ApiContract>;
+
+declare global {
+  var $apiClient: ApiClient | undefined;
+}
+
+function getApiUrl(): string {
+  if (typeof window === 'undefined') {
+    throw new Error('RPCLink is not allowed on the server side. Use server-side client instead.');
+  }
+  return `${window.location.origin}/api/rpc`;
+}
 
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({
@@ -31,7 +43,7 @@ export const queryClient = new QueryClient({
 
 function createApiLink() {
   return new RPCLink({
-    url: API_URL,
+    url: getApiUrl,
     interceptors: [
       onError((error: unknown) => {
         console.error('oRPC API Error:', error);
@@ -56,7 +68,10 @@ function createApiLink() {
   });
 }
 
-export type ApiContract = typeof contract;
-export type ApiClient = ContractRouterClient<ApiContract>;
+function createClientSideApiClient(): ApiClient {
+  return createORPCClient(createApiLink());
+}
 
-export const apiClient: ApiClient = createORPCClient(createApiLink());
+export const apiClient: ApiClient = globalThis.$apiClient ?? createClientSideApiClient();
+
+export const API_URL = typeof window !== 'undefined' ? `${window.location.origin}/api/rpc` : '/api/rpc';

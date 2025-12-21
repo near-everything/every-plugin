@@ -8,9 +8,28 @@ import pkg from './package.json';
 
 const __dirname = import.meta.dirname;
 const isProduction = process.env.NODE_ENV === 'production';
+const useRemoteUi = process.env.USE_REMOTE_UI === 'true';
 
 const configPath = process.env.BOS_CONFIG_PATH ?? path.resolve(__dirname, '../bos.config.json');
 const bosConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+const env = isProduction ? 'production' : 'development';
+const uiUrl = useRemoteUi ? bosConfig.app.ui.production : bosConfig.app.ui[env];
+
+function getClientRuntimeConfig() {
+  return {
+    env,
+    title: bosConfig.app.host.title,
+    hostUrl: bosConfig.app.host[env],
+    ui: {
+      name: bosConfig.app.ui.name,
+      url: uiUrl,
+      exposes: bosConfig.app.ui.exposes,
+    },
+    apiBase: '/api',
+    rpcBase: '/api/rpc',
+  };
+}
 
 function updateBosConfig(hostUrl: string) {
   try {
@@ -101,6 +120,28 @@ export default defineConfig({
       title: bosConfig.app.host.title,
       description: bosConfig.app.host.description,
     },
+    inject: 'body',
+    scriptLoading: 'defer',
+    tags: [
+      {
+        tag: 'script',
+        attrs: {},
+        children: `window.__RUNTIME_CONFIG__=${JSON.stringify(getClientRuntimeConfig())};`,
+        head: true,
+        append: false,
+      },
+      {
+        tag: 'link',
+        attrs: {
+          rel: 'preload',
+          href: `${uiUrl}/remoteEntry.js`,
+          as: 'script',
+          crossorigin: 'anonymous',
+        },
+        head: true,
+        append: true,
+      },
+    ],
   },
   dev: {
     progressBar: false,
@@ -112,7 +153,6 @@ export default defineConfig({
     port: 3001,
     proxy: {
       '/api': 'http://localhost:3000',
-      '/__runtime-config': 'http://localhost:3000',
     },
     historyApiFallback: true,
   },

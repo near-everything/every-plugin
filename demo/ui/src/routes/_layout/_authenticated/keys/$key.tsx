@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { apiClient } from "../../../utils/orpc";
+import { apiClient } from "../../../../utils/orpc";
 
 export type KvValueResult = Awaited<ReturnType<typeof apiClient.getValue>>;
 
-export const Route = createFileRoute("/_layout/_authenticated/$key")({
+export const Route = createFileRoute("/_layout/_authenticated/keys/$key")({
   loader: async ({ params }) => {
     try {
       const data = await apiClient.getValue({ key: params.key });
