@@ -35,7 +35,7 @@ function injectRuntimeConfig(html: string, config: RuntimeConfig): string {
     rpcBase: '/api/rpc',
   };
   const configScript = `<script>window.__RUNTIME_CONFIG__=${JSON.stringify(clientConfig)};</script>`;
-  const preloadLink = `<link rel="preload" href="${config.ui.url}/remoteEntry.js" as="script" crossorigin="anonymous" />`;
+  const preloadLink = `<link rel="preload" href="${config.ui.url}/remoteEntry.js" as="script" />`;
 
   return html
     .replace('<!--__RUNTIME_CONFIG__-->', configScript)
@@ -86,23 +86,7 @@ async function startServer() {
 
   const rpcHandler = new RPCHandler(router, {
     plugins: [new BatchHandlerPlugin()],
-    interceptors: [
-      onError((error) => {
-        console.error('\n=== Error ===');
-        formatORPCError(error);
-
-        if (error && typeof error === 'object') {
-          if ('message' in error) console.error('Message:', error.message);
-          if ('code' in error) console.error('Code:', error.code);
-          if ('status' in error) console.error('Status:', error.status);
-          if ('cause' in error) console.error('Cause:', error.cause);
-          if ('stack' in error) console.error('Stack:', error.stack);
-        } else {
-          console.error('Error:', error);
-        }
-        console.error('=================\n');
-      }),
-    ],
+    interceptors: [onError((error) => formatORPCError(error))],
   });
 
   const apiHandler = new OpenAPIHandler(router, {
@@ -118,23 +102,7 @@ async function startServer() {
         },
       }),
     ],
-    interceptors: [
-      onError((error) => {
-        console.error('\n=== Error ===');
-        formatORPCError(error);
-
-        if (error && typeof error === 'object') {
-          if ('message' in error) console.error('Message:', error.message);
-          if ('code' in error) console.error('Code:', error.code);
-          if ('status' in error) console.error('Status:', error.status);
-          if ('cause' in error) console.error('Cause:', error.cause);
-          if ('stack' in error) console.error('Stack:', error.stack);
-        } else {
-          console.error('Error:', error);
-        }
-        console.error('=====================\n');
-      }),
-    ],
+    interceptors: [onError((error) => formatORPCError(error))],
   });
 
   const apiApp = new Hono();

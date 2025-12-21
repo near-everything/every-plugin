@@ -1,7 +1,7 @@
 {
-  "short_name": "NEAR Merch",
-  "name": "NEAR Protocol Merch Store",
-  "description": "Official NEAR Protocol merchandise store - Shop exclusive blockchain apparel and accessories",
+  "short_name": "Demo",
+  "name": "Every Demo",
+  "description": "Demo application showcasing Module Federation with SSR, TanStack Router, and oRPC",
   "icons": [
     {
       "src": "favicon-16x16.png",
@@ -52,8 +52,8 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
+  "theme_color": "#171717",
   "background_color": "#ffffff",
-  "categories": ["shopping", "lifestyle"],
+  "categories": ["development", "demo"],
   "orientation": "portrait-primary"
 }

@@ -56,6 +56,14 @@ export async function renderToStream(options: SSRRenderOptions): Promise<SSRRend
   return { stream, dehydratedState };
 }
 
+function getUiOrigin(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
 export function createSSRHtml(
   bodyContent: string,
   dehydratedState: unknown,
@@ -70,13 +78,15 @@ export function createSSRHtml(
     rpcBase: '/api/rpc',
   };
 
+  const uiOrigin = getUiOrigin(config.ui.url);
+
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-ssr="true">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>${config.title}</title>
   
+  <link rel="preconnect" href="${uiOrigin}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   
@@ -92,7 +102,7 @@ export function createSSRHtml(
   <script>window.__RUNTIME_CONFIG__=${JSON.stringify(clientConfig)};</script>
   <script>window.__DEHYDRATED_STATE__=${JSON.stringify(dehydratedState)};</script>
   
-  <link rel="preload" href="${config.ui.url}/remoteEntry.js" as="script" crossorigin="anonymous" />
+  <link rel="preload" href="${config.ui.url}/remoteEntry.js" as="script" />
   
   <style>
     *, *::before, *::after { box-sizing: border-box; }

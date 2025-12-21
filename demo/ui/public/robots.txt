@@ -2,6 +2,3 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /checkout/
-
-Sitemap: https://merch.near.org/sitemap.xml

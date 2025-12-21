@@ -1,7 +1,7 @@
 {
-  "name": "NEAR Protocol Merch Store",
-  "short_name": "NEAR Merch",
-  "description": "Official NEAR Protocol merchandise store",
+  "name": "Demo",
+  "short_name": "Every Demo",
+  "description": "Demo application showcasing Module Federation with SSR",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",
@@ -14,7 +14,7 @@
       "type": "image/png"
     }
   ],
-  "theme_color": "#000000",
+  "theme_color": "#171717",
   "background_color": "#ffffff",
   "display": "standalone"
 }

@@ -16,8 +16,18 @@ interface MyRouterContext {
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   head: () => ({
     meta: [
-      { title: "App" },
-      { name: "description", content: "Demo application" },
+      { title: "everything.demo" },
+      { name: "description", content: "Demo application showcasing Module Federation with SSR, TanStack Router, and oRPC" },
+      { name: "theme-color", content: "#171717" },
+      { name: "application-name", content: "Every Plugin Demo" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+    ],
+    links: [
+      { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },
+      { rel: "icon", type: "image/svg+xml", href: "/icon.svg" },
+      { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.json" },
     ],
   }),
   component: RootComponent,
