@@ -11,9 +11,6 @@ import { sessionQueryOptions } from "../lib/session";
 import { queryClient } from "../utils/orpc";
 
 export const Route = createFileRoute("/_layout")({
-  beforeLoad: async ({ context }) => {
-    await context.queryClient.ensureQueryData(sessionQueryOptions);
-  },
   component: Layout,
 });
 

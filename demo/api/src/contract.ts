@@ -1,3 +1,4 @@
+import { NOT_FOUND, FORBIDDEN, UNAUTHORIZED } from 'every-plugin/errors';
 import { oc } from 'every-plugin/orpc';
 import { z } from 'every-plugin/zod';
 
@@ -15,7 +16,8 @@ export const contract = oc.router({
       message: z.string(),
       accountId: z.string(),
       timestamp: z.iso.datetime(),
-    })),
+    }))
+    .errors({ UNAUTHORIZED }),
 
   getValue: oc
     .route({ method: 'GET', path: '/kv/{key}' })
@@ -26,7 +28,8 @@ export const contract = oc.router({
       key: z.string(),
       value: z.string(),
       updatedAt: z.iso.datetime(),
-    })),
+    }))
+    .errors({ NOT_FOUND, FORBIDDEN, UNAUTHORIZED }),
 
   setValue: oc
     .route({ method: 'POST', path: '/kv/{key}' })
@@ -38,7 +41,8 @@ export const contract = oc.router({
       key: z.string(),
       value: z.string(),
       created: z.boolean(),
-    })),
+    }))
+    .errors({ FORBIDDEN, UNAUTHORIZED }),
 });
 
 export type ContractType = typeof contract;

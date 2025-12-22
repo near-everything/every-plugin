@@ -8,6 +8,10 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     exclude: ['node_modules/**', 'dist/**'],
     testTimeout: 30000,
+    fileParallelism: false,
+    sequence: {
+      hooks: 'stack',
+    },
   },
   plugins: [
     tsconfigPaths({

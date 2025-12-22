@@ -1,13 +1,9 @@
 {
   "name": "monorepo",
   "private": true,
-  "workspaces": [
-    "api",
-    "host",
-    "ui"
-  ],
   "scripts": {
-    "dev": "turbo dev",
+    "test": "turbo test --filter='./api'",
+    "dev": "turbo dev --filter='./api' --filter='./host' --filter='./ui'",
     "dev:ui": "USE_REMOTE_API=true turbo dev --filter=host --filter=ui",
     "dev:api": "USE_REMOTE_UI=true turbo dev --filter=host --filter=api",
     "start": "turbo preview --filter=host",

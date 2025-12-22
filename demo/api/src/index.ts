@@ -1,18 +1,16 @@
-import { eq } from 'drizzle-orm';
-import { createPlugin } from 'every-plugin';
-import { Effect } from 'every-plugin/effect';
-import { ORPCError } from 'every-plugin/orpc';
-import { z } from 'every-plugin/zod';
-import { contract } from './contract';
-import { kvStore } from './db/schema';
-import { Database, DatabaseLive } from './store';
+import { createPlugin } from "every-plugin";
+import { Cause, Effect, Exit, Layer } from "every-plugin/effect";
+import { ORPCError } from "every-plugin/orpc";
+import { z } from "every-plugin/zod";
+import { contract } from "./contract";
+import { DatabaseLive } from "./db/layer";
+import { KvService, KvServiceLive } from "./services/kv";
 
 export default createPlugin({
-  variables: z.object({
-  }),
+  variables: z.object({}),
 
   secrets: z.object({
-    API_DATABASE_URL: z.string().default('file:./api.db'),
+    API_DATABASE_URL: z.string().default("file:./api.db"),
     API_DATABASE_AUTH_TOKEN: z.string().optional(),
   }),
 
@@ -24,126 +22,90 @@ export default createPlugin({
 
   initialize: (config) =>
     Effect.gen(function* () {
-      const dbLayer = DatabaseLive(config.secrets.API_DATABASE_URL, config.secrets.API_DATABASE_AUTH_TOKEN);
-      const db = yield* Effect.provide(Database, dbLayer);
+      const Database = DatabaseLive(
+        config.secrets.API_DATABASE_URL,
+        config.secrets.API_DATABASE_AUTH_TOKEN
+      );
 
-      console.log('[API] Plugin initialized');
+      const Services = KvServiceLive.pipe(Layer.provide(Database));
 
-      return { db };
+      const services = yield* Effect.provide(KvService, Services);
+
+      console.log("[API] Services Initialized");
+      return services;
     }),
 
-  shutdown: (_context) =>
-    Effect.gen(function* () {
-      yield* Effect.promise(async () => console.log('[API] Plugin shutdown'));
-    }),
+  shutdown: () => Effect.log("[API] Shutdown"),
 
-  createRouter: (context, builder) => {
-    const { db } = context;
-
-    const requireAuth = builder.middleware(async ({ context, next }) => {
+  createRouter: (services, builder) => {
+    const authed = builder.middleware(({ context, next }) => {
       if (!context.nearAccountId) {
-        throw new ORPCError('UNAUTHORIZED', {
-          message: 'Authentication required',
-          data: { authType: 'nearAccountId' }
-        });
+        throw new ORPCError("UNAUTHORIZED", { message: "Auth required" });
       }
-      return next({
-        context: {
-          nearAccountId: context.nearAccountId,
-        }
-      });
+      return next({ context: { owner: context.nearAccountId } });
     });
 
     return {
-      ping: builder.ping.handler(async () => {
-        return {
-          status: 'ok' as const,
-          timestamp: new Date().toISOString(),
-        };
-      }),
+      ping: builder.ping.handler(async () => ({
+        status: "ok",
+        timestamp: new Date().toISOString(),
+      })),
 
-      protected: builder.protected
-        .use(requireAuth)
-        .handler(async ({ context }) => {
-          return {
-            message: 'This is a protected endpoint',
-            accountId: context.nearAccountId,
-            timestamp: new Date().toISOString(),
-          };
-        }),
+      protected: builder.protected.use(authed).handler(async ({ context }) => ({
+        message: "Protected data",
+        accountId: context.owner,
+        timestamp: new Date().toISOString(),
+      })),
 
       getValue: builder.getValue
-        .use(requireAuth)
-        .handler(async ({ input, context }) => {
-          const [record] = await db
-            .select()
-            .from(kvStore)
-            .where(eq(kvStore.key, input.key))
-            .limit(1);
+        .use(authed)
+        .handler(async ({ input, context, errors }) => {
+          const exit = await Effect.runPromiseExit(
+            services.getValue(input.key, context.owner)
+          );
 
-          if (!record) {
-            throw new ORPCError('NOT_FOUND', {
-              message: 'Key not found',
-            });
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause);
+            if (error instanceof ORPCError) {
+              if (error.code === "NOT_FOUND") {
+                throw errors.NOT_FOUND({
+                  message: "Key not found",
+                  data: { resource: "kv", resourceId: input.key },
+                });
+              }
+              if (error.code === "FORBIDDEN") {
+                throw errors.FORBIDDEN({
+                  message: "Access denied",
+                  data: { action: "read" },
+                });
+              }
+            }
+            throw error;
           }
 
-          if (record.nearAccountId !== context.nearAccountId) {
-            throw new ORPCError('FORBIDDEN', {
-              message: 'Access denied',
-            });
-          }
-
-          return {
-            key: record.key,
-            value: record.value,
-            updatedAt: record.updatedAt.toISOString(),
-          };
+          return exit.value;
         }),
 
       setValue: builder.setValue
-        .use(requireAuth)
-        .handler(async ({ input, context }) => {
-          const now = new Date();
+        .use(authed)
+        .handler(async ({ input, context, errors }) => {
+          const exit = await Effect.runPromiseExit(
+            services.setValue(input.key, input.value, context.owner)
+          );
 
-          const [existing] = await db
-            .select()
-            .from(kvStore)
-            .where(eq(kvStore.key, input.key))
-            .limit(1);
-
-          let created = false;
-
-          if (existing) {
-            if (existing.nearAccountId !== context.nearAccountId) {
-              throw new ORPCError('FORBIDDEN', {
-                message: 'Access denied',
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause);
+            if (error instanceof ORPCError && error.code === "FORBIDDEN") {
+              throw errors.FORBIDDEN({
+                message: "Access denied",
+                data: { action: "write" },
               });
             }
-
-            await db
-              .update(kvStore)
-              .set({
-                value: input.value,
-                updatedAt: now,
-              })
-              .where(eq(kvStore.key, input.key));
-          } else {
-            await db.insert(kvStore).values({
-              key: input.key,
-              value: input.value,
-              nearAccountId: context.nearAccountId,
-              createdAt: now,
-              updatedAt: now,
-            });
-            created = true;
+            throw error;
           }
 
-          return {
-            key: input.key,
-            value: input.value,
-            created,
-          };
+          return exit.value;
         }),
-    }
+    };
   },
 });

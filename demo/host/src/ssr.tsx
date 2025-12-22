@@ -1,10 +1,13 @@
-import { createElement } from 'react';
-import { renderToReadableStream } from 'react-dom/server';
-import { RouterProvider } from '@tanstack/react-router';
-import { createMemoryHistory } from '@tanstack/react-router';
-import { QueryClientProvider, dehydrate, type QueryClient } from '@tanstack/react-query';
-import { loadRemoteModule } from './federation.server';
-import type { RuntimeConfig } from './config';
+import {
+  dehydrate,
+  type QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
+import { createElement } from "react";
+import { renderToReadableStream } from "react-dom/server";
+import type { RuntimeConfig } from "./config";
+import { loadRemoteModule } from "./federation.server";
 
 interface CreateRouterResult {
   router: any;
@@ -12,7 +15,9 @@ interface CreateRouterResult {
 }
 
 interface RouterModule {
-  createRouter: (opts?: { context?: { queryClient?: QueryClient } }) => CreateRouterResult;
+  createRouter: (opts?: {
+    context?: { queryClient?: QueryClient };
+  }) => CreateRouterResult;
 }
 
 export interface SSRRenderOptions {
@@ -50,18 +55,18 @@ export interface SSRRenderResult {
 function extractHeadData(router: any): HeadData {
   const meta: HeadMeta[] = [];
   const links: HeadLink[] = [];
-  
+
   try {
     const matches = router.state?.matches || [];
-    
+
     for (const match of matches) {
       const headFn = match.route?.options?.head;
-      if (typeof headFn === 'function') {
+      if (typeof headFn === "function") {
         const headResult = headFn({
           params: match.params,
           loaderData: match.loaderData,
         });
-        
+
         if (headResult?.meta) {
           meta.push(...headResult.meta);
         }
@@ -71,16 +76,21 @@ function extractHeadData(router: any): HeadData {
       }
     }
   } catch (error) {
-    console.error('[SSR] Failed to extract head data:', error);
+    console.error("[SSR] Failed to extract head data:", error);
   }
-  
+
   return { meta, links };
 }
 
-export async function renderToStream(options: SSRRenderOptions): Promise<SSRRenderResult> {
+export async function renderToStream(
+  options: SSRRenderOptions
+): Promise<SSRRenderResult> {
   const { url, config } = options;
 
-  const routerModule = await loadRemoteModule<RouterModule>(config.ui.name, 'Router');
+  const routerModule = await loadRemoteModule<RouterModule>(
+    config.ui.name,
+    "Router"
+  );
   const { router, queryClient } = routerModule.createRouter();
 
   const memoryHistory = createMemoryHistory({
@@ -101,7 +111,7 @@ export async function renderToStream(options: SSRRenderOptions): Promise<SSRRend
 
   const stream = await renderToReadableStream(App, {
     onError(error) {
-      console.error('[SSR] Render error:', error);
+      console.error("[SSR] Render error:", error);
     },
   });
 
@@ -120,39 +130,40 @@ function getUiOrigin(url: string): string {
 
 function renderMetaTags(headData: HeadData): { title: string; tags: string } {
   const tags: string[] = [];
-  let title = '';
-  
+  let title = "";
+
   if (headData.meta) {
     for (const meta of headData.meta) {
       if (meta.title) {
         title = meta.title;
         continue;
       }
-      
+
       const attrs: string[] = [];
       if (meta.name) attrs.push(`name="${meta.name}"`);
       if (meta.property) attrs.push(`property="${meta.property}"`);
-      if (meta.content) attrs.push(`content="${meta.content.replace(/"/g, '&quot;')}"`);
+      if (meta.content)
+        attrs.push(`content="${meta.content.replace(/"/g, "&quot;")}"`);
       if (meta.charSet) attrs.push(`charset="${meta.charSet}"`);
-      
+
       if (attrs.length > 0) {
-        tags.push(`  <meta ${attrs.join(' ')} />`);
+        tags.push(`  <meta ${attrs.join(" ")} />`);
       }
     }
   }
-  
+
   if (headData.links) {
     for (const link of headData.links) {
       const attrs: string[] = [`rel="${link.rel}"`, `href="${link.href}"`];
       if (link.type) attrs.push(`type="${link.type}"`);
       if (link.sizes) attrs.push(`sizes="${link.sizes}"`);
       if (link.crossorigin) attrs.push(`crossorigin="${link.crossorigin}"`);
-      
-      tags.push(`  <link ${attrs.join(' ')} />`);
+
+      tags.push(`  <link ${attrs.join(" ")} />`);
     }
   }
-  
-  return { title, tags: tags.join('\n') };
+
+  return { title, tags: tags.join("\n") };
 }
 
 export function createSSRHtml(
@@ -166,16 +177,16 @@ export function createSSRHtml(
     title: config.title,
     hostUrl: config.hostUrl,
     ui: config.ui,
-    apiBase: '/api',
-    rpcBase: '/api/rpc',
+    apiBase: "/api",
+    rpcBase: "/api/rpc",
   };
 
   const uiOrigin = getUiOrigin(config.ui.url);
-  
-  const { title, tags } = headData 
-    ? renderMetaTags(headData) 
-    : { title: config.title, tags: '' };
-  
+
+  const { title, tags } = headData
+    ? renderMetaTags(headData)
+    : { title: config.title, tags: "" };
+
   const pageTitle = title || config.title;
 
   return `<!DOCTYPE html>
@@ -206,7 +217,9 @@ ${tags}
   </script>
   
   <script>window.__RUNTIME_CONFIG__=${JSON.stringify(clientConfig)};</script>
-  <script>window.__DEHYDRATED_STATE__=${JSON.stringify(dehydratedState)};</script>
+  <script>window.__DEHYDRATED_STATE__=${JSON.stringify(
+    dehydratedState
+  )};</script>
   
   <link rel="preload" href="${config.ui.url}/remoteEntry.js" as="script" />
   
