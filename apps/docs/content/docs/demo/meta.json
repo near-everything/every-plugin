@@ -1,0 +1,10 @@
+{
+  "title": "Demo System",
+  "pages": [
+    "architecture",
+    "development",
+    "nds",
+    "wasi-host",
+    "progress"
+  ]
+}

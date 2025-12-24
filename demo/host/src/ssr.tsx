@@ -221,7 +221,7 @@ ${tags}
     dehydratedState
   )};</script>
   
-  <link rel="preload" href="${config.ui.url}/remoteEntry.js" as="script" />
+  <link rel="preload" href="${config.ui.url}/remoteEntry.js" as="fetch" crossorigin="anonymous" />
   
   <style>
     *, *::before, *::after { box-sizing: border-box; }

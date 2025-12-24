@@ -4,8 +4,7 @@ import { siwnClient } from "better-near-auth/client";
 
 function getBaseUrl(): string {
   if (typeof window === 'undefined') return '';
-  const base = window.__RUNTIME_CONFIG__?.apiBase;
-  return base ? `${window.location.origin}${base}` : window.location.origin;
+  return window.location.origin;
 }
 
 export const authClient = createAuthClient({

@@ -8,13 +8,18 @@ import pkg from './package.json';
 
 const __dirname = import.meta.dirname;
 const isProduction = process.env.NODE_ENV === 'production';
-const useRemoteUi = process.env.USE_REMOTE_UI === 'true';
+const env = isProduction ? 'production' : 'development';
 
 const configPath = process.env.BOS_CONFIG_PATH ?? path.resolve(__dirname, '../bos.config.json');
 const bosConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-const env = isProduction ? 'production' : 'development';
-const uiUrl = useRemoteUi ? bosConfig.app.ui.production : bosConfig.app.ui[env];
+function resolveSource(envVar: string | undefined): 'local' | 'remote' {
+  if (envVar === 'local' || envVar === 'remote') return envVar;
+  return isProduction ? 'remote' : 'local';
+}
+
+const uiSource = resolveSource(process.env.UI_SOURCE);
+const uiUrl = uiSource === 'remote' ? bosConfig.app.ui.production : bosConfig.app.ui.development;
 
 function getClientRuntimeConfig() {
   return {
@@ -24,6 +29,7 @@ function getClientRuntimeConfig() {
     ui: {
       name: bosConfig.app.ui.name,
       url: uiUrl,
+      source: uiSource,
       exposes: bosConfig.app.ui.exposes,
     },
     apiBase: '/api',
@@ -104,8 +110,8 @@ export default defineConfig({
   source: {
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
-      'process.env.USE_REMOTE_API': JSON.stringify(process.env.USE_REMOTE_API || 'false'),
-      'process.env.USE_REMOTE_UI': JSON.stringify(process.env.USE_REMOTE_UI || 'false'),
+      'process.env.UI_SOURCE': JSON.stringify(uiSource),
+      'process.env.API_SOURCE': JSON.stringify(process.env.API_SOURCE || (isProduction ? 'remote' : 'local')),
       'process.env.PUBLIC_ACCOUNT_ID': JSON.stringify(bosConfig.account),
       'process.env.BETTER_AUTH_URL': JSON.stringify(process.env.BETTER_AUTH_URL || bosConfig.app.host[process.env.NODE_ENV || 'development']),
     },
@@ -135,7 +141,8 @@ export default defineConfig({
         attrs: {
           rel: 'preload',
           href: `${uiUrl}/remoteEntry.js`,
-          as: 'script',
+          as: 'fetch',
+          crossorigin: 'anonymous',
         },
         head: true,
         append: true,
@@ -150,9 +157,6 @@ export default defineConfig({
   },
   server: {
     port: 3001,
-    proxy: {
-      '/api': 'http://localhost:3000',
-    },
     historyApiFallback: true,
   },
   tools: {
