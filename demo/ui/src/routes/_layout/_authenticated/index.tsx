@@ -10,6 +10,14 @@ export type SetValueResult = Awaited<ReturnType<typeof apiClient.setValue>>;
 export type GetValueResult = Awaited<ReturnType<typeof apiClient.getValue>>;
 
 export const Route = createFileRoute("/_layout/_authenticated/")({
+  head: () => ({
+    meta: [
+      { title: "Dashboard | demo.everything" },
+      { name: "description", content: "Manage your key-value store and test API endpoints." },
+      { property: "og:title", content: "Dashboard | demo.everything" },
+      { property: "og:description", content: "Manage your key-value store and test API endpoints." },
+    ],
+  }),
   component: Dashboard,
 });
 

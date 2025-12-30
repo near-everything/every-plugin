@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { compress } from 'hono/compress';
 import { OpenAPIHandler } from '@orpc/openapi/fetch';
 import { OpenAPIReferencePlugin } from '@orpc/openapi/plugins';
 import { onError } from '@orpc/server';
@@ -17,14 +18,14 @@ import { createServer, type IncomingHttpHeaders } from 'node:http';
 import { resolve } from 'node:path';
 import config from './rsbuild.config';
 import { loadBosConfig, type RuntimeConfig } from './src/config';
+import { loadRouterModule } from './src/federation.server';
+import type { HeadData } from './src/types';
 import { db } from './src/db';
 import * as schema from './src/db/schema/auth';
-import { initializeServerFederation } from './src/federation.server';
 import { initializeServerApiClient } from './src/lib/api-client.server';
 import { auth } from './src/lib/auth';
 import { createRouter } from './src/routers';
 import { initializePlugins, type PluginResult } from './src/runtime';
-import { renderToStream, createSSRHtml } from './src/ssr';
 
 function nodeHeadersToHeaders(nodeHeaders: IncomingHttpHeaders): Headers {
   const headers = new Headers();
@@ -42,6 +43,62 @@ function nodeHeadersToHeaders(nodeHeaders: IncomingHttpHeaders): Headers {
   return headers;
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderHeadToString(head: HeadData): string {
+  const parts: string[] = [];
+
+  for (const meta of head.meta) {
+    if (!meta) continue;
+    const metaObj = meta as Record<string, unknown>;
+    if ('title' in metaObj && metaObj.title) {
+      parts.push(`<title>${escapeHtml(String(metaObj.title))}</title>`);
+    } else {
+      const attrs = Object.entries(metaObj)
+        .filter(([k, v]) => k !== 'children' && v !== undefined)
+        .map(([k, v]) => `${k}="${escapeHtml(String(v))}"`)
+        .join(' ');
+      if (attrs) parts.push(`<meta ${attrs} />`);
+    }
+  }
+
+  for (const link of head.links) {
+    if (!link) continue;
+    const linkObj = link as Record<string, unknown>;
+    const attrs = Object.entries(linkObj)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => `${k}="${escapeHtml(String(v))}"`)
+      .join(' ');
+    if (attrs) parts.push(`<link ${attrs} />`);
+  }
+
+  for (const script of head.scripts) {
+    if (!script) continue;
+    const scriptObj = script as Record<string, unknown>;
+    const { children, ...rest } = scriptObj;
+    const attrs = Object.entries(rest)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) =>
+        typeof v === 'boolean' ? (v ? k : '') : `${k}="${escapeHtml(String(v))}"`
+      )
+      .filter(Boolean)
+      .join(' ');
+    if (children) {
+      parts.push(`<script ${attrs}>${children}</script>`);
+    } else if (attrs) {
+      parts.push(`<script ${attrs}></script>`);
+    }
+  }
+
+  return parts.join('\n    ');
+}
+
 function injectRuntimeConfig(html: string, config: RuntimeConfig): string {
   const clientConfig = {
     env: config.env,
@@ -52,9 +109,10 @@ function injectRuntimeConfig(html: string, config: RuntimeConfig): string {
     rpcBase: '/api/rpc',
   };
   const configScript = `<script>window.__RUNTIME_CONFIG__=${JSON.stringify(clientConfig)};</script>`;
-  const preloadLink = `<link rel="preload" href="${config.ui.url}/remoteEntry.js" as="fetch" crossorigin="anonymous" />`;
+  const preloadLink = `<link rel="preload" href="${config.ui.url}/remoteEntry.js" as="script" crossorigin="anonymous" />`;
 
   return html
+    .replace('<!--__HEAD_CONTENT__-->', '')
     .replace('<!--__RUNTIME_CONFIG__-->', configScript)
     .replace('<!--__REMOTE_PRELOAD__-->', preloadLink);
 }
@@ -208,6 +266,8 @@ async function startServer() {
     })
   );
 
+  app.use('/*', compress());
+
   app.get('/health', (c) => c.text('OK'));
 
   setupApiRoutes(app, bosConfig, plugins);
@@ -264,48 +324,59 @@ async function startServer() {
     devServer.afterListen();
     devServer.connectWebSocket({ server });
   } else {
-    const ssrEnabled = process.env.DISABLE_SSR !== 'true';
-    const indexHtml = await readFile(resolve(import.meta.dirname, './dist/index.html'), 'utf-8');
-    const injectedHtml = injectRuntimeConfig(indexHtml, bosConfig);
-
-    if (ssrEnabled) {
-      initializeServerFederation(bosConfig);
-    }
-
     app.use('/*', serveStatic({ root: './dist' }));
 
-    app.get('*', async (c) => {
-      if (ssrEnabled) {
-        try {
-          const url = new URL(c.req.url).pathname + new URL(c.req.url).search;
-          const { stream, dehydratedState, headData } = await renderToStream({
-            url,
-            config: bosConfig,
-          });
+    if (bosConfig.ui.ssrUrl) {
+      logger.info('[Head] Loading Remote Router module for head extraction...');
+      const routerModule = await loadRouterModule(bosConfig);
+      logger.info('[Head] Remote Router module loaded successfully');
 
-          const chunks: Uint8Array[] = [];
-          const reader = stream.getReader();
+      app.get('*', async (c) => {
+        try {
+          const url = new URL(c.req.url);
+          const { env, title, hostUrl } = bosConfig;
           
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-          }
+          const headData = await routerModule.getRouteHead(url.pathname, {
+            assetsUrl: bosConfig.ui.url,
+            runtimeConfig: { env, title, hostUrl, apiBase: '/api', rpcBase: '/api/rpc' },
+          });
           
-          const bodyContent = new TextDecoder().decode(
-            new Uint8Array(chunks.reduce((acc, chunk) => [...acc, ...chunk], [] as number[]))
-          );
+          const headHtml = renderHeadToString(headData);
           
-          const html = createSSRHtml(bodyContent, dehydratedState, bosConfig, headData);
+          const clientConfig = {
+            env: bosConfig.env,
+            title: bosConfig.title,
+            hostUrl: bosConfig.hostUrl,
+            ui: bosConfig.ui,
+            apiBase: '/api',
+            rpcBase: '/api/rpc',
+          };
+          const configScript = `<script>window.__RUNTIME_CONFIG__=${JSON.stringify(clientConfig)};</script>`;
+          const preloadLink = `<link rel="preload" href="${bosConfig.ui.url}/remoteEntry.js" as="script" crossorigin="anonymous" />`;
+          
+          const indexHtml = await readFile(resolve(import.meta.dirname, './dist/index.html'), 'utf-8');
+          const html = indexHtml
+            .replace('<!--__HEAD_CONTENT__-->', headHtml)
+            .replace('<!--__RUNTIME_CONFIG__-->', configScript)
+            .replace('<!--__REMOTE_PRELOAD__-->', preloadLink);
+          
           return c.html(html);
         } catch (error) {
-          logger.error('[SSR] Render failed, falling back to CSR:', error);
+          logger.error('[Head] Extraction error:', error);
+          const indexHtml = await readFile(resolve(import.meta.dirname, './dist/index.html'), 'utf-8');
+          const injectedHtml = injectRuntimeConfig(indexHtml, bosConfig);
           return c.html(injectedHtml);
         }
-      }
-
-      return c.html(injectedHtml);
-    });
+      });
+    } else {
+      logger.info('[Head] Head extraction disabled - no ui.ssr URL configured in bos.config.json');
+      
+      app.get('*', async (c) => {
+        const indexHtml = await readFile(resolve(import.meta.dirname, './dist/index.html'), 'utf-8');
+        const injectedHtml = injectRuntimeConfig(indexHtml, bosConfig);
+        return c.html(injectedHtml);
+      });
+    }
 
     serve({ fetch: app.fetch, port }, (info) => {
       logger.info(
@@ -315,7 +386,6 @@ async function startServer() {
         `  http://localhost:${info.port}/api     → REST API (OpenAPI docs)`
       );
       logger.info(`  http://localhost:${info.port}/api/rpc → RPC endpoint`);
-      logger.info(`  SSR: ${ssrEnabled ? 'Enabled' : 'Disabled'}`);
     });
   }
 }

@@ -1,27 +1,15 @@
 import { registerRemotes } from '@module-federation/enhanced/runtime';
-
-interface RuntimeConfig {
-  env: 'development' | 'production';
-  title: string;
-  hostUrl: string;
-  ui: {
-    name: string;
-    url: string;
-    exposes: Record<string, string>;
-  };
-  apiBase: string;
-  rpcBase: string;
-}
+import type { WindowRuntimeConfig } from './types';
 
 declare global {
   interface Window {
-    __RUNTIME_CONFIG__?: RuntimeConfig;
+    __RUNTIME_CONFIG__?: WindowRuntimeConfig;
   }
 }
 
-let runtimeConfig: RuntimeConfig | null = null;
+let runtimeConfig: WindowRuntimeConfig | null = null;
 
-export function getRuntimeConfig(): RuntimeConfig {
+export function getRuntimeConfig(): WindowRuntimeConfig {
   if (!runtimeConfig) {
     throw new Error('Runtime config not initialized. Ensure window.__RUNTIME_CONFIG__ is set.');
   }

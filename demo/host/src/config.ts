@@ -14,6 +14,7 @@ interface BosConfig {
       name: string;
       development: string;
       production: string;
+      ssr?: string;
       exposes: Record<string, string>;
     };
     api: {
@@ -36,6 +37,7 @@ export interface RuntimeConfig {
   ui: {
     name: string;
     url: string;
+    ssrUrl?: string;
     source: SourceMode;
     exposes: Record<string, string>;
   };
@@ -77,6 +79,10 @@ export async function loadBosConfig(): Promise<RuntimeConfig> {
     ? config.app.api.production
     : config.app.api.development;
 
+  const ssrUrl = uiSource === 'remote' && config.app.ui.ssr
+    ? config.app.ui.ssr
+    : undefined;
+
   return {
     env,
     account: config.account,
@@ -85,6 +91,7 @@ export async function loadBosConfig(): Promise<RuntimeConfig> {
     ui: {
       name: config.app.ui.name,
       url: uiUrl,
+      ssrUrl,
       source: uiSource,
       exposes: config.app.ui.exposes,
     },

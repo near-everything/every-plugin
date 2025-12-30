@@ -1,15 +1,6 @@
-# checkout-ui
+# ui
 
-Checkout frontend for browsing products, managing cart, and checkout.
-
-## Tech Stack
-
-- **Framework**: React 19
-- **Routing**: TanStack Router (file-based)
-- **Data**: TanStack Query + oRPC client
-- **Styling**: Tailwind CSS v4
-- **Build**: Rsbuild + Module Federation
-- **Auth**: better-auth client
+Remote frontend module with TanStack Router.
 
 ## Module Federation
 
@@ -21,6 +12,7 @@ Exposed as remote module for host consumption via `remoteEntry.js`:
 | `./Router` | `router.tsx` | TanStack Router instance |
 | `./components` | `components/index.ts` | Reusable UI components |
 | `./providers` | `providers/index.tsx` | Context providers |
+| `./hooks` | `hooks/index.ts` | React hooks |
 | `./types` | `types/index.ts` | TypeScript types |
 
 **Shared dependencies** (singleton):
@@ -29,34 +21,46 @@ Exposed as remote module for host consumption via `remoteEntry.js`:
 - `@tanstack/react-query`, `@tanstack/react-router`
 - `@hot-labs/near-connect`, `near-kit`
 
-**Host configuration** (`host/remotes.json`):
+## Route Protection
 
-```json
-{
-  "checkout_ui": {
-    "url": "https://...",
-    "exposes": {
-      "App": "./App",
-      "Router": "./Router",
-      "components": "./components",
-      "providers": "./providers",
-      "types": "./types"
-    }
-  }
-}
-```
+File-based routing with auth guards via TanStack Router:
+
+- `_authenticated.tsx` - Requires login, redirects to `/login`
+- `_authenticated/_admin.tsx` - Requires admin role
+
+## Tech Stack
+
+- **Framework**: React 19
+- **Routing**: TanStack Router (file-based)
+- **Data**: TanStack Query + oRPC client
+- **Styling**: Tailwind CSS v4
+- **Build**: Rsbuild + Module Federation
+- **Auth**: better-auth client
 
 ## Available Scripts
 
 - `bun dev` - Start dev server (port 3002)
 - `bun build` - Build for production
-- `bun preview` - Preview production build
 - `bun typecheck` - Type checking
 
-## Project Structure
+## Configuration
 
-- `src/routes/` - File-based routes (TanStack Router)
-- `src/components/` - UI components (shadcn/ui)
-- `src/integrations/` - API integrations (oRPC client)
-- `src/hooks/` - React hooks (cart, favorites)
-- `src/providers/` - Context providers
+**bos.config.json**:
+
+```json
+{
+  "app": {
+    "ui": {
+      "name": "ui",
+      "development": "http://localhost:3002",
+      "production": "https://cdn.example.com/ui",
+      "exposes": {
+        "App": "./App",
+        "components": "./components",
+        "providers": "./providers",
+        "types": "./types"
+      }
+    }
+  }
+}
+```

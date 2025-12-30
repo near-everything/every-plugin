@@ -17,7 +17,7 @@
     "@hot-labs/near-connect": "^0.6.11",
     "@libsql/client": "^0.15.15",
     "@module-federation/enhanced": "^0.21.6",
-    "@module-federation/node": "^2.7.25",
+    "@module-federation/node": "^2.7.26",
     "@module-federation/rsbuild-plugin": "^0.21.6",
     "@module-federation/runtime": "^0.21.6",
     "@module-federation/runtime-core": "^0.21.6",
@@ -32,7 +32,7 @@
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.8",
     "drizzle-orm": "^0.45.1",
-    "every-plugin": "workspace:*",
+    "every-plugin": "*",
     "hono": "^4.6.0",
     "near-kit": "^0.6.3",
     "react": "^19.2.0",
@@ -46,6 +46,7 @@
     "@types/react-dom": "^19.2.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "zephyr-rsbuild-plugin": "^0.1.2"
+    "zephyr-rsbuild-plugin": "^0.1.2",
+    "web-vitals": "^5.1.0"
   }
 }

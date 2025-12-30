@@ -1,29 +1,95 @@
 import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import { initializeFederation } from './federation';
+import { createRoot, hydrateRoot } from 'react-dom/client';
+import { HydrationBoundary, QueryClientProvider, type DehydratedState } from '@tanstack/react-query';
+import { RouterProvider } from '@tanstack/react-router';
+import { RouterClient } from '@tanstack/react-router/ssr/client';
+import { loadRemote } from '@module-federation/enhanced/runtime';
+import { initializeFederation, getRuntimeConfig } from './federation';
+import type { RouterModule } from './types';
 
-const rootElement = document.getElementById('root');
-
-if (!rootElement) {
-  throw new Error('Root element not found');
+declare global {
+  interface Window {
+    __DEHYDRATED_STATE__?: DehydratedState;
+    __TSR_DEHYDRATED__?: unknown;
+  }
 }
 
-const pathname = window.location.pathname;
+async function render() {
+  await initializeFederation();
+  
+  const pathname = window.location.pathname;
+  
+  if (pathname === '/components') {
+    const rootElement = document.getElementById('root');
+    if (!rootElement) {
+      throw new Error('Root element not found for /components route');
+    }
+    const ComponentModule = await import('./components');
+    createRoot(rootElement).render(
+      <StrictMode>
+        <ComponentModule.default />
+      </StrictMode>
+    );
+    return;
+  }
 
-// Initialize federation before rendering
-initializeFederation().then(async () => {
-  const ComponentModule = pathname === '/components'
-    ? await import('./components')
-    : await import('./main');
+  const config = getRuntimeConfig();
+  
+  const routerModule = await loadRemote<RouterModule>(`${config.ui.name}/Router`);
+  
+  if (!routerModule) {
+    throw new Error(`Failed to load Router module from ${config.ui.name}`);
+  }
 
-  const RootComponent = ComponentModule.default;
+  const { env, title, hostUrl, apiBase, rpcBase } = config;
+  const { router, queryClient } = routerModule.createRouter({
+    context: {
+      assetsUrl: config.ui.url,
+      runtimeConfig: { env, title, hostUrl, apiBase, rpcBase },
+    },
+  });
+  
+  const dehydratedState = window.__DEHYDRATED_STATE__;
+  const isSSR = !!window.__TSR_DEHYDRATED__;
 
-  createRoot(rootElement!).render(
-    <StrictMode>
-      <RootComponent />
-    </StrictMode>
-  );
-}).catch((error) => {
-  console.error('Failed to initialize federation:', error);
-  document.body.innerHTML = '<div style="color: red; padding: 20px;">Failed to initialize application. Check console for details.</div>';
+  if (isSSR) {
+    const ssrApp = (
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <HydrationBoundary state={dehydratedState}>
+            <RouterClient router={router} />
+          </HydrationBoundary>
+        </QueryClientProvider>
+      </StrictMode>
+    );
+
+    hydrateRoot(document, ssrApp);
+    console.log('[Client] Hydrated SSR');
+  } else {
+    const csrApp = (
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <HydrationBoundary state={dehydratedState}>
+            <RouterProvider router={router} />
+          </HydrationBoundary>
+        </QueryClientProvider>
+      </StrictMode>
+    );
+
+    const rootElement = document.getElementById('root');
+    if (!rootElement) {
+      throw new Error('Root element not found');
+    }
+    
+    createRoot(rootElement).render(csrApp);
+    console.log('[Client] Rendered CSR');
+  }
+}
+
+render().catch((error) => {
+  console.error('Failed to initialize:', error);
+  const rootElement = document.getElementById('root');
+  if (rootElement && !rootElement.hasChildNodes()) {
+    rootElement.innerHTML = '<div style="color: red; padding: 20px;">Failed to initialize. Check console.</div>';
+  }
 });

@@ -141,7 +141,7 @@ export default defineConfig({
         attrs: {
           rel: 'preload',
           href: `${uiUrl}/remoteEntry.js`,
-          as: 'fetch',
+          as: 'script',
           crossorigin: 'anonymous',
         },
         head: true,

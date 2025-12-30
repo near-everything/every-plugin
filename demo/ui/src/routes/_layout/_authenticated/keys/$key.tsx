@@ -12,6 +12,26 @@ export const Route = createFileRoute("/_layout/_authenticated/keys/$key")({
       return { error: error as Error, data: null };
     }
   },
+  head: ({ params, loaderData }) => {
+    const keyName = params.key;
+    const hasData = loaderData?.data !== null;
+    const title = `Key: ${keyName} | demo.everything`;
+    const description = hasData
+      ? `View the value for key "${keyName}" in the key-value store.`
+      : `Key "${keyName}" not found in the store.`;
+
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:type", content: "article" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+      ],
+    };
+  },
   component: KeyValue,
 });
 

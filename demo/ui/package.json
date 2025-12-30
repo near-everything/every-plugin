@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "rsbuild dev",
-    "build": "rsbuild build",
+    "build": "bun run build:client && bun run build:server",
+    "build:client": "BUILD_TARGET=client rsbuild build",
+    "build:server": "BUILD_TARGET=server rsbuild build",
     "preview": "rsbuild preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
@@ -61,6 +63,7 @@
   },
   "devDependencies": {
     "@module-federation/enhanced": "^0.21.6",
+    "@module-federation/node": "^2.7.26",
     "@module-federation/rsbuild-plugin": "^0.21.6",
     "@rsbuild/core": "^1.6.12",
     "@rsbuild/plugin-react": "^1.4.2",
@@ -75,7 +78,6 @@
     "tailwindcss": "^4.1.17",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4",
-    "web-vitals": "^5.1.0",
     "zephyr-rsbuild-plugin": "^0.1.2"
   }
 }

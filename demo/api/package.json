@@ -24,7 +24,7 @@
     "@rspack/core": "^1.6.8",
     "@types/node": "^25.0.3",
     "dotenv": "^17.2.3",
-    "every-plugin": "workspace:*",
+    "every-plugin": "*",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4",
     "zephyr-rspack-plugin": "^0.1.2"

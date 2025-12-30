@@ -1,12 +1,12 @@
 # host
 
-Server host for the application with authentication and Module Federation.
+Server host with authentication and Module Federation.
 
 ## Architecture
 
-The host orchestrates two federation systems:
+The host orchestrates both UI and API federation:
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────┐
 │                        host                             │
 │                                                         │
@@ -15,15 +15,12 @@ The host orchestrates two federation systems:
 │  │  Hono.js + oRPC handlers                       │     │
 │  └────────────────────────────────────────────────┘     │
 │           ↑                         ↑                   │
+│           │      bos.config.json    │                   │
+│           │    (single source)      │                   │
 │  ┌────────┴────────┐       ┌────────┴────────┐          │
-│  │ remotes.json    │       │ registry.json   │          │
 │  │ UI Federation   │       │ API Plugins     │          │
+│  │ (remoteEntry)   │       │ (every-plugin)  │          │
 │  └────────┬────────┘       └────────┬────────┘          │
-│           ↓                         ↓                   │
-│  ┌─────────────────┐       ┌─────────────────┐          │
-│  │ Module Fed      │       │ every-plugin    │          │
-│  │ runtime         │       │ runtime         │          │
-│  └─────────────────┘       └─────────────────┘          │
 │           ↓                         ↓                   │
 │  ┌─────────────────┐       ┌─────────────────┐          │
 │  │ React app       │       │ oRPC router     │          │
@@ -32,60 +29,52 @@ The host orchestrates two federation systems:
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Federation
+## Configuration
 
-**UI Remotes** (`remotes.json`):
-
-```json
-{
-  "ui": {
-    "url": "https://...",
-    "exposes": {
-      "App": "./App",
-      "Router": "./Router",
-      "components": "./components",
-      "providers": "./providers"
-    }
-  }
-}
-```
-
-**API Plugins** (`registry.json`):
+All configuration from `bos.config.json`:
 
 ```json
 {
-  "plugins": {
+  "account": "example.near",
+  "app": {
+    "host": {
+      "title": "App Title",
+      "development": "http://localhost:3001",
+      "production": "https://example.com"
+    },
+    "ui": {
+      "name": "ui",
+      "development": "http://localhost:3002",
+      "production": "https://cdn.example.com/ui"
+    },
     "api": {
-      "remote": "https://...",
-      "secrets": {
-        "STRIPE_SECRET_KEY": "{{STRIPE_SECRET_KEY}}"
-      }
+      "name": "api",
+      "development": "http://localhost:3014",
+      "production": "https://cdn.example.com/api",
+      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN"]
     }
   }
 }
 ```
 
-**Router Composition** (`routers/index.ts`):
+**Environment Variables:**
 
-```typescript
-return {
-  ...baseRouter,           // /health, /status
-  ...plugins.api.router,   // plugin routes
-}
-```
+- `UI_SOURCE` - `local` or `remote` (defaults based on NODE_ENV)
+- `API_SOURCE` - `local` or `remote` (defaults based on NODE_ENV)
+- `API_PROXY` - Proxy API requests to another host
 
 ## Tech Stack
 
 - **Server**: Hono.js + @hono/node-server
 - **API**: oRPC (RPC + OpenAPI)
-- **Auth**: Better-Auth + better-near-auth
+- **Auth**: Better-Auth + better-near-auth (SIWN)
 - **Database**: SQLite (libsql) + Drizzle ORM
 - **Build**: Rsbuild + Module Federation
 - **Plugins**: every-plugin runtime
 
 ## Available Scripts
 
-- `bun dev` - Start dev server (API: 3000, UI: 3001)
+- `bun dev` - Start dev server (port 3001)
 - `bun build` - Build for production
 - `bun preview` - Run production server
 - `bun db:migrate` - Run migrations
@@ -93,26 +82,7 @@ return {
 
 ## API Routes
 
+- `/health` - Health check
 - `/api/auth/*` - Authentication endpoints (Better-Auth)
 - `/api/rpc/*` - RPC endpoint (batching supported)
 - `/api/*` - REST API (OpenAPI spec)
-- `/api/webhooks/stripe` - Stripe webhook handler
-- `/api/webhooks/fulfillment` - Fulfillment webhook handler
-- `/health` - Health check
-
-## Adding New Plugins
-
-1. Add plugin to `registry.json`:
-```json
-{
-  "plugins": {
-    "new-plugin": {
-      "remote": "https://plugin-url...",
-      "variables": {},
-      "secrets": {}
-    }
-  }
-}
-```
-
-2. Plugin router is automatically merged in `routers/index.ts`
