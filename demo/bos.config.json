@@ -10,14 +10,14 @@
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1331-ui-every-plugin-near-everything-739619432-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1345-ui-every-plugin-near-everything-7ebc15930-ze.zephyrcloud.app",
       "exposes": {
         "App": "./App",
         "components": "./components",
         "providers": "./providers",
         "types": "./types"
       },
-      "ssr": "https://elliot-braem-1332-ui-every-plugin-near-everything-aba644b1a-ze.zephyrcloud.app"
+      "ssr": "https://elliot-braem-1346-ui-every-plugin-near-everything-a7acfbeb6-ze.zephyrcloud.app"
     },
     "api": {
       "name": "api",

@@ -6,6 +6,8 @@
     "dev": "BOS_CONFIG_PATH=../bos.config.json tsx server.ts",
     "build": "rsbuild build",
     "preview": "NODE_ENV=production BOS_CONFIG_PATH=../bos.config.json tsx server.ts",
+    "test": "NODE_ENV=production BOS_CONFIG_PATH=../bos.config.json vitest run",
+    "test:watch": "NODE_ENV=production BOS_CONFIG_PATH=../bos.config.json vitest",
     "typecheck": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
@@ -46,7 +48,9 @@
     "@types/react-dom": "^19.2.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "zephyr-rsbuild-plugin": "^0.1.2",
-    "web-vitals": "^5.1.0"
+    "vite-tsconfig-paths": "^6.0.3",
+    "vitest": "^3.2.4",
+    "web-vitals": "^5.1.0",
+    "zephyr-rsbuild-plugin": "^0.1.2"
   }
 }

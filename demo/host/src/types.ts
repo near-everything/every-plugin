@@ -30,6 +30,15 @@ export interface HeadData {
   scripts: HeadScript[];
 }
 
+export interface DebugRouteMatch {
+  routeId: string;
+  params: Record<string, string>;
+  hasHead: boolean;
+  hasLoader: boolean;
+  headType: string;
+  loaderType: string;
+}
+
 export type RouterModule = {
   createRouter: (opts?: CreateRouterOptions) => {
     router: AnyRouter;
@@ -39,6 +48,7 @@ export type RouterModule = {
     pathname: string,
     context?: Partial<RouterContext>
   ) => Promise<HeadData>;
+  debugMatchRoutes: (pathname: string) => DebugRouteMatch[];
   routeTree: AnyRouter["routeTree"];
 };
 
