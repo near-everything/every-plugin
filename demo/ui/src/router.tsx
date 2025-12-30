@@ -1,13 +1,15 @@
+import { QueryClient } from "@tanstack/react-query";
 import {
-  createRouter as createTanStackRouter,
   createBrowserHistory,
-} from '@tanstack/react-router';
-import { QueryClient } from '@tanstack/react-query';
-import { routeTree } from './routeTree.gen';
-import type { CreateRouterOptions, RouterContext } from './types';
-import './styles.css';
+  createRouter as createTanStackRouter,
+} from "@tanstack/react-router";
+import { routeTree } from "./routeTree.gen";
+import "./styles.css";
+import type { CreateRouterOptions } from "./types";
 
-export type { RouterContext, CreateRouterOptions, RouterModule, ClientRuntimeConfig } from './types';
+export type {
+  ClientRuntimeConfig, CreateRouterOptions, RouterContext, RouterModule
+} from "./types";
 
 function NotFoundComponent() {
   return (
@@ -51,16 +53,18 @@ function ErrorComponent({ error }: { error: Error }) {
 }
 
 export function createRouter(opts: CreateRouterOptions = {}) {
-  const queryClient = opts.context?.queryClient ?? new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 5 * 60 * 1000,
-        gcTime: 30 * 60 * 1000,
-        refetchOnWindowFocus: false,
-        retry: 1,
+  const queryClient =
+    opts.context?.queryClient ??
+    new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 5 * 60 * 1000,
+          gcTime: 30 * 60 * 1000,
+          refetchOnWindowFocus: false,
+          retry: 1,
+        },
       },
-    },
-  });
+    });
 
   const history = opts.history ?? createBrowserHistory();
 
@@ -69,10 +73,10 @@ export function createRouter(opts: CreateRouterOptions = {}) {
     history,
     context: {
       queryClient,
-      assetsUrl: opts.context?.assetsUrl ?? '',
+      assetsUrl: opts.context?.assetsUrl ?? "",
       runtimeConfig: opts.context?.runtimeConfig,
     },
-    defaultPreload: 'intent',
+    defaultPreload: "intent",
     scrollRestoration: true,
     defaultStructuralSharing: true,
     defaultPreloadStaleTime: 0,
@@ -85,8 +89,8 @@ export function createRouter(opts: CreateRouterOptions = {}) {
 
 export { routeTree };
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface Register {
-    router: ReturnType<typeof createRouter>['router'];
+    router: ReturnType<typeof createRouter>["router"];
   }
 }

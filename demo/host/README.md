@@ -45,7 +45,8 @@ All configuration from `bos.config.json`:
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://cdn.example.com/ui"
+      "production": "https://cdn.example.com/ui",
+      "ssr": "https://cdn.example.com/ui-ssr"
     },
     "api": {
       "name": "api",
@@ -59,9 +60,28 @@ All configuration from `bos.config.json`:
 
 **Environment Variables:**
 
-- `UI_SOURCE` - `local` or `remote` (defaults based on NODE_ENV)
-- `API_SOURCE` - `local` or `remote` (defaults based on NODE_ENV)
-- `API_PROXY` - Proxy API requests to another host
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `UI_SOURCE` | `local` or `remote` | Based on NODE_ENV |
+| `API_SOURCE` | `local` or `remote` | Based on NODE_ENV |
+| `API_PROXY` | Proxy API requests to another host URL | - |
+| `HOST_DATABASE_URL` | SQLite database URL for auth | `file:./database.db` |
+| `HOST_DATABASE_AUTH_TOKEN` | Auth token for remote database | - |
+| `BETTER_AUTH_SECRET` | Secret for session encryption | - |
+| `BETTER_AUTH_URL` | Base URL for auth endpoints | - |
+| `CORS_ORIGIN` | Comma-separated allowed origins | Host + UI URLs |
+
+### Proxy Mode
+
+Set `API_PROXY=true` or `API_PROXY=<url>` to proxy all `/api/*` requests to another host instead of loading the API plugin locally. Useful for:
+
+- Development against production API
+- Staging environments
+- Testing without running the API server
+
+```bash
+API_PROXY=https://production.example.com bun dev
+```
 
 ## Tech Stack
 
@@ -82,7 +102,9 @@ All configuration from `bos.config.json`:
 
 ## API Routes
 
-- `/health` - Health check
-- `/api/auth/*` - Authentication endpoints (Better-Auth)
-- `/api/rpc/*` - RPC endpoint (batching supported)
-- `/api/*` - REST API (OpenAPI spec)
+| Route | Description |
+|-------|-------------|
+| `/health` | Health check |
+| `/api/auth/*` | Authentication endpoints (Better-Auth) |
+| `/api/rpc/*` | RPC endpoint (batching supported) |
+| `/api/*` | REST API (OpenAPI spec at `/api`) |

@@ -8,7 +8,6 @@ Exposed as remote module for host consumption via `remoteEntry.js`:
 
 | Export | Path | Description |
 |--------|------|-------------|
-| `./App` | `bootstrap.tsx` | Main app component |
 | `./Router` | `router.tsx` | TanStack Router instance |
 | `./components` | `components/index.ts` | Reusable UI components |
 | `./providers` | `providers/index.tsx` | Context providers |
@@ -55,10 +54,11 @@ File-based routing with auth guards via TanStack Router:
       "development": "http://localhost:3002",
       "production": "https://cdn.example.com/ui",
       "exposes": {
-        "App": "./App",
-        "components": "./components",
-        "providers": "./providers",
-        "types": "./types"
+        "Router": "./router.tsx",
+        "components": "./components/index.ts",
+        "providers": "./providers/index.tsx",
+        "hooks": "./hooks/index.ts",
+        "types": "./types/index.ts"
       }
     }
   }

@@ -1,27 +1,21 @@
-import type { AnyRoute, AnyRouteMatch } from "@tanstack/react-router";
-import {
-  createMemoryHistory,
-  createRouter as createTanStackRouter,
-} from "@tanstack/react-router";
+import type { AnyRoute } from "@tanstack/react-router";
+import { createMemoryHistory, createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 import type {
-  RouterContext
+  HeadData,
+  HeadLink,
+  HeadMeta,
+  HeadScript,
+  RouterContext,
 } from "./types";
 
 export { createRouter, routeTree } from "./router";
 export type {
-  ClientRuntimeConfig, CreateRouterOptions, RouterContext
+  ClientRuntimeConfig,
+  CreateRouterOptions,
+  HeadData,
+  RouterContext,
 } from "./types";
-
-type HeadMeta = NonNullable<AnyRouteMatch["meta"]>[number];
-type HeadLink = NonNullable<AnyRouteMatch["links"]>[number];
-type HeadScript = NonNullable<AnyRouteMatch["headScripts"]>[number];
-
-export interface HeadData {
-  meta: HeadMeta[];
-  links: HeadLink[];
-  scripts: HeadScript[];
-}
 
 function getMetaKey(meta: HeadMeta): string {
   if (!meta) return "null";
@@ -44,41 +38,6 @@ function getScriptKey(script: HeadScript): string {
   if ("src" in script && script.src) return `src:${script.src}`;
   if ("children" in script && script.children) return `children:${typeof script.children === "string" ? script.children : JSON.stringify(script.children)}`;
   return JSON.stringify(script);
-}
-
-export interface DebugRouteMatch {
-  routeId: string;
-  params: Record<string, string>;
-  hasHead: boolean;
-  hasLoader: boolean;
-  headType: string;
-  loaderType: string;
-}
-
-export function debugMatchRoutes(pathname: string): DebugRouteMatch[] {
-  const history = createMemoryHistory({ initialEntries: [pathname] });
-  const router = createTanStackRouter({
-    routeTree,
-    history,
-    context: {
-      queryClient: undefined as never,
-      assetsUrl: "",
-      runtimeConfig: undefined,
-    },
-  });
-
-  const matches = router.matchRoutes(pathname);
-  return matches.map((match) => {
-    const route = router.looseRoutesById[match.routeId] as AnyRoute | undefined;
-    return {
-      routeId: match.routeId,
-      params: match.params as Record<string, string>,
-      hasHead: !!route?.options?.head,
-      hasLoader: !!route?.options?.loader,
-      headType: typeof route?.options?.head,
-      loaderType: typeof route?.options?.loader,
-    };
-  });
 }
 
 export async function getRouteHead(

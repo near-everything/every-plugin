@@ -51,6 +51,19 @@ export interface RuntimeConfig {
   };
 }
 
+export type ClientRuntimeConfig =
+  Pick<RuntimeConfig, 'env' | 'title' | 'hostUrl'> & {
+    apiBase: string;
+    rpcBase: string;
+  };
+
+export type WindowRuntimeConfig =
+  Pick<RuntimeConfig, 'env' | 'title' | 'hostUrl'> & {
+    ui: Pick<RuntimeConfig['ui'], 'name' | 'url' | 'exposes'>;
+    apiBase: string;
+    rpcBase: string;
+  };
+
 function resolveSource(envVar: string | undefined, env: string): SourceMode {
   if (envVar === 'local' || envVar === 'remote') return envVar;
   return env === 'production' ? 'remote' : 'local';

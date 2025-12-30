@@ -1,14 +1,13 @@
-import type { RouterContext } from "@/types";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import {
   ClientOnly,
   createRootRouteWithContext,
-  HeadContent,
   Outlet,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
+import type { RouterContext } from "@/types";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 
 export const Route = createRootRouteWithContext<RouterContext>()({
