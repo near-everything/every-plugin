@@ -19,6 +19,22 @@ export const contract = oc.router({
     }))
     .errors({ UNAUTHORIZED }),
 
+  listKeys: oc
+    .route({ method: 'GET', path: '/kv' })
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).optional(),
+      offset: z.number().int().min(0).optional(),
+    }))
+    .output(z.object({
+      keys: z.array(z.object({
+        key: z.string(),
+        updatedAt: z.iso.datetime(),
+      })),
+      total: z.number(),
+      hasMore: z.boolean(),
+    }))
+    .errors({ UNAUTHORIZED }),
+
   getValue: oc
     .route({ method: 'GET', path: '/kv/{key}' })
     .input(z.object({
@@ -43,6 +59,17 @@ export const contract = oc.router({
       created: z.boolean(),
     }))
     .errors({ FORBIDDEN, UNAUTHORIZED }),
+
+  deleteKey: oc
+    .route({ method: 'DELETE', path: '/kv/{key}' })
+    .input(z.object({
+      key: z.string(),
+    }))
+    .output(z.object({
+      key: z.string(),
+      deleted: z.boolean(),
+    }))
+    .errors({ NOT_FOUND, FORBIDDEN, UNAUTHORIZED }),
 });
 
 export type ContractType = typeof contract;

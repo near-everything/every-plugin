@@ -10,19 +10,19 @@
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1345-ui-every-plugin-near-everything-7ebc15930-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1355-ui-every-plugin-near-everything-416cdd46a-ze.zephyrcloud.app",
       "exposes": {
         "App": "./App",
         "components": "./components",
         "providers": "./providers",
         "types": "./types"
       },
-      "ssr": "https://elliot-braem-1346-ui-every-plugin-near-everything-a7acfbeb6-ze.zephyrcloud.app"
+      "ssr": "https://elliot-braem-1356-ui-every-plugin-near-everything-f5fae457d-ze.zephyrcloud.app"
     },
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://elliot-braem-1292-api-every-plugin-near-everythin-72fb0666b-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1357-api-every-plugin-near-everythin-6cf8713c4-ze.zephyrcloud.app",
       "variables": {},
       "secrets": [
         "API_DATABASE_URL",

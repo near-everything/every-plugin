@@ -44,7 +44,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",
-    "near-kit": "^0.6.x",
+    "near-kit": "^0.7.0",
     "next-themes": "^0.4.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -57,7 +57,7 @@
     "@hot-labs/near-connect": "^0.6.x",
     "@tanstack/react-query": "^5.x",
     "@tanstack/react-router": "^1.x",
-    "near-kit": "^0.6.x",
+    "near-kit": "^0.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

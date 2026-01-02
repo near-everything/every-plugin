@@ -52,6 +52,10 @@ function ErrorComponent({ error }: { error: Error }) {
   );
 }
 
+function PendingComponent() {
+  return <div className="min-h-screen w-full bg-background" />;
+}
+
 export function createRouter(opts: CreateRouterOptions = {}) {
   const queryClient =
     opts.context?.queryClient ??
@@ -82,6 +86,8 @@ export function createRouter(opts: CreateRouterOptions = {}) {
     defaultPreloadStaleTime: 0,
     defaultNotFoundComponent: NotFoundComponent,
     defaultErrorComponent: ErrorComponent,
+    defaultPendingComponent: PendingComponent,
+    defaultPendingMinMs: 100,
   });
 
   return { router, queryClient };

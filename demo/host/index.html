@@ -6,8 +6,27 @@
     <!--__RUNTIME_CONFIG__-->
     <!--__REMOTE_PRELOAD__-->
 
+    <script>
+      (function () {
+        var t = localStorage.getItem("theme");
+        if (
+          t === "dark" ||
+          (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)
+        ) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
+
     <style>
-      /* Minimal shell reset - does NOT style the app */
+      :root {
+        --host-bg: #ffffff;
+        --host-fg: #171717;
+      }
+      .dark {
+        --host-bg: #1c1c1e;
+        --host-fg: #fafafa;
+      }
       *,
       *::before,
       *::after {
@@ -17,14 +36,20 @@
         height: 100%;
         -webkit-text-size-adjust: 100%;
         text-size-adjust: 100%;
+        color-scheme: light dark;
       }
       body {
         min-height: 100%;
+        margin: 0;
+        background-color: var(--host-bg);
+        color: var(--host-fg);
         -webkit-tap-highlight-color: transparent;
         touch-action: manipulation;
+        transition: background-color 0.2s ease;
       }
       #root {
         min-height: 100vh;
+        background-color: var(--host-bg);
       }
       @supports (min-height: 100dvh) {
         #root {

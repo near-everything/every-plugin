@@ -78,12 +78,20 @@ function Dashboard() {
         <span className="text-xs text-muted-foreground font-mono">
           {accountId}
         </span>
-        <Link
-          to="/dashboard"
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-        >
-          admin
-        </Link>
+        <div className="flex gap-4">
+          <Link
+            to="/keys"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+          >
+            my keys
+          </Link>
+          <Link
+            to="/dashboard"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+          >
+            admin
+          </Link>
+        </div>
       </div>
 
       <div className="space-y-6">

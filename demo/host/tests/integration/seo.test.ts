@@ -312,6 +312,84 @@ describe("SEO Head Extraction", () => {
         expect((titleMeta as { title: string }).title).toContain(key);
       }
     });
+
+    it("includes og:image meta tag", async () => {
+      const head = await routerModule.getRouteHead(`/keys/${testKey}`, {
+        assetsUrl: config.ui.url,
+        runtimeConfig: {
+          env: config.env,
+          title: config.title,
+          hostUrl: config.hostUrl,
+          apiBase: "/api",
+          rpcBase: "/api/rpc",
+        },
+      });
+
+      const ogImage = head.meta.find(
+        (m) =>
+          m &&
+          typeof m === "object" &&
+          "property" in m &&
+          (m as { property: string }).property === "og:image"
+      );
+      expect(ogImage).toBeDefined();
+      expect((ogImage as { content: string }).content).toBeTruthy();
+      expect((ogImage as { content: string }).content).toContain("data:image/svg+xml;base64,");
+    });
+
+    it("includes twitter:image meta tag", async () => {
+      const head = await routerModule.getRouteHead(`/keys/${testKey}`, {
+        assetsUrl: config.ui.url,
+        runtimeConfig: {
+          env: config.env,
+          title: config.title,
+          hostUrl: config.hostUrl,
+          apiBase: "/api",
+          rpcBase: "/api/rpc",
+        },
+      });
+
+      const twitterImage = head.meta.find(
+        (m) =>
+          m &&
+          typeof m === "object" &&
+          "name" in m &&
+          (m as { name: string }).name === "twitter:image"
+      );
+      expect(twitterImage).toBeDefined();
+      expect((twitterImage as { content: string }).content).toBeTruthy();
+      expect((twitterImage as { content: string }).content).toContain("data:image/svg+xml;base64,");
+    });
+
+    it("generates valid SVG data URL for og:image", async () => {
+      const head = await routerModule.getRouteHead(`/keys/${testKey}`, {
+        assetsUrl: config.ui.url,
+        runtimeConfig: {
+          env: config.env,
+          title: config.title,
+          hostUrl: config.hostUrl,
+          apiBase: "/api",
+          rpcBase: "/api/rpc",
+        },
+      });
+
+      const ogImage = head.meta.find(
+        (m) =>
+          m &&
+          typeof m === "object" &&
+          "property" in m &&
+          (m as { property: string }).property === "og:image"
+      );
+      const content = (ogImage as { content: string }).content;
+      const base64Part = content.replace("data:image/svg+xml;base64,", "");
+      const svgContent = atob(base64Part);
+      
+      expect(svgContent).toContain("<svg");
+      expect(svgContent).toContain("width=\"1200\"");
+      expect(svgContent).toContain("height=\"630\"");
+      expect(svgContent).toContain("fill=\"#171717\"");
+      expect(svgContent).toContain(testKey);
+    });
   });
 
   describe("HTML Rendering", () => {

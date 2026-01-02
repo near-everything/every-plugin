@@ -57,6 +57,20 @@ export default createPlugin({
         timestamp: new Date().toISOString(),
       })),
 
+      listKeys: builder.listKeys
+        .use(authed)
+        .handler(async ({ input, context }) => {
+          const exit = await Effect.runPromiseExit(
+            services.listKeys(context.owner, input.limit, input.offset)
+          );
+
+          if (Exit.isFailure(exit)) {
+            throw Cause.squash(exit.cause);
+          }
+
+          return exit.value;
+        }),
+
       getValue: builder.getValue
         .use(authed)
         .handler(async ({ input, context, errors }) => {
@@ -100,6 +114,35 @@ export default createPlugin({
                 message: "Access denied",
                 data: { action: "write" },
               });
+            }
+            throw error;
+          }
+
+          return exit.value;
+        }),
+
+      deleteKey: builder.deleteKey
+        .use(authed)
+        .handler(async ({ input, context, errors }) => {
+          const exit = await Effect.runPromiseExit(
+            services.deleteKey(input.key, context.owner)
+          );
+
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause);
+            if (error instanceof ORPCError) {
+              if (error.code === "NOT_FOUND") {
+                throw errors.NOT_FOUND({
+                  message: "Key not found",
+                  data: { resource: "kv", resourceId: input.key },
+                });
+              }
+              if (error.code === "FORBIDDEN") {
+                throw errors.FORBIDDEN({
+                  message: "Access denied",
+                  data: { action: "delete" },
+                });
+              }
             }
             throw error;
           }

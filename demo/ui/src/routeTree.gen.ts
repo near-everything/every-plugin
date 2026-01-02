@@ -17,6 +17,7 @@ import { Route as LayoutAuthenticatedIndexRouteImport } from './routes/_layout/_
 import { Route as LayoutPageTermsOfServiceRouteImport } from './routes/_layout/_page/terms-of-service'
 import { Route as LayoutPagePrivacyPolicyRouteImport } from './routes/_layout/_page/privacy-policy'
 import { Route as LayoutAuthenticatedAdminRouteImport } from './routes/_layout/_authenticated/_admin'
+import { Route as LayoutAuthenticatedKeysIndexRouteImport } from './routes/_layout/_authenticated/keys/index'
 import { Route as LayoutAuthenticatedKeysKeyRouteImport } from './routes/_layout/_authenticated/keys/$key'
 import { Route as LayoutAuthenticatedAdminDashboardRouteImport } from './routes/_layout/_authenticated/_admin/dashboard'
 
@@ -59,6 +60,12 @@ const LayoutAuthenticatedAdminRoute =
     id: '/_admin',
     getParentRoute: () => LayoutAuthenticatedRoute,
   } as any)
+const LayoutAuthenticatedKeysIndexRoute =
+  LayoutAuthenticatedKeysIndexRouteImport.update({
+    id: '/keys/',
+    path: '/keys/',
+    getParentRoute: () => LayoutAuthenticatedRoute,
+  } as any)
 const LayoutAuthenticatedKeysKeyRoute =
   LayoutAuthenticatedKeysKeyRouteImport.update({
     id: '/keys/$key',
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/': typeof LayoutAuthenticatedIndexRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
+  '/keys': typeof LayoutAuthenticatedKeysIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LayoutLoginRoute
@@ -87,6 +95,7 @@ export interface FileRoutesByTo {
   '/': typeof LayoutAuthenticatedIndexRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
+  '/keys': typeof LayoutAuthenticatedKeysIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -100,6 +109,7 @@ export interface FileRoutesById {
   '/_layout/_authenticated/': typeof LayoutAuthenticatedIndexRoute
   '/_layout/_authenticated/_admin/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/_layout/_authenticated/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
+  '/_layout/_authenticated/keys/': typeof LayoutAuthenticatedKeysIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/keys/$key'
+    | '/keys'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/keys/$key'
+    | '/keys'
   id:
     | '__root__'
     | '/_layout'
@@ -130,6 +142,7 @@ export interface FileRouteTypes {
     | '/_layout/_authenticated/'
     | '/_layout/_authenticated/_admin/dashboard'
     | '/_layout/_authenticated/keys/$key'
+    | '/_layout/_authenticated/keys/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAuthenticatedAdminRouteImport
       parentRoute: typeof LayoutAuthenticatedRoute
     }
+    '/_layout/_authenticated/keys/': {
+      id: '/_layout/_authenticated/keys/'
+      path: '/keys'
+      fullPath: '/keys'
+      preLoaderRoute: typeof LayoutAuthenticatedKeysIndexRouteImport
+      parentRoute: typeof LayoutAuthenticatedRoute
+    }
     '/_layout/_authenticated/keys/$key': {
       id: '/_layout/_authenticated/keys/$key'
       path: '/keys/$key'
@@ -230,12 +250,14 @@ interface LayoutAuthenticatedRouteChildren {
   LayoutAuthenticatedAdminRoute: typeof LayoutAuthenticatedAdminRouteWithChildren
   LayoutAuthenticatedIndexRoute: typeof LayoutAuthenticatedIndexRoute
   LayoutAuthenticatedKeysKeyRoute: typeof LayoutAuthenticatedKeysKeyRoute
+  LayoutAuthenticatedKeysIndexRoute: typeof LayoutAuthenticatedKeysIndexRoute
 }
 
 const LayoutAuthenticatedRouteChildren: LayoutAuthenticatedRouteChildren = {
   LayoutAuthenticatedAdminRoute: LayoutAuthenticatedAdminRouteWithChildren,
   LayoutAuthenticatedIndexRoute: LayoutAuthenticatedIndexRoute,
   LayoutAuthenticatedKeysKeyRoute: LayoutAuthenticatedKeysKeyRoute,
+  LayoutAuthenticatedKeysIndexRoute: LayoutAuthenticatedKeysIndexRoute,
 }
 
 const LayoutAuthenticatedRouteWithChildren =

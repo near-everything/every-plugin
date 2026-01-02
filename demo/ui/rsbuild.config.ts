@@ -96,6 +96,9 @@ function createClientConfig() {
     source: {
       define: {
         "import.meta.env.PUBLIC_ACCOUNT_ID": JSON.stringify(bosConfig.account),
+        "import.meta.env.BETTER_AUTH_URL": JSON.stringify(
+          bosConfig.app.host[isProduction ? "production" : "development"]
+        ),
       },
     },
     resolve: {
@@ -175,6 +178,9 @@ function createServerConfig() {
       },
       define: {
         "import.meta.env.PUBLIC_ACCOUNT_ID": JSON.stringify(bosConfig.account),
+        "import.meta.env.BETTER_AUTH_URL": JSON.stringify(
+          bosConfig.app.host[isProduction ? "production" : "development"]
+        ),
       },
     },
     resolve: {

@@ -24,7 +24,7 @@
         "@rspack/core": "^1.6.8",
         "@types/node": "^25.0.3",
         "dotenv": "^17.2.3",
-        "every-plugin": "*",
+        "every-plugin": "^0.8.3",
         "vite-tsconfig-paths": "^5.1.4",
         "vitest": "^3.2.4",
         "zephyr-rspack-plugin": "^0.1.2",
@@ -55,9 +55,9 @@
         "dotenv": "^17.2.3",
         "drizzle-kit": "^0.31.8",
         "drizzle-orm": "^0.45.1",
-        "every-plugin": "*",
+        "every-plugin": "^0.8.3",
         "hono": "^4.6.0",
-        "near-kit": "^0.6.3",
+        "near-kit": "^0.7.0",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
       },
@@ -109,7 +109,7 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "lucide-react": "^0.544.0",
-        "near-kit": "^0.6.x",
+        "near-kit": "^0.7.0",
         "next-themes": "^0.4.6",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
@@ -141,7 +141,7 @@
         "@hot-labs/near-connect": "^0.6.x",
         "@tanstack/react-query": "^5.x",
         "@tanstack/react-router": "^1.x",
-        "near-kit": "^0.6.x",
+        "near-kit": "^0.7.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
       },
@@ -2134,6 +2134,8 @@
 
     "host/@types/node": ["@types/node@22.19.3", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-1N9SBnWYOJTrNZCdh/yJE+t910Y128BoyY+zBLWhL3r0TYzlTmFdXrPwHL9DyFZmlEXNQQolTZh3KHV31QDhyA=="],
 
+    "host/near-kit": ["near-kit@0.7.0", "", { "dependencies": { "@napi-rs/keyring": "^1.2.0", "@noble/curves": "^2.0.1", "@noble/hashes": "^2.0.1", "@scure/base": "^2.0.0", "@scure/bip32": "^2.0.1", "@scure/bip39": "^2.0.1", "@zorsh/zorsh": "^0.4.0", "tar": "^7.5.2", "zod": "^4.1.12" }, "peerDependencies": { "@hot-labs/near-connect": ">=0.6.0", "@near-wallet-selector/core": ">=8.0.0" }, "optionalPeers": ["@hot-labs/near-connect", "@near-wallet-selector/core"] }, "sha512-mqE9i8QRq0DV/mky8RY+tO1kdx+yuQm3X5nuWiJAXqrfVe17SvDoMjyZpDWENSUqempiU22kBQX4OjGod4B96g=="],
+
     "host/vite-tsconfig-paths": ["vite-tsconfig-paths@6.0.3", "", { "dependencies": { "debug": "^4.1.1", "globrex": "^0.1.2", "tsconfck": "^3.0.3" }, "peerDependencies": { "vite": "*" }, "optionalPeers": ["vite"] }, "sha512-7bL7FPX/DSviaZGYUKowWF1AiDVWjMjxNbE8lyaVGDezkedWqfGhlnQ4BZXre0ZN5P4kAgIJfAlgFDVyjrCIyg=="],
 
     "hpack.js/readable-stream": ["readable-stream@2.3.8", "", { "dependencies": { "core-util-is": "~1.0.0", "inherits": "~2.0.3", "isarray": "~1.0.0", "process-nextick-args": "~2.0.0", "safe-buffer": "~5.1.1", "string_decoder": "~1.1.1", "util-deprecate": "~1.0.1" } }, "sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA=="],
@@ -2197,6 +2199,8 @@
     "type-is/mime-types": ["mime-types@3.0.2", "", { "dependencies": { "mime-db": "^1.54.0" } }, "sha512-Lbgzdk0h4juoQ9fCKXW4by0UJqj+nOOrI9MJ1sSj4nI8aI2eo1qmvQEie4VD1glsS250n15LsWsYtCugiStS5A=="],
 
     "ui/@types/node": ["@types/node@22.19.3", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-1N9SBnWYOJTrNZCdh/yJE+t910Y128BoyY+zBLWhL3r0TYzlTmFdXrPwHL9DyFZmlEXNQQolTZh3KHV31QDhyA=="],
+
+    "ui/near-kit": ["near-kit@0.7.0", "", { "dependencies": { "@napi-rs/keyring": "^1.2.0", "@noble/curves": "^2.0.1", "@noble/hashes": "^2.0.1", "@scure/base": "^2.0.0", "@scure/bip32": "^2.0.1", "@scure/bip39": "^2.0.1", "@zorsh/zorsh": "^0.4.0", "tar": "^7.5.2", "zod": "^4.1.12" }, "peerDependencies": { "@hot-labs/near-connect": ">=0.6.0", "@near-wallet-selector/core": ">=8.0.0" }, "optionalPeers": ["@hot-labs/near-connect", "@near-wallet-selector/core"] }, "sha512-mqE9i8QRq0DV/mky8RY+tO1kdx+yuQm3X5nuWiJAXqrfVe17SvDoMjyZpDWENSUqempiU22kBQX4OjGod4B96g=="],
 
     "unstorage/chokidar": ["chokidar@4.0.3", "", { "dependencies": { "readdirp": "^4.0.1" } }, "sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA=="],
 
