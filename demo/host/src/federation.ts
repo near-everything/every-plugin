@@ -23,12 +23,6 @@ export async function initializeFederation() {
   
   runtimeConfig = window.__RUNTIME_CONFIG__;
 
-  console.log('[Federation] Registering dynamic remote:', {
-    name: runtimeConfig.ui.name,
-    entry: `${runtimeConfig.ui.url}/remoteEntry.js`,
-    alias: runtimeConfig.ui.name,
-  });
-
   registerRemotes([
     {
       name: runtimeConfig.ui.name,

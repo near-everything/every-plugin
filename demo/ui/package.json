@@ -34,7 +34,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tabs": "^1.1.13",
     "@tanstack/react-devtools": "^0.7.11",
-    "@tanstack/react-query": "^5.x",
+    "@tanstack/react-query": "^5.90.11",
     "@tanstack/react-query-devtools": "^5.91.1",
     "@tanstack/react-router": "^1.x",
     "@tanstack/react-router-devtools": "^1.139.14",

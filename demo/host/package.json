@@ -34,6 +34,7 @@
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.8",
     "drizzle-orm": "^0.45.1",
+    "effect": "^3.19.14",
     "every-plugin": "^0.8.3",
     "hono": "^4.6.0",
     "near-kit": "^0.7.0",

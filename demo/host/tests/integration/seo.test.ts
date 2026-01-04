@@ -1,10 +1,15 @@
+import { Effect } from "effect";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { loadBosConfig, type RuntimeConfig } from "@/config";
-import { loadRouterModule } from "@/federation.server";
+import { loadBosConfig, type RuntimeConfig } from "@/services/config";
+import { loadRouterModule } from "@/services/federation.server";
 import type { HeadData, RouterModule } from "@/types";
 
+declare global {
+  var $apiClient: typeof mockApiClient;
+}
+
 const mockApiClient = {
-  getValue: vi.fn().mockImplementation(({ key }: { key: string }) => 
+  getValue: vi.fn().mockImplementation(({ key }: { key: string }) =>
     Promise.resolve({ key, value: `test-value-for-${key}` })
   ),
   setValue: vi.fn().mockResolvedValue({ success: true }),
@@ -73,9 +78,9 @@ describe("SEO Head Extraction", () => {
 
   beforeAll(async () => {
     globalThis.$apiClient = mockApiClient;
-    
+
     config = await loadBosConfig();
-    routerModule = await loadRouterModule(config);
+    routerModule = await Effect.runPromise(loadRouterModule(config));
   });
 
   describe("Module Federation", () => {
@@ -213,7 +218,7 @@ describe("SEO Head Extraction", () => {
           (s as { type: string }).type === "application/ld+json"
       );
       expect(jsonLd).toBeDefined();
-      
+
       const scriptObj = jsonLd as { children?: string };
       if (scriptObj.children) {
         const parsed = JSON.parse(scriptObj.children);
@@ -383,7 +388,7 @@ describe("SEO Head Extraction", () => {
       const content = (ogImage as { content: string }).content;
       const base64Part = content.replace("data:image/svg+xml;base64,", "");
       const svgContent = atob(base64Part);
-      
+
       expect(svgContent).toContain("<svg");
       expect(svgContent).toContain("width=\"1200\"");
       expect(svgContent).toContain("height=\"630\"");

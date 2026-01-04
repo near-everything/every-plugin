@@ -12,4 +12,4 @@ export type {
   RuntimeConfig,
   SourceMode,
   WindowRuntimeConfig,
-} from "./config";
+} from "./services/config";
