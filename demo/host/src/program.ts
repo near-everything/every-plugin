@@ -148,13 +148,13 @@ async function setupProductionRoutes(app: Hono, config: RuntimeConfig, routerMod
         });
 
         const headHtml = renderHeadToString(headData);
-        const indexHtml = await readFile(resolve(import.meta.dirname, "./dist/index.html"), "utf-8");
+        const indexHtml = await readFile(resolve(import.meta.dirname, "../dist/index.html"), "utf-8");
         const html = injectHeadAndConfig(indexHtml, config, headHtml);
 
         return c.html(html);
       } catch (error) {
         logger.error("[Head] Extraction error:", error);
-        const indexHtml = await readFile(resolve(import.meta.dirname, "./dist/index.html"), "utf-8");
+        const indexHtml = await readFile(resolve(import.meta.dirname, "../dist/index.html"), "utf-8");
         const injectedHtml = injectRuntimeConfig(indexHtml, config);
         return c.html(injectedHtml);
       }
@@ -163,7 +163,7 @@ async function setupProductionRoutes(app: Hono, config: RuntimeConfig, routerMod
     logger.info("[Head] Head extraction disabled - no ui.ssr URL configured");
 
     app.get("*", async (c) => {
-      const indexHtml = await readFile(resolve(import.meta.dirname, "./dist/index.html"), "utf-8");
+      const indexHtml = await readFile(resolve(import.meta.dirname, "../dist/index.html"), "utf-8");
       const injectedHtml = injectRuntimeConfig(indexHtml, config);
       return c.html(injectedHtml);
     });

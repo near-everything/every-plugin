@@ -40,16 +40,16 @@ export const createAuth = Effect.gen(function* () {
     },
     session: {
       cookieCache: {
-        enabled: true,
-        maxAge: 5 * 60,
-      },
+        enabled: process.env.NODE_ENV === "production",
+        maxAge: 5 * 60 // 5 minutes cache - reduces DB hits
+      }
     },
     advanced: {
       defaultCookieAttributes: {
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
-        httpOnly: true,
-      },
+        httpOnly: true
+      }
     },
   });
 });
