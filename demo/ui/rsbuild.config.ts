@@ -112,6 +112,26 @@ function createClientConfig() {
       client: {
         overlay: false,
       },
+      // setupMiddlewares: [
+      //   (middlewares) => {
+      //     middlewares.unshift((req: { url?: string }, res: import("node:http").ServerResponse, next: () => void) => {
+      //       if (req.url === "/remoteEntry.server.js") {
+      //         const filePath = path.join(__dirname, "dist/remoteEntry.server.js");
+      //         if (fs.existsSync(filePath)) {
+      //           res.setHeader("Content-Type", "application/javascript");
+      //           res.setHeader("Access-Control-Allow-Origin", "*");
+      //           fs.createReadStream(filePath).pipe(res);
+      //         } else {
+      //           res.statusCode = 503;
+      //           res.setHeader("Content-Type", "text/plain");
+      //           res.end("Server bundle not yet built. Run: bun build:server");
+      //         }
+      //       } else {
+      //         next();
+      //       }
+      //     });
+      //   },
+      // ],
     },
     server: {
       port: 3002,
@@ -120,6 +140,10 @@ function createClientConfig() {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
+      },
+      publicDir: {
+        name: "dist",
+        copyOnBuild: false,
       },
     },
     tools: {
@@ -199,10 +223,13 @@ function createServerConfig() {
           library: { type: "commonjs-module" },
         },
         externals: [
-          ...sharedDeps,
-          "react/jsx-runtime",
-          "react/jsx-dev-runtime",
-          "react-dom/server",
+          /^react$/,
+          /^react\//,
+          /^react-dom/,
+          /^@tanstack\/react-query/,
+          /^@tanstack\/react-router/,
+          /^@hot-labs\/near-connect/,
+          /^near-kit/,
           /^node:/,
         ],
         infrastructureLogging: { level: "error" },

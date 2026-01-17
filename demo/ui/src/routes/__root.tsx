@@ -2,7 +2,9 @@ import { TanStackDevtools } from "@tanstack/react-devtools";
 import {
   ClientOnly,
   createRootRouteWithContext,
+  HeadContent,
   Outlet,
+  Scripts,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { ThemeProvider } from "next-themes";
@@ -11,16 +13,15 @@ import type { RouterContext } from "@/types";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 
 export const Route = createRootRouteWithContext<RouterContext>()({
-  loader: ({ context }) => {
-    return {
-      assetsUrl: context.assetsUrl || "",
-      siteUrl: context.runtimeConfig?.hostUrl || "",
-    };
-  },
+  loader: ({ context }) => ({
+    assetsUrl: context.assetsUrl || "",
+    runtimeConfig: context.runtimeConfig,
+  }),
   head: ({ loaderData }) => {
     const assetsUrl = loaderData?.assetsUrl || "";
-    const siteUrl = loaderData?.siteUrl || "";
-    const title = "demo.everything";
+    const runtimeConfig = loaderData?.runtimeConfig;
+    const siteUrl = runtimeConfig?.hostUrl || "";
+    const title = runtimeConfig?.title || "demo.everything";
     const description =
       "Demo application showcasing Module Federation with SSR, TanStack Router, and oRPC";
     const siteName = "Every Demo";
@@ -73,8 +74,20 @@ export const Route = createRootRouteWithContext<RouterContext>()({
           href: `${assetsUrl}/apple-touch-icon.png`,
         },
         { rel: "manifest", href: `${assetsUrl}/manifest.json` },
+        {
+          rel: "preload",
+          href: `${assetsUrl}/remoteEntry.js`,
+          as: "script",
+          crossOrigin: "anonymous",
+        },
       ],
       scripts: [
+        {
+          children: `window.__RUNTIME_CONFIG__=${JSON.stringify(runtimeConfig)};`,
+        },
+        {
+          children: `(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}})();`,
+        },
         {
           type: "application/ld+json",
           children: JSON.stringify({
@@ -85,9 +98,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
             description,
           }),
         },
-        {
-          children: `(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}})();`,
-        },
       ],
     };
   },
@@ -96,21 +106,44 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
 function RootComponent() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <Outlet />
-      <Toaster position="bottom-right" richColors closeButton />
-      <ClientOnly>
-        <TanStackDevtools
-          config={{ position: "bottom-right" }}
-          plugins={[
-            {
-              name: "Tanstack Router",
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-            TanStackQueryDevtools,
-          ]}
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <HeadContent />
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              :root { --host-bg: #ffffff; --host-fg: #171717; }
+              .dark { --host-bg: #1c1c1e; --host-fg: #fafafa; }
+              *, *::before, *::after { box-sizing: border-box; }
+              html { height: 100%; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color-scheme: light dark; }
+              body { min-height: 100%; margin: 0; background-color: var(--host-bg); color: var(--host-fg); -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: background-color 0.2s ease; }
+              #root { min-height: 100vh; background-color: var(--host-bg); }
+              @supports (min-height: 100dvh) { #root { min-height: 100dvh; } }
+            `,
+          }}
         />
-      </ClientOnly>
-    </ThemeProvider>
+      </head>
+      <body>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <div id="root">
+            <Outlet />
+          </div>
+          <Toaster position="bottom-right" richColors closeButton />
+        </ThemeProvider>
+        <Scripts />
+        <ClientOnly>
+          <TanStackDevtools
+            config={{ position: "bottom-right" }}
+            plugins={[
+              {
+                name: "Tanstack Router",
+                render: <TanStackRouterDevtoolsPanel />,
+              },
+              TanStackQueryDevtools,
+            ]}
+          />
+        </ClientOnly>
+      </body>
+    </html>
   );
 }

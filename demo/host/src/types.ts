@@ -4,6 +4,8 @@ export type {
   HeadLink,
   HeadMeta,
   HeadScript,
+  RenderOptions,
+  RenderResult,
   RouterContext,
   RouterModule,
 } from "../../ui/src/types";

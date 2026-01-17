@@ -1,11 +1,16 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import type { AnyRoute } from "@tanstack/react-router";
 import { createMemoryHistory, createRouter as createTanStackRouter } from "@tanstack/react-router";
+import { createRequestHandler, renderRouterToStream, RouterServer } from "@tanstack/react-router/ssr/server";
+import { createRouter } from "./router";
 import { routeTree } from "./routeTree.gen";
 import type {
   HeadData,
   HeadLink,
   HeadMeta,
   HeadScript,
+  RenderOptions,
+  RenderResult,
   RouterContext,
 } from "./types";
 
@@ -14,6 +19,8 @@ export type {
   ClientRuntimeConfig,
   CreateRouterOptions,
   HeadData,
+  RenderOptions,
+  RenderResult,
   RouterContext,
 } from "./types";
 
@@ -118,5 +125,49 @@ export async function getRouteHead(
     meta: [...metaMap.values()],
     links: [...linkMap.values()],
     scripts: [...scriptMap.values()],
+  };
+}
+
+export async function renderToStream(
+  request: Request,
+  options: RenderOptions
+): Promise<RenderResult> {
+  const url = new URL(request.url);
+  const history = createMemoryHistory({ initialEntries: [url.pathname + url.search] });
+
+  let queryClientRef: typeof import("@tanstack/react-query").QueryClient.prototype | null = null;
+
+  const handler = createRequestHandler({
+    request,
+    createRouter: () => {
+      const { router, queryClient } = createRouter({
+        history,
+        context: {
+          assetsUrl: options.assetsUrl,
+          runtimeConfig: options.runtimeConfig,
+        },
+      });
+      queryClientRef = queryClient;
+      return router;
+    },
+  });
+
+  const response = await handler(({ request, responseHeaders, router }) =>
+    renderRouterToStream({
+      request,
+      responseHeaders,
+      router,
+      children: (
+        <QueryClientProvider client={queryClientRef!}>
+          <RouterServer router={router} />
+        </QueryClientProvider>
+      ),
+    }),
+  );
+
+  return {
+    stream: response.body!,
+    statusCode: response.status,
+    headers: new Headers(response.headers),
   };
 }

@@ -1,23 +1,29 @@
 {
   "account": "demo.everything.near",
+  "create": {
+    "project": "near-everything/every-plugin/demo",
+    "ui": "near-everything/every-plugin/demo/ui",
+    "api": "near-everything/every-plugin/demo/api",
+    "host": "near-everything/every-plugin/demo/host"
+  },
   "app": {
     "host": {
-      "title": "demo.everything",
-      "description": "Demo application",
+      "title": "demo | everything",
+      "description": "This is a demo application orchestrated by a bos.config.json in the project root.",
       "development": "http://localhost:3001",
       "production": "https://demo.everything.dev"
     },
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1363-ui-every-plugin-near-everything-a47b64640-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1525-ui-every-plugin-near-everything-0e7cc8a65-ze.zephyrcloud.app",
       "exposes": {
         "App": "./App",
         "components": "./components",
         "providers": "./providers",
         "types": "./types"
       },
-      "ssr": "https://elliot-braem-1364-ui-every-plugin-near-everything-7e2bc6283-ze.zephyrcloud.app"
+      "ssr": "https://elliot-braem-1526-ui-every-plugin-near-everything-ce627730b-ze.zephyrcloud.app"
     },
     "api": {
       "name": "api",

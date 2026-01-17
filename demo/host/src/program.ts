@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { createServer, type IncomingHttpHeaders } from "node:http";
-import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
@@ -9,13 +6,13 @@ import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { BatchHandlerPlugin } from "@orpc/server/plugins";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { createRsbuild, logger } from "@rsbuild/core";
+import { logger } from "@rsbuild/core";
 import { Effect, ManagedRuntime } from "effect";
 import { formatORPCError } from "every-plugin/errors";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { compress } from "hono/compress";
 import { cors } from "hono/cors";
-import rsbuildConfig from "../rsbuild.config";
+import { createServer, type IncomingHttpHeaders } from "node:http";
 import { FullServerLive } from "./layers";
 import { AuthService, type Auth } from "./services/auth";
 import { ConfigService, type RuntimeConfig } from "./services/config";
@@ -23,8 +20,7 @@ import { createRequestContext } from "./services/context";
 import type { Database } from "./services/database";
 import { DatabaseService } from "./services/database";
 import { loadRouterModule, type RouterModule } from "./services/federation.server";
-import { injectHeadAndConfig, injectRuntimeConfig, renderHeadToString } from "./services/html";
-import { type PluginResult, PluginsService } from "./services/plugins";
+import { PluginsService, type PluginResult } from "./services/plugins";
 import { createRouter } from "./services/router";
 
 function nodeHeadersToHeaders(nodeHeaders: IncomingHttpHeaders): Headers {
@@ -73,7 +69,7 @@ function setupApiRoutes(
     const proxyTarget = config.api.proxy!;
     logger.info(`[API] Proxy mode enabled → ${proxyTarget}`);
 
-    app.all("/api/*", async (c) => {
+    app.all("/api/*", async (c: Context) => {
       const response = await proxyRequest(c.req.raw, proxyTarget);
       return response;
     });
@@ -85,7 +81,7 @@ function setupApiRoutes(
 
   const rpcHandler = new RPCHandler(router, {
     plugins: [new BatchHandlerPlugin()],
-    interceptors: [onError((error) => formatORPCError(error))],
+    interceptors: [onError((error: unknown) => formatORPCError(error))],
   });
 
   const apiHandler = new OpenAPIHandler(router, {
@@ -101,12 +97,12 @@ function setupApiRoutes(
         },
       }),
     ],
-    interceptors: [onError((error) => formatORPCError(error))],
+    interceptors: [onError((error: unknown) => formatORPCError(error))],
   });
 
-  app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+  app.on(["POST", "GET"], "/api/auth/*", (c: Context) => auth.handler(c.req.raw));
 
-  app.all("/api/rpc/*", async (c) => {
+  app.all("/api/rpc/*", async (c: Context) => {
     const req = c.req.raw;
     const context = await createRequestContext(req, auth, db);
 
@@ -118,7 +114,7 @@ function setupApiRoutes(
     return result.response ? c.newResponse(result.response.body, result.response) : c.text("Not Found", 404);
   });
 
-  app.all("/api/*", async (c) => {
+  app.all("/api/*", async (c: Context) => {
     const req = c.req.raw;
     const context = await createRequestContext(req, auth, db);
 
@@ -131,43 +127,57 @@ function setupApiRoutes(
   });
 }
 
-async function setupProductionRoutes(app: Hono, config: RuntimeConfig, routerModule?: RouterModule) {
-  app.use("/*", serveStatic({ root: "./dist" }));
-
-  if (routerModule) {
-    logger.info("[Head] Remote Router module loaded for head extraction");
-
-    app.get("*", async (c) => {
-      try {
-        const url = new URL(c.req.url);
-        const { env, title, hostUrl } = config;
-
-        const headData = await routerModule.getRouteHead(url.pathname, {
-          assetsUrl: config.ui.url,
-          runtimeConfig: { env, title, hostUrl, apiBase: "/api", rpcBase: "/api/rpc" },
-        });
-
-        const headHtml = renderHeadToString(headData);
-        const indexHtml = await readFile(resolve(import.meta.dirname, "../dist/index.html"), "utf-8");
-        const html = injectHeadAndConfig(indexHtml, config, headHtml);
-
-        return c.html(html);
-      } catch (error) {
-        logger.error("[Head] Extraction error:", error);
-        const indexHtml = await readFile(resolve(import.meta.dirname, "../dist/index.html"), "utf-8");
-        const injectedHtml = injectRuntimeConfig(indexHtml, config);
-        return c.html(injectedHtml);
-      }
-    });
+function setupRoutes(app: Hono, config: RuntimeConfig, routerModule: RouterModule, isDev: boolean) {
+  if (isDev) {
+    app.use("/static/*", serveStatic({ root: "../ui/dist" }));
+    app.use("/favicon.ico", serveStatic({ root: "../ui/public" }));
+    app.use("/icon.svg", serveStatic({ root: "../ui/public" }));
+    app.use("/manifest.json", serveStatic({ root: "../ui/public" }));
   } else {
-    logger.info("[Head] Head extraction disabled - no ui.ssr URL configured");
-
-    app.get("*", async (c) => {
-      const indexHtml = await readFile(resolve(import.meta.dirname, "../dist/index.html"), "utf-8");
-      const injectedHtml = injectRuntimeConfig(indexHtml, config);
-      return c.html(injectedHtml);
-    });
+    app.use("/static/*", serveStatic({ root: "./dist" }));
+    app.use("/favicon.ico", serveStatic({ root: "./dist" }));
+    app.use("/icon.svg", serveStatic({ root: "./dist" }));
+    app.use("/manifest.json", serveStatic({ root: "./dist" }));
+    app.use("/robots.txt", serveStatic({ root: "./dist" }));
   }
+
+  logger.info("[SSR] Streaming SSR enabled - HTML generated by Router");
+
+  app.get("*", async (c: Context) => {
+    try {
+      const { env, title, hostUrl } = config;
+
+      const result = await routerModule.renderToStream(c.req.raw, {
+        assetsUrl: config.ui.url,
+        runtimeConfig: { env, title, hostUrl, apiBase: "/api", rpcBase: "/api/rpc" },
+      });
+
+      return new Response(result.stream, {
+        status: result.statusCode,
+        headers: result.headers,
+      });
+    } catch (error) {
+      logger.error("[SSR] Streaming error:", error);
+      return c.html(`
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <title>Server Error</title>
+            <style>
+              body { font-family: system-ui; padding: 2rem; background: #1c1c1e; color: #fafafa; }
+              pre { background: #2d2d2d; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+            </style>
+          </head>
+          <body>
+            <h1>Server Error</h1>
+            <p>An error occurred during server-side rendering.</p>
+            <pre>${error instanceof Error ? error.stack : String(error)}</pre>
+          </body>
+        </html>
+      `, 500);
+    }
+  });
 }
 
 export const startServer = Effect.gen(function* () {
@@ -194,57 +204,82 @@ export const startServer = Effect.gen(function* () {
     })
   );
 
-  app.use("/*", compress());
+  if (!isDev) {
+    app.use("/*", async (c, next) => {
+      const accept = c.req.header("accept") || "";
+      if (accept.includes("text/html")) {
+        return next();
+      }
+      return compress()(c, next);
+    });
+  }
 
-  app.get("/health", (c) => c.text("OK"));
+  app.get("/health", (c: Context) => c.text("OK"));
 
   setupApiRoutes(app, config, plugins, auth, db);
 
+  logger.info(`[Config] UI source: ${config.ui.source} → ${config.ui.url}`);
+  logger.info(`[Config] API source: ${config.api.source} → ${config.api.url}`);
+  if (config.api.proxy) {
+    logger.info(`[Config] API proxy: ${config.api.proxy}`);
+  }
+
+  const ssrUrl = isDev ? config.ui.url : config.ui.ssrUrl;
+  if (!ssrUrl) {
+    throw new Error("SSR URL not configured. Set app.ui.ssr in bos.config.json or use local development.");
+  }
+
+  logger.info(`[SSR] Loading Router module from ${ssrUrl}...`);
+  const routerModuleResult = yield* loadRouterModule(config).pipe(Effect.either);
+
+  if (routerModuleResult._tag === "Left") {
+    logger.error("[SSR] Failed to load Router module:", routerModuleResult.left);
+    throw new Error("Failed to load Router module for SSR");
+  }
+
+  const routerModule = routerModuleResult.right;
+  logger.info("[SSR] Router module loaded successfully");
+
+  setupRoutes(app, config, routerModule, isDev);
+
   if (isDev) {
-    logger.info(`[Config] UI source: ${config.ui.source} → ${config.ui.url}`);
-    logger.info(`[Config] API source: ${config.api.source} → ${config.api.url}`);
-    if (config.api.proxy) {
-      logger.info(`[Config] API proxy: ${config.api.proxy}`);
-    }
-
-    const rsbuild = yield* Effect.tryPromise(() =>
-      createRsbuild({
-        cwd: resolve(import.meta.dirname, ".."),
-        rsbuildConfig,
-      })
-    );
-
-    const devServer = yield* Effect.tryPromise(() => rsbuild.createDevServer());
-
-    const server = createServer((req, res) => {
+    const server = createServer(async (req, res) => {
       const url = req.url || "/";
+      const fetchReq = new Request(`http://localhost:${port}${url}`, {
+        method: req.method,
+        headers: nodeHeadersToHeaders(req.headers),
+        body: req.method !== "GET" && req.method !== "HEAD" ? req : undefined,
+        duplex: "half",
+      } as RequestInit);
 
-      if (url.startsWith("/api")) {
-        const fetchReq = new Request(`http://localhost:${port}${url}`, {
-          method: req.method,
-          headers: nodeHeadersToHeaders(req.headers),
-          body: req.method !== "GET" && req.method !== "HEAD" ? req : undefined,
-          duplex: "half",
-        } as RequestInit);
+      try {
+        const response = await app.fetch(fetchReq);
+        res.statusCode = response.status;
+        response.headers.forEach((value: string, key: string) => {
+          res.setHeader(key, value);
+        });
 
-        Promise.resolve(app.fetch(fetchReq))
-          .then(async (response: Response) => {
-            res.statusCode = response.status;
-            response.headers.forEach((value: string, key: string) => {
-              res.setHeader(key, value);
-            });
-            const body = await response.arrayBuffer();
-            res.end(Buffer.from(body));
-          })
-          .catch((err: Error) => {
-            logger.error("[API] Error handling request:", err);
-            res.statusCode = 500;
-            res.end("Internal Server Error");
-          });
-        return;
+        if (response.body) {
+          const reader = response.body.getReader();
+          const pump = async () => {
+            const { done, value } = await reader.read();
+            if (done) {
+              res.end();
+              return;
+            }
+            res.write(value);
+            await pump();
+          };
+          await pump();
+        } else {
+          const body = await response.arrayBuffer();
+          res.end(Buffer.from(body));
+        }
+      } catch (err) {
+        logger.error("[Server] Error handling request:", err);
+        res.statusCode = 500;
+        res.end("Internal Server Error");
       }
-
-      devServer.middlewares(req, res);
     });
 
     server.listen(port, () => {
@@ -252,26 +287,8 @@ export const startServer = Effect.gen(function* () {
       logger.info(`  http://localhost:${port}/api     → REST API (OpenAPI docs)`);
       logger.info(`  http://localhost:${port}/api/rpc → RPC endpoint`);
     });
-
-    devServer.afterListen();
-    devServer.connectWebSocket({ server });
   } else {
-    let routerModule: RouterModule | undefined;
-
-    if (config.ui.ssrUrl) {
-      logger.info("[Head] Loading Remote Router module for head extraction...");
-      const result = yield* loadRouterModule(config).pipe(Effect.either);
-      if (result._tag === "Right") {
-        routerModule = result.right;
-        logger.info("[Head] Remote Router module loaded successfully");
-      } else {
-        logger.warn("[Head] Failed to load Router module, continuing without head extraction");
-      }
-    }
-
-    yield* Effect.sync(() => setupProductionRoutes(app, config, routerModule));
-
-    serve({ fetch: app.fetch, port }, (info) => {
+    serve({ fetch: app.fetch, port }, (info: { port: number }) => {
       logger.info(`Host production server running at http://localhost:${info.port}`);
       logger.info(`  http://localhost:${info.port}/api     → REST API (OpenAPI docs)`);
       logger.info(`  http://localhost:${info.port}/api/rpc → RPC endpoint`);

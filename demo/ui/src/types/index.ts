@@ -33,6 +33,17 @@ export interface HeadData {
   scripts: HeadScript[];
 }
 
+export interface RenderOptions {
+  assetsUrl: string;
+  runtimeConfig: ClientRuntimeConfig;
+}
+
+export interface RenderResult {
+  stream: ReadableStream;
+  statusCode: number;
+  headers: Headers;
+}
+
 export interface RouterModule {
   createRouter: (opts?: CreateRouterOptions) => {
     router: AnyRouter;
@@ -42,5 +53,9 @@ export interface RouterModule {
     pathname: string,
     context?: Partial<RouterContext>
   ) => Promise<HeadData>;
+  renderToStream: (
+    request: Request,
+    options: RenderOptions
+  ) => Promise<RenderResult>;
   routeTree: AnyRouter["routeTree"];
 }

@@ -8,7 +8,6 @@ import pkg from './package.json';
 
 const __dirname = import.meta.dirname;
 const isProduction = process.env.NODE_ENV === 'production';
-const env = isProduction ? 'production' : 'development';
 
 const configPath = process.env.BOS_CONFIG_PATH ?? path.resolve(__dirname, '../bos.config.json');
 const bosConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -19,23 +18,6 @@ function resolveSource(envVar: string | undefined): 'local' | 'remote' {
 }
 
 const uiSource = resolveSource(process.env.UI_SOURCE);
-const uiUrl = uiSource === 'remote' ? bosConfig.app.ui.production : bosConfig.app.ui.development;
-
-function getClientRuntimeConfig() {
-  return {
-    env,
-    title: bosConfig.app.host.title,
-    hostUrl: bosConfig.app.host[env],
-    ui: {
-      name: bosConfig.app.ui.name,
-      url: uiUrl,
-      source: uiSource,
-      exposes: bosConfig.app.ui.exposes,
-    },
-    apiBase: '/api',
-    rpcBase: '/api/rpc',
-  };
-}
 
 function updateBosConfig(hostUrl: string) {
   try {
@@ -96,7 +78,7 @@ if (isProduction) {
   plugins.push(
     withZephyr({
       hooks: {
-        onDeployComplete: (info: any) => {
+        onDeployComplete: (info: { url: string }) => {
           console.log('🚀 Host Deployed:', info.url);
           updateBosConfig(info.url);
         },
@@ -119,36 +101,6 @@ export default defineConfig({
       index: './src/index.client.tsx',
     },
   },
-  html: {
-    template: './index.html',
-    title: bosConfig.app.host.title,
-    templateParameters: {
-      title: bosConfig.app.host.title,
-      description: bosConfig.app.host.description,
-    },
-    inject: 'body',
-    scriptLoading: 'defer',
-    tags: [
-      {
-        tag: 'script',
-        attrs: {},
-        children: `window.__RUNTIME_CONFIG__=${JSON.stringify(getClientRuntimeConfig())};`,
-        head: true,
-        append: false,
-      },
-      {
-        tag: 'link',
-        attrs: {
-          rel: 'preload',
-          href: `${uiUrl}/remoteEntry.js`,
-          as: 'script',
-          crossorigin: 'anonymous',
-        },
-        head: true,
-        append: true,
-      },
-    ],
-  },
   dev: {
     progressBar: false,
     client: {
@@ -157,7 +109,6 @@ export default defineConfig({
   },
   server: {
     port: 3001,
-    historyApiFallback: true,
   },
   tools: {
     rspack: {
@@ -172,5 +123,8 @@ export default defineConfig({
       root: 'dist',
     },
     assetPrefix: '/',
+    filename: {
+      js: 'static/js/[name].js',
+    },
   },
 });

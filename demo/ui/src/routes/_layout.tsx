@@ -1,4 +1,4 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   createFileRoute,
   Link,
@@ -11,12 +11,13 @@ import { sessionQueryOptions } from "../lib/session";
 import { queryClient } from "../utils/orpc";
 
 export const Route = createFileRoute("/_layout")({
+  ssr: "data-only",
   component: Layout,
 });
 
 function Layout() {
   const router = useRouter();
-  const { data: session } = useSuspenseQuery(sessionQueryOptions);
+  const { data: session, isLoading } = useQuery(sessionQueryOptions);
   const accountId = session?.user?.id;
 
   const handleSignOut = async () => {

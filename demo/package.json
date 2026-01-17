@@ -4,9 +4,12 @@
   "workspaces": [
     "api",
     "ui",
-    "host"
+    "host",
+    "cli"
   ],
   "scripts": {
+    "bos": "bun run cli/src/index.ts",
+    "demo": "bun run cli/src/index.ts",
     "test": "turbo test --filter=api",
     "dev": "turbo dev --filter=api --filter=host --filter=ui",
     "dev:ui": "API_SOURCE=remote turbo dev --filter=host --filter=ui",
@@ -28,7 +31,10 @@
     "seed-docs": "bun run scripts/seed-docs.ts"
   },
   "devDependencies": {
-    "turbo": "^2.6.3"
+    "turbo": "^2.7.5"
   },
-  "packageManager": "bun@1.2.20"
+  "packageManager": "bun@1.2.20",
+  "dependencies": {
+    "@types/bun": "^1.3.6"
+  }
 }
