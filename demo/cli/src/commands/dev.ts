@@ -1,6 +1,5 @@
-import { getPackages, getRemotes } from "../config";
-import { run } from "../utils/run";
-import { colors, icons, gradients, divider } from "../utils/theme";
+import { getPackages } from "../config";
+import { startDev, type DevOrchestrator } from "../lib/orchestrator";
 
 interface DevOptions {
   ui?: boolean;
@@ -37,23 +36,11 @@ export async function devCommand(options: DevOptions) {
     description = "Full Local";
   }
 
-  console.log();
-  console.log(colors.cyan(`+${"-".repeat(46)}+`));
-  console.log(`  ${icons.run} ${gradients.cyber(`LAUNCHING ${description}`)}`);
-  console.log(colors.cyan(`+${"-".repeat(46)}+`));
-  console.log();
+  const orchestrator: DevOrchestrator = {
+    packages: filters,
+    env,
+    description,
+  };
 
-  console.log(`  ${icons.config} ${colors.bold("Config")}`);
-  console.log(colors.dim(`  |- packages: ${filters.join(", ")}`));
-  if (Object.keys(env).length) {
-    for (const [k, v] of Object.entries(env)) {
-      console.log(colors.dim(`  |- ${k}=${v}`));
-    }
-  }
-  console.log();
-
-  console.log(colors.dim(divider(48)));
-  console.log();
-
-  await run("turbo", ["dev", ...filters.map((f) => `--filter=${f}`)], { env });
+  startDev(orchestrator);
 }

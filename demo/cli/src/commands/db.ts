@@ -1,4 +1,4 @@
-import { getPackages } from "../config";
+import { getPackages, getConfigDir } from "../config";
 import { run } from "../utils/run";
 import { colors, icons, gradients } from "../utils/theme";
 
@@ -12,6 +12,7 @@ type DbAction = (typeof VALID_ACTIONS)[number];
 export async function dbCommand(action: string, options: DbOptions) {
   const packages = getPackages();
   const filter = options.filter ?? "host";
+  const cwd = getConfigDir();
 
   if (!packages.includes(filter)) {
     console.error(colors.magenta(`${icons.err} Unknown package: ${filter}`));
@@ -36,10 +37,10 @@ export async function dbCommand(action: string, options: DbOptions) {
     case "studio":
     case "generate":
     case "push":
-      await run("turbo", [`db:${action}`, `--filter=${filter}`]);
+      await run("bun", ["run", "drizzle-kit", action], { cwd: `${cwd}/${filter}` });
       break;
     case "sync":
-      await run("bun", ["run", "scripts/sync-db.ts"]);
+      await run("bun", ["run", "scripts/sync-db.ts"], { cwd });
       break;
   }
 

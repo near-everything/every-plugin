@@ -20,7 +20,13 @@ export async function testCommand(options: TestOptions) {
     console.log(`  ${icons.test} ${gradients.cyber("RUNNING ALL TESTS")}`);
     console.log(colors.cyan(`+${"-".repeat(46)}+`));
     console.log();
-    await run("turbo", ["test", ...testable.map((p) => `--filter=${p}`)]);
+
+    for (const pkg of testable) {
+      console.log(
+        `  ${icons.run} ${gradients.neon(pkg.toUpperCase())} ${colors.dim("→ vitest run")}`
+      );
+      await run("bun", ["run", "test"], { cwd: `${cwd}/${pkg}` });
+    }
   } else {
     if (!packages.includes(filter)) {
       console.error(colors.magenta(`${icons.err} Unknown package: ${filter}`));
@@ -36,30 +42,4 @@ export async function testCommand(options: TestOptions) {
   console.log();
   console.log(colors.neonGreen(`  ${icons.ok} Tests complete`));
   console.log();
-}
-
-export async function testSsrCommand(options: { watch?: boolean }) {
-  const cwd = getConfigDir();
-
-  console.log();
-  console.log(colors.cyan(`+${"-".repeat(46)}+`));
-
-  if (options.watch) {
-    console.log(`  ${icons.scan} ${gradients.cyber("SSR WATCH MODE")}`);
-    console.log(colors.cyan(`+${"-".repeat(46)}+`));
-    console.log();
-    console.log(colors.dim("   Rebuilds UI and reruns tests on changes"));
-    console.log();
-    await run("turbo", ["watch", "build", "--filter=ui"]);
-  } else {
-    console.log(`  ${icons.test} ${gradients.cyber("SSR INTEGRATION TESTS")}`);
-    console.log(colors.cyan(`+${"-".repeat(46)}+`));
-    console.log();
-    await run("bun", ["run", "test", "--", "tests/integration/ssr.test.ts"], {
-      cwd: `${cwd}/host`,
-    });
-    console.log();
-    console.log(colors.neonGreen(`  ${icons.ok} SSR tests complete`));
-    console.log();
-  }
 }

@@ -19,7 +19,10 @@
     "gradient-string": "^3.0.0",
     "boxen": "^8.0.1",
     "@clack/prompts": "^0.10.0",
-    "degit": "^2.8.4"
+    "degit": "^2.8.4",
+    "effect": "^3.19.14",
+    "@effect/platform": "^0.82.0",
+    "@effect/platform-bun": "^0.58.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

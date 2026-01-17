@@ -10,6 +10,7 @@ import { testCommand } from "./commands/test";
 import { dbCommand } from "./commands/db";
 import { cleanCommand } from "./commands/clean";
 import { createCommand } from "./commands/create";
+import { logsCommand } from "./commands/logs";
 import { colors, gradients, icons } from "./utils/theme";
 
 function getHelpHeader(): string {
@@ -97,6 +98,20 @@ program
   .command("clean")
   .description("Clean build artifacts")
   .action(cleanCommand);
+
+program
+  .command("logs")
+  .description("View dev session logs")
+  .option("-n, --lines <count>", "Number of lines to show", "50")
+  .option("-c, --copy", "Copy logs to clipboard")
+  .option("-f, --file <name>", "Specific log file or 'list' to see all")
+  .action((options: { lines?: string; copy?: boolean; file?: string }) =>
+    logsCommand({
+      lines: options.lines ? parseInt(options.lines, 10) : undefined,
+      copy: options.copy,
+      file: options.file,
+    })
+  );
 
 const create = program
   .command("create")

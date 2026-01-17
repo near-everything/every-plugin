@@ -294,3 +294,4 @@ fabric.properties
 /**/*.db
 
 .turbo
+.bos
