@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
 import { siwn } from "better-near-auth";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "every-plugin/effect";
 import * as schema from "../db/schema/auth";
 import { ConfigService } from "./config";
 import { DatabaseService } from "./database";

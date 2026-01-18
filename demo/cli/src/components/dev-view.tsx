@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
-import { render, Text, Box, useInput, useApp } from "ink";
-import { colors, icons, gradients, divider } from "../utils/theme";
+import { Box, render, Text, useApp, useInput } from "ink";
+import { useEffect, useState } from "react";
+import { colors, divider, gradients, icons } from "../utils/theme";
 
 export type ProcessStatus = "pending" | "starting" | "ready" | "error";
 
@@ -40,13 +40,26 @@ function StatusIcon({ status }: { status: ProcessStatus }) {
   }
 }
 
+function getServiceColor(name: string): string {
+  return name === "host" ? "cyan" : name === "ui" ? "magenta" : "green";
+}
+
+function UrlRow({ proc }: { proc: ProcessState }) {
+  const color = getServiceColor(proc.name);
+  const url = `http://localhost:${proc.port}`;
+  const isReady = proc.status === "ready";
+
+  return (
+    <Box>
+      <Text>{"  "}</Text>
+      <Text color={isReady ? color : "gray"}>{url}</Text>
+      <Text color="gray"> ({proc.name})</Text>
+    </Box>
+  );
+}
+
 function ProcessRow({ proc }: { proc: ProcessState }) {
-  const color =
-    proc.name === "host"
-      ? "cyan"
-      : proc.name === "ui"
-        ? "magenta"
-        : "green";
+  const color = getServiceColor(proc.name);
 
   const statusText =
     proc.status === "pending"
@@ -64,9 +77,8 @@ function ProcessRow({ proc }: { proc: ProcessState }) {
       <Text> </Text>
       <Text color={color}>{proc.name.toUpperCase().padEnd(8)}</Text>
       <Text color={proc.status === "ready" ? "green" : "gray"}>
-        {statusText.padEnd(14)}
+        {statusText}
       </Text>
-      <Text color="gray">:{proc.port}</Text>
     </Box>
   );
 }
@@ -87,7 +99,14 @@ function LogLine({ entry }: { entry: LogEntry }) {
   );
 }
 
-function DevView({ processes, logs, description, env, onExit, onExportLogs }: DevViewProps) {
+function DevView({
+  processes,
+  logs,
+  description,
+  env,
+  onExit,
+  onExportLogs,
+}: DevViewProps) {
   const { exit } = useApp();
 
   useInput((input, key) => {
@@ -120,6 +139,14 @@ function DevView({ processes, logs, description, env, onExit, onExportLogs }: De
       </Box>
       <Box marginBottom={1}>
         <Text>{colors.cyan(`+${"-".repeat(50)}+`)}</Text>
+      </Box>
+
+      {processes.filter((proc) => proc.port > 0).map((proc) => (
+        <UrlRow key={`url-${proc.name}`} proc={proc} />
+      ))}
+
+      <Box marginTop={1} marginBottom={0}>
+        <Text>{colors.dim(divider(52))}</Text>
       </Box>
 
       {processes.map((proc) => (
@@ -168,7 +195,11 @@ function DevView({ processes, logs, description, env, onExit, onExportLogs }: De
 }
 
 export interface DevViewHandle {
-  updateProcess: (name: string, status: ProcessStatus, message?: string) => void;
+  updateProcess: (
+    name: string,
+    status: ProcessStatus,
+    message?: string,
+  ) => void;
   addLog: (source: string, line: string, isError?: boolean) => void;
   unmount: () => void;
 }
@@ -178,7 +209,7 @@ export function renderDevView(
   description: string,
   env: Record<string, string>,
   onExit?: () => void,
-  onExportLogs?: () => void
+  onExportLogs?: () => void,
 ): DevViewHandle {
   let processes = [...initialProcesses];
   let logs: LogEntry[] = [];
@@ -187,10 +218,10 @@ export function renderDevView(
   const updateProcess = (
     name: string,
     status: ProcessStatus,
-    message?: string
+    message?: string,
   ) => {
     processes = processes.map((p) =>
-      p.name === name ? { ...p, status, message } : p
+      p.name === name ? { ...p, status, message } : p,
     );
     rerender?.();
   };

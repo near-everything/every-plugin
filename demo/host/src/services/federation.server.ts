@@ -1,6 +1,6 @@
 import { createInstance, getInstance } from "@module-federation/enhanced/runtime";
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
-import { Context, Effect, Layer, Schedule } from "effect";
+import { Context, Effect, Layer, Schedule } from "every-plugin/effect";
 import type { RuntimeConfig } from "./config";
 import { ConfigService } from "./config";
 import { FederationError } from "./errors";

@@ -4,7 +4,7 @@ import { pluginModuleFederation } from '@module-federation/rsbuild-plugin';
 import { defineConfig } from '@rsbuild/core';
 import { pluginReact } from '@rsbuild/plugin-react';
 import { withZephyr } from 'zephyr-rsbuild-plugin';
-import pkg from './package.json';
+import { getHostSharedDependencies } from 'every-plugin/build/rspack';
 
 const __dirname = import.meta.dirname;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -33,44 +33,15 @@ function updateBosConfig(hostUrl: string) {
   }
 }
 
+const hostSharedDeps = getHostSharedDependencies();
+
 const plugins = [
   pluginReact(),
   pluginModuleFederation({
     name: 'host',
     remotes: {},
     dts: false,
-    shared: {
-      react: {
-        singleton: true,
-        eager: true,
-        requiredVersion: pkg.dependencies.react,
-      },
-      'react-dom': {
-        singleton: true,
-        eager: true,
-        requiredVersion: pkg.dependencies['react-dom'],
-      },
-      '@tanstack/react-query': {
-        singleton: true,
-        eager: true,
-        requiredVersion: pkg.dependencies['@tanstack/react-query'],
-      },
-      '@tanstack/react-router': {
-        singleton: true,
-        eager: true,
-        requiredVersion: pkg.dependencies['@tanstack/react-router'],
-      },
-      '@hot-labs/near-connect': {
-        singleton: true,
-        eager: false,
-        requiredVersion: pkg.dependencies['@hot-labs/near-connect'],
-      },
-      'near-kit': {
-        singleton: true,
-        eager: false,
-        requiredVersion: pkg.dependencies['near-kit'],
-      },
-    },
+    shared: hostSharedDeps,
   }),
 ];
 
@@ -121,10 +92,11 @@ export default defineConfig({
   output: {
     distPath: {
       root: 'dist',
+      js: 'static/js',
     },
     assetPrefix: '/',
     filename: {
-      js: 'static/js/[name].js',
+      js: '[name].js',
     },
   },
 });

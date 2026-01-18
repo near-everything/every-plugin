@@ -59,7 +59,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       ],
       links: [
         { rel: "canonical", href: siteUrl },
-        { rel: "stylesheet", href: `${assetsUrl}/static/css/style.css` },
+        { rel: "stylesheet", href: `${assetsUrl}/static/css/async/style.css` },
         { rel: "preconnect", href: "https://fonts.googleapis.com" },
         {
           rel: "preconnect",
@@ -97,6 +97,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
             url: siteUrl,
             description,
           }),
+        },
+        {
+          src: "/static/js/index.js",
+          defer: true,
         },
       ],
     };

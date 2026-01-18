@@ -1,11 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ModuleFederationPlugin } from "@module-federation/enhanced/rspack";
 import { pluginModuleFederation } from "@module-federation/rsbuild-plugin";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
 import { TanStackRouterRspack } from "@tanstack/router-plugin/rspack";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { getUISharedDependencies } from "every-plugin/build/rspack";
 import { withZephyr } from "zephyr-rsbuild-plugin";
 import pkg from "./package.json";
 
@@ -40,25 +41,7 @@ function updateBosConfig(field: "production" | "ssr", url: string) {
   }
 }
 
-const sharedDeps = [
-  "react",
-  "react-dom",
-  "@tanstack/react-query",
-  "@tanstack/react-router",
-  "@hot-labs/near-connect",
-  "near-kit",
-] as const;
-
-const sharedConfig = Object.fromEntries(
-  sharedDeps.map((dep) => [
-    dep,
-    {
-      singleton: true,
-      eager: true,
-      requiredVersion: pkg.dependencies[dep],
-    },
-  ])
-);
+const uiSharedDeps = getUISharedDependencies();
 
 function createClientConfig() {
   const plugins = [
@@ -74,7 +57,7 @@ function createClientConfig() {
         "./hooks": "./src/hooks/index.ts",
         "./types": "./src/types/index.ts",
       },
-      shared: sharedConfig,
+      shared: uiSharedDeps,
     }),
   ];
 
@@ -167,12 +150,12 @@ function createClientConfig() {
       },
     },
     output: {
-      distPath: { root: "dist" },
+      distPath: { root: "dist", css: "static/css" },
       assetPrefix: "auto",
       // assetPrefix: isProduction
       //   ? `${bosConfig.app.ui.production}/`
       //   : `${bosConfig.app.ui.development}/`,
-      filename: { css: "static/css/style.css" },
+      filename: { css: "style.css" },
       copy: [{ from: path.resolve(__dirname, "public"), to: "./" }],
     },
   });
@@ -223,13 +206,6 @@ function createServerConfig() {
           library: { type: "commonjs-module" },
         },
         externals: [
-          /^react$/,
-          /^react\//,
-          /^react-dom/,
-          /^@tanstack\/react-query/,
-          /^@tanstack\/react-router/,
-          /^@hot-labs\/near-connect/,
-          /^near-kit/,
           /^node:/,
         ],
         infrastructureLogging: { level: "error" },
@@ -243,6 +219,7 @@ function createServerConfig() {
             runtimePlugins: [require.resolve("@module-federation/node/runtimePlugin")],
             library: { type: "commonjs-module" },
             exposes: { "./Router": "./src/router.server.tsx" },
+            shared: uiSharedDeps,
           }),
         ],
       },

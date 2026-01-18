@@ -9,24 +9,24 @@
     }
   },
   "peerDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   },
   "dependencies": {
-    "@libsql/client": "^0.15.15",
-    "drizzle-kit": "^0.31.8",
-    "drizzle-orm": "^0.45.1",
-    "near-kit": "^0.6.3"
+    "@libsql/client": "catalog:",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
+    "near-kit": "^0.7.0"
   },
   "devDependencies": {
     "@effect/language-service": "^0.41.1",
     "@module-federation/node": "^2.7.25",
     "@rspack/cli": "^1.6.8",
     "@rspack/core": "^1.6.8",
-    "@types/node": "^25.0.3",
+    "@types/node": "catalog:",
     "dotenv": "^17.2.3",
-    "every-plugin": "^0.8.3",
+    "every-plugin": "0.8.6",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.2.4",
+    "vitest": "catalog:",
     "zephyr-rspack-plugin": "^0.1.2"
   },
   "scripts": {

@@ -8,7 +8,7 @@ interface BuildOptions {
 
 const buildCommands: Record<string, { cmd: string; args: string[] }> = {
   host: { cmd: "rsbuild", args: ["build"] },
-  ui: { cmd: "rsbuild", args: ["build"] },
+  ui: { cmd: "build", args: [] },
   api: { cmd: "rspack", args: ["build"] },
 };
 

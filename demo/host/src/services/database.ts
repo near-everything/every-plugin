@@ -1,5 +1,5 @@
 import { createClient } from "@libsql/client";
-import { Effect } from "effect";
+import { Effect } from "every-plugin/effect";
 import { drizzle } from "drizzle-orm/libsql";
 import * as authSchema from "../db/schema/auth";
 import { DatabaseError } from "./errors";

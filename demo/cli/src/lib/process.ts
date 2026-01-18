@@ -1,5 +1,5 @@
 import { Command } from "@effect/platform";
-import { Effect, Stream, Fiber, Deferred, Ref } from "effect";
+import { Deferred, Effect, Fiber, Ref, Stream } from "effect";
 import type { ProcessStatus } from "../components/dev-view";
 
 export interface DevProcess {
@@ -22,6 +22,33 @@ const pkgConfigs: Record<string, Omit<DevProcess, "env">> = {
     port: 3001,
     readyPatterns: [/listening on/i, /server started/i, /ready/i],
     errorPatterns: [/error:/i, /failed/i, /exception/i],
+  },
+  "host-client": {
+    name: "host-client",
+    command: "bun",
+    args: ["run", "rsbuild", "build", "--watch"],
+    cwd: "host",
+    port: 0,
+    readyPatterns: [/built in/i, /compiled.*successfully/i],
+    errorPatterns: [/error/i, /failed/i],
+  },
+  "ui-prebuild": {
+    name: "ui-prebuild",
+    command: "bun",
+    args: ["run", "rsbuild", "build"],
+    cwd: "ui",
+    port: 0,
+    readyPatterns: [/built in/i, /compiled.*successfully/i],
+    errorPatterns: [/error/i, /failed/i],
+  },
+  "ui-ssr": {
+    name: "ui-ssr",
+    command: "bun",
+    args: ["run", "rsbuild", "build", "--watch"],
+    cwd: "ui",
+    port: 0,
+    readyPatterns: [/built in/i, /compiled.*successfully/i],
+    errorPatterns: [/error/i, /failed/i],
   },
   ui: {
     name: "ui",
@@ -49,7 +76,12 @@ export const getProcessConfig = (
 ): DevProcess | null => {
   const config = pkgConfigs[pkg];
   if (!config) return null;
-  return { ...config, env };
+
+  const processEnv = pkg === "ui-ssr"
+    ? { ...env, BUILD_TARGET: "server" }
+    : env;
+
+  return { ...config, env: processEnv };
 };
 
 export interface ProcessCallbacks {
@@ -148,7 +180,7 @@ export const spawnDevProcess = (
         await new Promise((r) => setTimeout(r, 100));
         try {
           proc.kill("SIGKILL");
-        } catch {}
+        } catch { }
       },
       waitForReady: Deferred.await(readyDeferred),
       waitForExit: Effect.gen(function* () {

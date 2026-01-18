@@ -11,6 +11,7 @@ import { dbCommand } from "./commands/db";
 import { cleanCommand } from "./commands/clean";
 import { createCommand } from "./commands/create";
 import { logsCommand } from "./commands/logs";
+import { syncCommand } from "./commands/sync";
 import { colors, gradients, icons } from "./utils/theme";
 
 function getHelpHeader(): string {
@@ -98,6 +99,11 @@ program
   .command("clean")
   .description("Clean build artifacts")
   .action(cleanCommand);
+
+program
+  .command("sync")
+  .description("Sync shared dependency versions with every-plugin")
+  .action(syncCommand);
 
 program
   .command("logs")

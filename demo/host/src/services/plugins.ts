@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "every-plugin/effect";
 import { createPluginRuntime } from "every-plugin";
 import { ConfigService } from "./config";
 import { PluginError } from "./errors";

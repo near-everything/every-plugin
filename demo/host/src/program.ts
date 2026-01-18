@@ -1,26 +1,26 @@
+import { createServer, type IncomingHttpHeaders } from "node:http";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
-import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { BatchHandlerPlugin } from "@orpc/server/plugins";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { logger } from "@rsbuild/core";
-import { Effect, ManagedRuntime } from "effect";
+import { Effect, ManagedRuntime } from "every-plugin/effect";
 import { formatORPCError } from "every-plugin/errors";
-import { Hono, type Context } from "hono";
+import { onError } from "every-plugin/orpc";
+import { type Context, Hono } from "hono";
 import { compress } from "hono/compress";
 import { cors } from "hono/cors";
-import { createServer, type IncomingHttpHeaders } from "node:http";
 import { FullServerLive } from "./layers";
-import { AuthService, type Auth } from "./services/auth";
+import { type Auth, AuthService } from "./services/auth";
 import { ConfigService, type RuntimeConfig } from "./services/config";
 import { createRequestContext } from "./services/context";
 import type { Database } from "./services/database";
 import { DatabaseService } from "./services/database";
 import { loadRouterModule, type RouterModule } from "./services/federation.server";
-import { PluginsService, type PluginResult } from "./services/plugins";
+import { type PluginResult, PluginsService } from "./services/plugins";
 import { createRouter } from "./services/router";
 
 function nodeHeadersToHeaders(nodeHeaders: IncomingHttpHeaders): Headers {
@@ -129,6 +129,7 @@ function setupApiRoutes(
 
 function setupRoutes(app: Hono, config: RuntimeConfig, routerModule: RouterModule, isDev: boolean) {
   if (isDev) {
+    app.use("/static/js/*", serveStatic({ root: "./dist" }));
     app.use("/static/*", serveStatic({ root: "../ui/dist" }));
     app.use("/favicon.ico", serveStatic({ root: "../ui/public" }));
     app.use("/icon.svg", serveStatic({ root: "../ui/public" }));

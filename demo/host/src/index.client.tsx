@@ -1,10 +1,14 @@
-import { StrictMode } from 'react';
-import { hydrateRoot } from 'react-dom/client';
-import { HydrationBoundary, QueryClientProvider, type DehydratedState } from '@tanstack/react-query';
-import { RouterClient } from '@tanstack/react-router/ssr/client';
-import { loadRemote } from '@module-federation/enhanced/runtime';
-import { initializeFederation, getRuntimeConfig } from './federation';
-import type { RouterModule } from './types';
+import { loadRemote } from "@module-federation/enhanced/runtime";
+import {
+  type DehydratedState,
+  HydrationBoundary,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import { RouterClient } from "@tanstack/react-router/ssr/client";
+import { StrictMode } from "react";
+import { hydrateRoot } from "react-dom/client";
+import { getRuntimeConfig, initializeFederation } from "./federation";
+import type { RouterModule } from "./types";
 
 declare global {
   interface Window {
@@ -12,13 +16,19 @@ declare global {
   }
 }
 
+console.log("[Client] Script loaded, starting hydration...");
+
 async function hydrate() {
+  console.log("[Client] Initializing federation...");
   await initializeFederation();
+  console.log("[Client] Federation initialized");
 
   const config = getRuntimeConfig();
-  
-  const routerModule = await loadRemote<RouterModule>(`${config.ui.name}/Router`);
-  
+
+  const routerModule = await loadRemote<RouterModule>(
+    `${config.ui.name}/Router`,
+  );
+
   if (!routerModule) {
     throw new Error(`Failed to load Router module from ${config.ui.name}`);
   }
@@ -30,7 +40,9 @@ async function hydrate() {
       runtimeConfig: { env, title, hostUrl, apiBase, rpcBase },
     },
   });
-  
+
+  await router.load();
+
   const dehydratedState = window.__DEHYDRATED_STATE__;
 
   hydrateRoot(
@@ -41,12 +53,12 @@ async function hydrate() {
           <RouterClient router={router} />
         </HydrationBoundary>
       </QueryClientProvider>
-    </StrictMode>
+    </StrictMode>,
   );
 
-  console.log('[Client] Hydrated SSR');
+  console.log("[Client] Hydrated SSR");
 }
 
 hydrate().catch((error) => {
-  console.error('Failed to hydrate:', error);
+  console.error("Failed to hydrate:", error);
 });

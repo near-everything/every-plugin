@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Effect } from "effect";
+import { Effect } from "every-plugin/effect";
 import { ConfigError } from "./errors";
 
 interface BosConfig {

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect } from "every-plugin/effect";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { loadBosConfig, type RuntimeConfig } from "@/services/config";
 import { loadRouterModule } from "@/services/federation.server";
@@ -58,7 +58,7 @@ describe("SSR Stream Lifecycle", () => {
       expect(elapsed).toBeLessThan(5000);
     });
 
-    it("completes stream for layout routes with ssr: data-only", async () => {
+    it("completes stream for layout routes", async () => {
       const startTime = Date.now();
       
       const head = await routerModule.getRouteHead("/login", {
@@ -154,6 +154,85 @@ describe("SSR Stream Lifecycle", () => {
 
       const authCallsAfter = mockApiClient.protected.mock.calls.length;
       expect(authCallsAfter).toBe(authCallsBefore);
+    });
+  });
+
+  describe("Public SSR Routes", () => {
+    const STREAM_TIMEOUT = 5000;
+
+    it("renders public /p/{key} route with full SSR", { timeout: 6000 }, async () => {
+      const request = new Request("http://localhost/p/test-public-key");
+      const startTime = Date.now();
+
+      const result = await routerModule.renderToStream(request, {
+        assetsUrl: config.ui.url,
+        runtimeConfig: {
+          env: config.env,
+          title: config.title,
+          hostUrl: config.hostUrl,
+          apiBase: "/api",
+          rpcBase: "/api/rpc",
+        },
+      });
+
+      const html = await consumeStream(result.stream);
+      const elapsed = Date.now() - startTime;
+
+      expect(elapsed).toBeLessThan(STREAM_TIMEOUT);
+      expect(result.statusCode).toBe(200);
+      expect(html).toContain("<!DOCTYPE html>");
+      expect(html).toContain("</html>");
+      expect(html).toContain("test-public-key");
+    });
+
+    it("includes OG metadata in public route head", async () => {
+      const head = await routerModule.getRouteHead("/p/my-og-test", {
+        assetsUrl: config.ui.url,
+        runtimeConfig: {
+          env: config.env,
+          title: config.title,
+          hostUrl: config.hostUrl,
+          apiBase: "/api",
+          rpcBase: "/api/rpc",
+        },
+      });
+
+      expect(head).toBeDefined();
+      expect(head.meta).toBeDefined();
+
+      const ogTitle = head.meta.find(
+        (m) => m && typeof m === "object" && "property" in m && m.property === "og:title"
+      );
+      const ogDescription = head.meta.find(
+        (m) => m && typeof m === "object" && "property" in m && m.property === "og:description"
+      );
+      const ogImage = head.meta.find(
+        (m) => m && typeof m === "object" && "property" in m && m.property === "og:image"
+      );
+
+      expect(ogTitle).toBeDefined();
+      expect(ogDescription).toBeDefined();
+      expect(ogImage).toBeDefined();
+    });
+
+    it("renders key parameter in full SSR stream", { timeout: 6000 }, async () => {
+      const request = new Request("http://localhost/p/rendered-key-value");
+
+      const result = await routerModule.renderToStream(request, {
+        assetsUrl: config.ui.url,
+        runtimeConfig: {
+          env: config.env,
+          title: config.title,
+          hostUrl: config.hostUrl,
+          apiBase: "/api",
+          rpcBase: "/api/rpc",
+        },
+      });
+
+      const html = await consumeStream(result.stream);
+
+      expect(html).toContain("rendered-key-value");
+      expect(html).toContain("Public Page:");
     });
   });
 
