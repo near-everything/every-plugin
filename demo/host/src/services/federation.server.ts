@@ -15,12 +15,9 @@ function getOrCreateFederationInstance(config: RuntimeConfig) {
 
   const existingInstance = getInstance();
 
-  const isDev = process.env.NODE_ENV !== "production";
-  const ssrEntryUrl = isDev
-    ? `${config.ui.url}/remoteEntry.server.js`
-    : config.ui.ssrUrl
-      ? `${config.ui.ssrUrl}/remoteEntry.server.js`
-      : null;
+  const ssrEntryUrl = config.ui.ssrUrl
+    ? `${config.ui.ssrUrl}/remoteEntry.server.js`
+    : `${config.ui.url}/remoteEntry.server.js`;
 
   if (!ssrEntryUrl) {
     throw new FederationError({
@@ -30,6 +27,11 @@ function getOrCreateFederationInstance(config: RuntimeConfig) {
   }
 
   if (existingInstance) {
+    existingInstance.registerRemotes([{
+      name: config.ui.name,
+      entry: ssrEntryUrl,
+      alias: config.ui.name,
+    }]);
     federationInstance = existingInstance;
     return federationInstance;
   }

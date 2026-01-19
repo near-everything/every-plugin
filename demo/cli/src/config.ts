@@ -1,10 +1,27 @@
 import { join, dirname } from "path";
 
+export type SourceMode = "local" | "remote";
+
+export interface DevConfig {
+  host: SourceMode;
+  ui: SourceMode;
+  api: SourceMode;
+  proxy?: boolean;
+}
+
+export const DEFAULT_DEV_CONFIG: DevConfig = {
+  host: "local",
+  ui: "local",
+  api: "local",
+};
+
 export interface HostConfig {
   title: string;
   description?: string;
   development: string;
   production: string;
+  remote?: string;
+  secrets?: string[];
 }
 
 export interface RemoteConfig {
@@ -125,4 +142,34 @@ export function getAccount(): string {
 export function getTitle(): string {
   const config = loadConfig();
   return config.app.host.title;
+}
+
+export function getComponentUrl(
+  component: "host" | "ui" | "api",
+  source: SourceMode
+): string {
+  const config = loadConfig();
+  
+  if (component === "host") {
+    if (source === "remote") {
+      const remoteUrl = config.app.host.remote;
+      if (!remoteUrl) {
+        throw new Error("No remote URL configured for host. Run 'bos build host' first.");
+      }
+      return remoteUrl;
+    }
+    return config.app.host.development;
+  }
+  
+  const componentConfig = config.app[component];
+  if (!componentConfig || !("name" in componentConfig)) {
+    throw new Error(`Component ${component} not found in bos.config.json`);
+  }
+  
+  return source === "remote" ? componentConfig.production : componentConfig.development;
+}
+
+export function getHostRemoteUrl(): string | undefined {
+  const config = loadConfig();
+  return config.app.host.remote;
 }

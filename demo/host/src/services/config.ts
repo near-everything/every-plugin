@@ -1,7 +1,21 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Effect } from "every-plugin/effect";
+import { Effect, Layer } from "every-plugin/effect";
 import { ConfigError } from "./errors";
+
+export interface BootstrapConfig {
+  configPath?: string;
+  secrets?: Record<string, string>;
+  ui?: { source?: SourceMode };
+  api?: { source?: SourceMode; proxy?: string };
+  database?: { url?: string };
+}
+
+let globalBootstrap: BootstrapConfig | undefined;
+
+export function setBootstrapConfig(config: BootstrapConfig): void {
+  globalBootstrap = config;
+}
 
 interface BosConfig {
   account: string;
@@ -11,6 +25,8 @@ interface BosConfig {
       description?: string;
       development: string;
       production: string;
+      remote?: string;
+      secrets?: string[];
     };
     ui: {
       name: string;
@@ -54,6 +70,7 @@ export interface RuntimeConfig {
 }
 
 export type ClientRuntimeConfig = Pick<RuntimeConfig, "env" | "title" | "hostUrl"> & {
+  assetsUrl: string;
   apiBase: string;
   rpcBase: string;
 };
@@ -64,14 +81,26 @@ export type WindowRuntimeConfig = Pick<RuntimeConfig, "env" | "title" | "hostUrl
   rpcBase: string;
 };
 
-function resolveSource(envVar: string | undefined, env: string): SourceMode {
+function resolveSource(
+  bootstrapSource: SourceMode | undefined,
+  envVar: string | undefined,
+  env: string
+): SourceMode {
+  if (bootstrapSource) return bootstrapSource;
   if (envVar === "local" || envVar === "remote") return envVar;
   return env === "production" ? "remote" : "local";
 }
 
 export const loadConfig = Effect.gen(function* () {
+  const bootstrap = globalBootstrap;
   const env = (process.env.NODE_ENV as "development" | "production") || "development";
-  const path = process.env.BOS_CONFIG_PATH ?? resolve(process.cwd(), "bos.config.json");
+  const path = bootstrap?.configPath ?? process.env.BOS_CONFIG_PATH ?? resolve(process.cwd(), "bos.config.json");
+
+  if (bootstrap?.secrets) {
+    for (const [key, value] of Object.entries(bootstrap.secrets)) {
+      process.env[key] = value;
+    }
+  }
 
   const raw = yield* Effect.tryPromise({
     try: () => readFile(path, "utf8"),
@@ -83,15 +112,15 @@ export const loadConfig = Effect.gen(function* () {
     catch: (e) => new ConfigError({ path, cause: e }),
   });
 
-  const uiSource = resolveSource(process.env.UI_SOURCE, env);
-  const apiSource = resolveSource(process.env.API_SOURCE, env);
+  const uiSource = resolveSource(bootstrap?.ui?.source, process.env.UI_SOURCE, env);
+  const apiSource = resolveSource(bootstrap?.api?.source, process.env.API_SOURCE, env);
 
-  const apiProxyEnv = process.env.API_PROXY;
+  const apiProxyEnv = bootstrap?.api?.proxy ?? process.env.API_PROXY;
   const apiProxy = apiProxyEnv === "true" ? config.app.host.production : apiProxyEnv || undefined;
 
   const uiUrl = uiSource === "remote" ? config.app.ui.production : config.app.ui.development;
   const apiUrl = apiSource === "remote" ? config.app.api.production : config.app.api.development;
-  const ssrUrl = uiSource === "remote" && config.app.ui.ssr ? config.app.ui.ssr : undefined;
+  const ssrUrl = config.app.ui.ssr || undefined;
 
   return {
     env,

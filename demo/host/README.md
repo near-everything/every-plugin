@@ -1,6 +1,6 @@
 # host
 
-Server host with authentication and Module Federation.
+Server host with authentication and Module Federation. Can be run locally or loaded from a remote Module Federation bundle.
 
 ## Architecture
 
@@ -95,10 +95,69 @@ API_PROXY=https://production.example.com bun dev
 ## Available Scripts
 
 - `bun dev` - Start dev server (port 3001)
-- `bun build` - Build for production
-- `bun preview` - Run production server
+- `bun build` - Build MF bundle for production (outputs `remoteEntry.js`)
+- `bun bootstrap` - Run host from remote MF URL (requires `HOST_REMOTE_URL`)
+- `bun preview` - Run production server locally
 - `bun db:migrate` - Run migrations
 - `bun db:studio` - Open Drizzle Studio
+
+## Remote Host Mode
+
+The host can be deployed as a Module Federation remote and loaded dynamically at runtime:
+
+### Building & Deploying
+
+```bash
+# Build the MF bundle (deploys to Zephyr, updates bos.config.json)
+cd demo/host
+bun build
+```
+
+This produces `dist/remoteEntry.js` and deploys to Zephyr. The Zephyr URL is saved to `bos.config.json → app.host.remote`.
+
+### Using Remote Host in Development
+
+```bash
+# From the CLI - no local host code needed!
+bos dev --remote-host
+```
+
+This loads and runs the host from the Zephyr URL configured in `bos.config.json`.
+
+### Production Deployment (Railway/Docker)
+
+Use the bootstrap script to run the host from a remote URL:
+
+```bash
+# Set the remote URL
+export HOST_REMOTE_URL=https://your-zephyr-url.zephyrcloud.app
+
+# Run
+bun bootstrap
+```
+
+**Dockerfile example:**
+```dockerfile
+FROM oven/bun:latest
+WORKDIR /app
+COPY package.json bun.lockb ./
+RUN bun install
+COPY bootstrap.ts ./
+CMD ["bun", "bootstrap"]
+```
+
+**Required Environment Variables:**
+- `HOST_REMOTE_URL` - Zephyr URL of the deployed host bundle
+- `HOST_DATABASE_URL` - Database connection string
+- `BETTER_AUTH_SECRET` - Auth encryption secret
+- `BETTER_AUTH_URL` - Base URL for auth endpoints
+
+### Benefits
+
+1. **No local host code needed** - Just reference the remote URL
+2. **Instant updates** - Deploy new bundle, containers pick it up on restart
+3. **Version flexibility** - Pin to specific Zephyr URLs for stability
+4. **Same binary everywhere** - Bootstrap script is tiny, all logic lives in the bundle
 
 ## API Routes
 

@@ -69,10 +69,10 @@ program
 program
   .command("dev")
   .description(`Start development (${packages.join(", ")})`)
-  .option("--ui", "UI development (remote API)")
-  .option("--api", "API development (remote UI)")
-  .option("--host", "Host only (all remote)")
-  .option("--proxy", "Proxy mode (proxy API to remote)")
+  .option("--host <mode>", "Host mode: local (default) | remote", "local")
+  .option("--ui <mode>", "UI mode: local (default) | remote", "local")
+  .option("--api <mode>", "API mode: local (default) | remote", "local")
+  .option("--proxy", "Proxy API requests to production")
   .action(devCommand);
 
 program

@@ -154,7 +154,7 @@ function DevView({
       ))}
 
       {Object.keys(env).length > 0 && (
-        <Box marginTop={1}>
+        <Box marginTop={1} flexDirection="column">
           {Object.entries(env).map(([k, v]) => (
             <Text key={k} color="gray">
               {"  "}

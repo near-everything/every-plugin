@@ -8,6 +8,7 @@ export interface ClientRuntimeConfig {
   env: string;
   title: string;
   hostUrl: string;
+  assetsUrl: string;
   apiBase: string;
   rpcBase: string;
 }

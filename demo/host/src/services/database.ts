@@ -1,26 +1,52 @@
-import { createClient } from "@libsql/client";
+import { type Client, createClient } from "@libsql/client";
 import { Effect } from "every-plugin/effect";
-import { drizzle } from "drizzle-orm/libsql";
+import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import * as authSchema from "../db/schema/auth";
 import { DatabaseError } from "./errors";
 
-export const createDatabase = Effect.try({
-  try: () => {
+type Schema = typeof authSchema;
+
+export interface DatabaseClient {
+  db: LibSQLDatabase<Schema>;
+  client: Client;
+}
+
+let activeClient: Client | null = null;
+
+const acquireDatabase = Effect.try({
+  try: (): LibSQLDatabase<Schema> => {
     const client = createClient({
       url: process.env.HOST_DATABASE_URL || "file:./database.db",
       authToken: process.env.HOST_DATABASE_AUTH_TOKEN,
     });
 
-    return drizzle(client, {
+    activeClient = client;
+
+    const db = drizzle(client, {
       schema: {
         ...authSchema,
       },
     });
+
+    return db;
   },
   catch: (e) => new DatabaseError({ cause: e }),
 });
 
-export type Database = Effect.Effect.Success<typeof createDatabase>;
+export const closeDatabase = (): void => {
+  if (activeClient) {
+    try {
+      activeClient.close();
+      console.log("[Database] Connection closed");
+    } catch {
+    }
+    activeClient = null;
+  }
+};
+
+export const createDatabase = acquireDatabase;
+
+export type Database = LibSQLDatabase<Schema>;
 
 export class DatabaseService extends Effect.Service<DatabaseService>()("host/DatabaseService", {
   effect: createDatabase,

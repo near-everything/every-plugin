@@ -1,12 +1,13 @@
 import { appendFile } from "node:fs/promises";
-import { BunRuntime, BunContext } from "@effect/platform-bun";
+import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect } from "effect";
 import path from "path";
+import type { DevConfig } from "../config";
 import {
-  renderDevView,
-  type ProcessState,
   type DevViewHandle,
   type LogEntry,
+  type ProcessState,
+  renderDevView,
 } from "../components/dev-view";
 import { getProcessConfig, makeDevProcess, type ProcessCallbacks, type ProcessHandle } from "./process";
 
@@ -14,9 +15,10 @@ export interface DevOrchestrator {
   packages: string[];
   env: Record<string, string>;
   description: string;
+  devConfig: DevConfig;
 }
 
-const STARTUP_ORDER = ["ui-prebuild", "host-client", "api", "ui-ssr", "ui", "host"];
+const STARTUP_ORDER = ["ui-ssr", "ui", "api", "host"];
 
 const sortByOrder = (packages: string[]): string[] => {
   return [...packages].sort((a, b) => {
@@ -73,7 +75,8 @@ export const runDevServers = (orchestrator: DevOrchestrator) =>
     });
 
     const killAll = async () => {
-      for (const handle of handles) {
+      const reversed = [...handles].reverse();
+      for (const handle of reversed) {
         try {
           await handle.kill();
         } catch { }

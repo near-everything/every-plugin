@@ -74,16 +74,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
           href: `${assetsUrl}/apple-touch-icon.png`,
         },
         { rel: "manifest", href: `${assetsUrl}/manifest.json` },
-        {
-          rel: "preload",
-          href: `${assetsUrl}/remoteEntry.js`,
-          as: "script",
-          crossOrigin: "anonymous",
-        },
       ],
       scripts: [
         {
-          children: `window.__RUNTIME_CONFIG__=${JSON.stringify(runtimeConfig)};`,
+          src: `${assetsUrl}/remoteEntry.js`,
         },
         {
           children: `(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}})();`,
@@ -99,8 +93,21 @@ export const Route = createRootRouteWithContext<RouterContext>()({
           }),
         },
         {
-          src: "/static/js/index.js",
-          defer: true,
+          children: `
+window.__RUNTIME_CONFIG__=${JSON.stringify(runtimeConfig)};
+function __hydrate(){
+  var container = window['ui'];
+  if (!container) { console.error('[Hydrate] Container not found'); return; }
+  container.init({}).then(function(){
+    return container.get('./Hydrate');
+  }).then(function(mod){
+    return mod().hydrate();
+  }).catch(function(e){
+    console.error('[Hydrate] Failed:', e);
+  });
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',__hydrate);}else{__hydrate();}
+          `.trim(),
         },
       ],
     };

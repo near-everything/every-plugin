@@ -15,10 +15,10 @@ import { compress } from "hono/compress";
 import { cors } from "hono/cors";
 import { FullServerLive } from "./layers";
 import { type Auth, AuthService } from "./services/auth";
-import { ConfigService, type RuntimeConfig } from "./services/config";
+import { type BootstrapConfig, ConfigService, type RuntimeConfig, setBootstrapConfig } from "./services/config";
 import { createRequestContext } from "./services/context";
 import type { Database } from "./services/database";
-import { DatabaseService } from "./services/database";
+import { closeDatabase, DatabaseService } from "./services/database";
 import { loadRouterModule, type RouterModule } from "./services/federation.server";
 import { type PluginResult, PluginsService } from "./services/plugins";
 import { createRouter } from "./services/router";
@@ -128,13 +128,7 @@ function setupApiRoutes(
 }
 
 function setupRoutes(app: Hono, config: RuntimeConfig, routerModule: RouterModule, isDev: boolean) {
-  if (isDev) {
-    app.use("/static/js/*", serveStatic({ root: "./dist" }));
-    app.use("/static/*", serveStatic({ root: "../ui/dist" }));
-    app.use("/favicon.ico", serveStatic({ root: "../ui/public" }));
-    app.use("/icon.svg", serveStatic({ root: "../ui/public" }));
-    app.use("/manifest.json", serveStatic({ root: "../ui/public" }));
-  } else {
+  if (!isDev) {
     app.use("/static/*", serveStatic({ root: "./dist" }));
     app.use("/favicon.ico", serveStatic({ root: "./dist" }));
     app.use("/icon.svg", serveStatic({ root: "./dist" }));
@@ -147,10 +141,11 @@ function setupRoutes(app: Hono, config: RuntimeConfig, routerModule: RouterModul
   app.get("*", async (c: Context) => {
     try {
       const { env, title, hostUrl } = config;
+      const assetsUrl = config.ui.url;
 
       const result = await routerModule.renderToStream(c.req.raw, {
-        assetsUrl: config.ui.url,
-        runtimeConfig: { env, title, hostUrl, apiBase: "/api", rpcBase: "/api/rpc" },
+        assetsUrl,
+        runtimeConfig: { env, title, hostUrl, assetsUrl, apiBase: "/api", rpcBase: "/api/rpc" },
       });
 
       return new Response(result.stream, {
@@ -181,7 +176,7 @@ function setupRoutes(app: Hono, config: RuntimeConfig, routerModule: RouterModul
   });
 }
 
-export const startServer = Effect.gen(function* () {
+export const createStartServer = (onReady?: () => void) => Effect.gen(function* () {
   const port = Number(process.env.PORT) || 3001;
   const isDev = process.env.NODE_ENV !== "production";
 
@@ -225,94 +220,201 @@ export const startServer = Effect.gen(function* () {
     logger.info(`[Config] API proxy: ${config.api.proxy}`);
   }
 
-  const ssrUrl = isDev ? config.ui.url : config.ui.ssrUrl;
-  if (!ssrUrl) {
-    throw new Error("SSR URL not configured. Set app.ui.ssr in bos.config.json or use local development.");
+  let ssrRouterModule: RouterModule | null = null;
+
+  app.get("*", async (c: Context) => {
+    if (!ssrRouterModule) {
+      return c.html(`
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <title>Loading...</title>
+            <meta http-equiv="refresh" content="2" />
+            <style>
+              body { font-family: system-ui; padding: 2rem; background: #1c1c1e; color: #fafafa; text-align: center; }
+            </style>
+          </head>
+          <body>
+            <h1>⏳ SSR Loading...</h1>
+            <p>The UI module is still loading. This page will refresh automatically.</p>
+          </body>
+        </html>
+      `, 503);
+    }
+
+    try {
+      const { env, title, hostUrl } = config;
+      const assetsUrl = config.ui.url;
+      const result = await ssrRouterModule.renderToStream(c.req.raw, {
+        assetsUrl,
+        runtimeConfig: { env, title, hostUrl, assetsUrl, apiBase: "/api", rpcBase: "/api/rpc" },
+      });
+      return new Response(result.stream, {
+        status: result.statusCode,
+        headers: result.headers,
+      });
+    } catch (error) {
+      logger.error("[SSR] Streaming error:", error);
+      return c.html(`
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <title>Server Error</title>
+            <style>
+              body { font-family: system-ui; padding: 2rem; background: #1c1c1e; color: #fafafa; }
+              pre { background: #2d2d2d; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+            </style>
+          </head>
+          <body>
+            <h1>Server Error</h1>
+            <p>An error occurred during server-side rendering.</p>
+            <pre>${error instanceof Error ? error.stack : String(error)}</pre>
+          </body>
+        </html>
+      `, 500);
+    }
+  });
+
+  if (!isDev) {
+    app.use("/static/*", serveStatic({ root: "./dist" }));
+    app.use("/favicon.ico", serveStatic({ root: "./dist" }));
+    app.use("/icon.svg", serveStatic({ root: "./dist" }));
+    app.use("/manifest.json", serveStatic({ root: "./dist" }));
+    app.use("/robots.txt", serveStatic({ root: "./dist" }));
   }
 
-  logger.info(`[SSR] Loading Router module from ${ssrUrl}...`);
-  const routerModuleResult = yield* loadRouterModule(config).pipe(Effect.either);
+  const startHttpServer = () => {
+    if (isDev) {
+      const server = createServer(async (req, res) => {
+        const url = req.url || "/";
+        const fetchReq = new Request(`http://localhost:${port}${url}`, {
+          method: req.method,
+          headers: nodeHeadersToHeaders(req.headers),
+          body: req.method !== "GET" && req.method !== "HEAD" ? req : undefined,
+          duplex: "half",
+        } as RequestInit);
 
-  if (routerModuleResult._tag === "Left") {
-    logger.error("[SSR] Failed to load Router module:", routerModuleResult.left);
-    throw new Error("Failed to load Router module for SSR");
-  }
+        try {
+          const response = await app.fetch(fetchReq);
+          res.statusCode = response.status;
+          response.headers.forEach((value: string, key: string) => {
+            res.setHeader(key, value);
+          });
 
-  const routerModule = routerModuleResult.right;
-  logger.info("[SSR] Router module loaded successfully");
-
-  setupRoutes(app, config, routerModule, isDev);
-
-  if (isDev) {
-    const server = createServer(async (req, res) => {
-      const url = req.url || "/";
-      const fetchReq = new Request(`http://localhost:${port}${url}`, {
-        method: req.method,
-        headers: nodeHeadersToHeaders(req.headers),
-        body: req.method !== "GET" && req.method !== "HEAD" ? req : undefined,
-        duplex: "half",
-      } as RequestInit);
-
-      try {
-        const response = await app.fetch(fetchReq);
-        res.statusCode = response.status;
-        response.headers.forEach((value: string, key: string) => {
-          res.setHeader(key, value);
-        });
-
-        if (response.body) {
-          const reader = response.body.getReader();
-          const pump = async () => {
-            const { done, value } = await reader.read();
-            if (done) {
-              res.end();
-              return;
-            }
-            res.write(value);
+          if (response.body) {
+            const reader = response.body.getReader();
+            const pump = async () => {
+              const { done, value } = await reader.read();
+              if (done) {
+                res.end();
+                return;
+              }
+              res.write(value);
+              await pump();
+            };
             await pump();
-          };
-          await pump();
-        } else {
-          const body = await response.arrayBuffer();
-          res.end(Buffer.from(body));
+          } else {
+            const body = await response.arrayBuffer();
+            res.end(Buffer.from(body));
+          }
+        } catch (err) {
+          logger.error("[Server] Error handling request:", err);
+          res.statusCode = 500;
+          res.end("Internal Server Error");
         }
-      } catch (err) {
-        logger.error("[Server] Error handling request:", err);
-        res.statusCode = 500;
-        res.end("Internal Server Error");
-      }
-    });
+      });
 
-    server.listen(port, () => {
-      logger.info(`Host dev server running at http://localhost:${port}`);
-      logger.info(`  http://localhost:${port}/api     → REST API (OpenAPI docs)`);
-      logger.info(`  http://localhost:${port}/api/rpc → RPC endpoint`);
-    });
-  } else {
-    serve({ fetch: app.fetch, port }, (info: { port: number }) => {
-      logger.info(`Host production server running at http://localhost:${info.port}`);
-      logger.info(`  http://localhost:${info.port}/api     → REST API (OpenAPI docs)`);
-      logger.info(`  http://localhost:${info.port}/api/rpc → RPC endpoint`);
-    });
-  }
+      server.listen(port, () => {
+        logger.info(`Host dev server running at http://localhost:${port}`);
+        logger.info(`  http://localhost:${port}/api     → REST API (OpenAPI docs)`);
+        logger.info(`  http://localhost:${port}/api/rpc → RPC endpoint`);
+        onReady?.();
+      });
+    } else {
+      serve({ fetch: app.fetch, port }, (info: { port: number }) => {
+        logger.info(`Host production server running at http://localhost:${info.port}`);
+        logger.info(`  http://localhost:${info.port}/api     → REST API (OpenAPI docs)`);
+        logger.info(`  http://localhost:${info.port}/api/rpc → RPC endpoint`);
+        onReady?.();
+      });
+    }
+  };
+
+  startHttpServer();
+
+  yield* Effect.fork(
+    Effect.gen(function* () {
+      const ssrUrl = config.ui.ssrUrl ?? config.ui.url;
+      logger.info(`[SSR] Loading Router module from ${ssrUrl}...`);
+
+      const routerModuleResult = yield* loadRouterModule(config).pipe(Effect.either);
+
+      if (routerModuleResult._tag === "Left") {
+        logger.error("[SSR] Failed to load Router module:", routerModuleResult.left);
+        logger.warn("[SSR] Server running in API-only mode, SSR disabled");
+        return;
+      }
+
+      ssrRouterModule = routerModuleResult.right;
+      logger.info("[SSR] Router module loaded successfully, SSR routes active");
+    })
+  );
+
+  yield* Effect.never;
 });
+
+export const startServer = createStartServer();
 
 export const ServerLive = FullServerLive;
 
-export const runServer = async () => {
+export interface ServerHandle {
+  ready: Promise<void>;
+  shutdown: () => Promise<void>;
+}
+
+export const runServer = (bootstrap?: BootstrapConfig): ServerHandle => {
+  if (bootstrap) {
+    setBootstrapConfig(bootstrap);
+  }
+
+  let resolveReady: () => void;
+  let rejectReady: (err: unknown) => void;
+  
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+
   const runtime = ManagedRuntime.make(ServerLive);
 
   const shutdown = async () => {
     console.log("[Server] Shutting down...");
+    closeDatabase();
     await runtime.dispose();
-    process.exit(0);
+    console.log("[Server] Shutdown complete");
   };
 
-  process.on("SIGINT", () => void shutdown());
-  process.on("SIGTERM", () => void shutdown());
+  const serverEffect = createStartServer(() => resolveReady());
+
+  runtime.runPromise(serverEffect).catch((err) => {
+    console.error("Failed to start server:", err);
+    rejectReady(err);
+  });
+
+  return { ready, shutdown };
+};
+
+export const runServerBlocking = async () => {
+  const handle = runServer();
+  
+  process.on("SIGINT", () => void handle.shutdown().then(() => process.exit(0)));
+  process.on("SIGTERM", () => void handle.shutdown().then(() => process.exit(0)));
 
   try {
-    await runtime.runPromise(startServer);
+    await handle.ready;
+    await new Promise(() => {});
   } catch (err) {
     console.error("Failed to start server:", err);
     process.exit(1);

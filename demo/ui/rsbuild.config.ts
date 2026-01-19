@@ -52,6 +52,7 @@ function createClientConfig() {
       dts: false,
       exposes: {
         "./Router": "./src/router.tsx",
+        "./Hydrate": "./src/hydrate.tsx",
         "./components": "./src/components/index.ts",
         "./providers": "./src/providers/index.tsx",
         "./hooks": "./src/hooks/index.ts",
@@ -77,6 +78,9 @@ function createClientConfig() {
   return defineConfig({
     plugins,
     source: {
+      entry: {
+        index: "./src/hydrate.tsx",
+      },
       define: {
         "import.meta.env.PUBLIC_ACCOUNT_ID": JSON.stringify(bosConfig.account),
         "import.meta.env.BETTER_AUTH_URL": JSON.stringify(
@@ -134,10 +138,6 @@ function createClientConfig() {
         target: "web",
         output: {
           uniqueName: normalizedName,
-          library: {
-            name: normalizedName,
-            type: "var",
-          },
         },
         infrastructureLogging: { level: "error" },
         stats: "errors-warnings",
@@ -150,12 +150,9 @@ function createClientConfig() {
       },
     },
     output: {
-      distPath: { root: "dist", css: "static/css" },
+      distPath: { root: "dist", css: "static/css", js: "static/js" },
       assetPrefix: "auto",
-      // assetPrefix: isProduction
-      //   ? `${bosConfig.app.ui.production}/`
-      //   : `${bosConfig.app.ui.development}/`,
-      filename: { css: "style.css" },
+      filename: { js: "[name].js", css: "style.css" },
       copy: [{ from: path.resolve(__dirname, "public"), to: "./" }],
     },
   });

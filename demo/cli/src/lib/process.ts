@@ -1,6 +1,9 @@
+import { resolve } from "node:path";
 import { Command } from "@effect/platform";
 import { Deferred, Effect, Fiber, Ref, Stream } from "effect";
+import type { SourceMode } from "../config";
 import type { ProcessStatus } from "../components/dev-view";
+import { loadSecretsFor } from "./secrets";
 
 export interface DevProcess {
   name: string;
@@ -20,26 +23,8 @@ const pkgConfigs: Record<string, Omit<DevProcess, "env">> = {
     args: ["run", "tsx", "server.ts"],
     cwd: "host",
     port: 3001,
-    readyPatterns: [/listening on/i, /server started/i, /ready/i],
+    readyPatterns: [/listening on/i, /server started/i, /ready/i, /running at/i],
     errorPatterns: [/error:/i, /failed/i, /exception/i],
-  },
-  "host-client": {
-    name: "host-client",
-    command: "bun",
-    args: ["run", "rsbuild", "build", "--watch"],
-    cwd: "host",
-    port: 0,
-    readyPatterns: [/built in/i, /compiled.*successfully/i],
-    errorPatterns: [/error/i, /failed/i],
-  },
-  "ui-prebuild": {
-    name: "ui-prebuild",
-    command: "bun",
-    args: ["run", "rsbuild", "build"],
-    cwd: "ui",
-    port: 0,
-    readyPatterns: [/built in/i, /compiled.*successfully/i],
-    errorPatterns: [/error/i, /failed/i],
   },
   "ui-ssr": {
     name: "ui-ssr",
@@ -192,6 +177,120 @@ export const spawnDevProcess = (
     return handle;
   });
 
+interface ServerHandle {
+  ready: Promise<void>;
+  shutdown: () => Promise<void>;
+}
+
+interface BootstrapConfig {
+  configPath?: string;
+  secrets?: Record<string, string>;
+  ui?: { source?: SourceMode };
+  api?: { source?: SourceMode; proxy?: string };
+  database?: { url?: string };
+}
+
+export const spawnRemoteHost = (
+  config: DevProcess,
+  callbacks: ProcessCallbacks
+) =>
+  Effect.gen(function* () {
+    const readyDeferred = yield* Deferred.make<void>();
+    const remoteUrl = config.env?.HOST_REMOTE_URL;
+
+    if (!remoteUrl) {
+      return yield* Effect.fail(new Error("HOST_REMOTE_URL not provided for remote host"));
+    }
+
+    callbacks.onStatus(config.name, "starting");
+    callbacks.onLog(config.name, `Loading host from remote: ${remoteUrl}`);
+
+    const configPath = resolve(process.cwd(), "bos.config.json");
+    
+    const hostSecrets = loadSecretsFor("host");
+    callbacks.onLog(config.name, `Loaded ${Object.keys(hostSecrets).length} host secrets`);
+
+    const uiSource = (config.env?.UI_SOURCE as SourceMode) ?? "local";
+    const apiSource = (config.env?.API_SOURCE as SourceMode) ?? "local";
+    const apiProxy = config.env?.API_PROXY;
+
+    const bootstrap: BootstrapConfig = {
+      configPath,
+      secrets: hostSecrets,
+      ui: { source: uiSource },
+      api: { source: apiSource, proxy: apiProxy },
+    };
+
+    callbacks.onLog(config.name, `Bootstrap config: UI=${uiSource}, API=${apiSource}`);
+
+    let serverHandle: ServerHandle | null = null;
+
+    const loadAndRun = async () => {
+      try {
+        const { createInstance, getInstance } = await import("@module-federation/enhanced/runtime");
+        const { setGlobalFederationInstance } = await import("@module-federation/runtime-core");
+
+        let mf = getInstance();
+        if (!mf) {
+          mf = createInstance({
+            name: "cli-host",
+            remotes: [],
+          });
+          setGlobalFederationInstance(mf);
+        }
+
+        const remoteEntryUrl = remoteUrl.endsWith("/remoteEntry.js")
+          ? remoteUrl
+          : `${remoteUrl}/remoteEntry.js`;
+
+        callbacks.onLog(config.name, `Registering host remote: ${remoteEntryUrl}`);
+        mf.registerRemotes([{
+          name: "host",
+          entry: remoteEntryUrl,
+        }]);
+
+        callbacks.onLog(config.name, "Loading host/Server module...");
+        const hostModule = await mf.loadRemote<{ runServer: (bootstrap?: BootstrapConfig) => ServerHandle }>("host/Server");
+
+        if (!hostModule?.runServer) {
+          throw new Error("Host module does not export runServer function");
+        }
+
+        callbacks.onLog(config.name, "Starting remote host server with bootstrap config...");
+        serverHandle = hostModule.runServer(bootstrap);
+
+        await serverHandle.ready;
+
+        callbacks.onStatus(config.name, "ready");
+        callbacks.onLog(config.name, `Remote host ready at http://localhost:${config.port}`);
+        Deferred.unsafeDone(readyDeferred, Effect.void);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.stack || error.message : String(error);
+        callbacks.onLog(config.name, `Error: ${errorMsg}`, true);
+        callbacks.onStatus(config.name, "error");
+        Deferred.unsafeDone(readyDeferred, Effect.void);
+        throw error;
+      }
+    };
+
+    const serverPromise = loadAndRun();
+
+    const handle: ProcessHandle = {
+      name: config.name,
+      pid: process.pid,
+      kill: async () => {
+        callbacks.onLog(config.name, "Shutting down remote host...");
+        if (serverHandle) {
+          await serverHandle.shutdown();
+        }
+      },
+      waitForReady: Deferred.await(readyDeferred),
+      waitForExit: Effect.promise(() => serverPromise),
+    };
+
+    return handle;
+  });
+
 export const makeDevProcess = (
   pkg: string,
   env: Record<string, string> | undefined,
@@ -202,5 +301,10 @@ export const makeDevProcess = (
     if (!config) {
       return yield* Effect.fail(new Error(`Unknown package: ${pkg}`));
     }
+
+    if (pkg === "host" && env?.HOST_SOURCE === "remote") {
+      return yield* spawnRemoteHost(config, callbacks);
+    }
+
     return yield* spawnDevProcess(config, callbacks);
   });
