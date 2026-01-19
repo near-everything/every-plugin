@@ -105,6 +105,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
     });
@@ -240,6 +241,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -259,6 +261,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -282,6 +285,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -308,6 +312,7 @@ describe("SEO Head Extraction", () => {
             hostUrl: config.hostUrl,
             apiBase: "/api",
             rpcBase: "/api/rpc",
+            assetsUrl: config.ui.url,
           },
         });
 
@@ -327,6 +332,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -351,6 +357,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -375,6 +382,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -407,6 +415,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -423,6 +432,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -442,6 +452,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -459,6 +470,7 @@ describe("SEO Head Extraction", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 

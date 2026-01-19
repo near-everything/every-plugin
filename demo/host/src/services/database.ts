@@ -1,6 +1,6 @@
 import { type Client, createClient } from "@libsql/client";
-import { Effect } from "every-plugin/effect";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
+import { Effect } from "every-plugin/effect";
 import * as authSchema from "../db/schema/auth";
 import { DatabaseError } from "./errors";
 

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Effect, Layer } from "every-plugin/effect";
+import { Effect } from "every-plugin/effect";
 import { ConfigError } from "./errors";
 
 export interface BootstrapConfig {

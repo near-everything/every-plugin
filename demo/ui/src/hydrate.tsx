@@ -3,7 +3,8 @@ import type { ClientRuntimeConfig } from "./types";
 export async function hydrate() {
   console.log("[Hydrate] Starting...");
 
-  const runtimeConfig = (window as { __RUNTIME_CONFIG__?: ClientRuntimeConfig }).__RUNTIME_CONFIG__;
+  const runtimeConfig = (window as { __RUNTIME_CONFIG__?: ClientRuntimeConfig })
+    .__RUNTIME_CONFIG__;
   if (!runtimeConfig) {
     console.error("[Hydrate] No runtime config found");
     return;
@@ -26,7 +27,7 @@ export async function hydrate() {
     document,
     <QueryClientProvider client={queryClient}>
       <RouterClient router={router} />
-    </QueryClientProvider>
+    </QueryClientProvider>,
   );
 
   console.log("[Hydrate] Complete!");

@@ -1,10 +1,10 @@
 import { createInstance, getInstance } from "@module-federation/enhanced/runtime";
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
 import { Context, Effect, Layer, Schedule } from "every-plugin/effect";
+import type { RouterModule } from "../types";
 import type { RuntimeConfig } from "./config";
 import { ConfigService } from "./config";
 import { FederationError } from "./errors";
-import type { RouterModule } from "../types";
 
 export type { RouterModule };
 

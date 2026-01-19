@@ -48,6 +48,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -69,6 +70,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -89,6 +91,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -109,6 +112,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -129,6 +133,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -149,6 +154,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -172,6 +178,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -194,6 +201,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -226,6 +234,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -251,6 +260,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -275,6 +285,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -298,6 +309,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 
@@ -322,6 +334,7 @@ describe("SSR Stream Lifecycle", () => {
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
+          assetsUrl: config.ui.url,
         },
       });
 

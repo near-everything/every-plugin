@@ -1,4 +1,4 @@
-import { join, dirname } from "path";
+import { dirname, join } from "path";
 
 export type SourceMode = "local" | "remote";
 
@@ -149,7 +149,7 @@ export function getComponentUrl(
   source: SourceMode
 ): string {
   const config = loadConfig();
-  
+
   if (component === "host") {
     if (source === "remote") {
       const remoteUrl = config.app.host.remote;
@@ -160,12 +160,12 @@ export function getComponentUrl(
     }
     return config.app.host.development;
   }
-  
+
   const componentConfig = config.app[component];
   if (!componentConfig || !("name" in componentConfig)) {
     throw new Error(`Component ${component} not found in bos.config.json`);
   }
-  
+
   return source === "remote" ? componentConfig.production : componentConfig.development;
 }
 
