@@ -1,31 +1,32 @@
+import { serialize as borshSerialize } from "borsh";
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
-import { Near } from "near-kit";
-import { serialize as borshSerialize } from "borsh";
 
-import { bosContract } from "./contract";
 import {
-  loadConfig,
-  getPackages,
-  getRemotes,
-  getHost,
-  getConfigDir,
-  getPortsFromConfig,
-  getConfigPath,
   type BosConfig as BosConfigType,
-  type DevConfig,
   DEFAULT_DEV_CONFIG,
+  type DevConfig,
+  getConfigDir,
+  getHost,
   getHostRemoteUrl,
-  type SourceMode,
+  getPackages,
+  getPortsFromConfig,
+  getRemotes,
+  loadConfig,
+  type SourceMode
 } from "./config";
-import { startDev, type DevOrchestrator } from "./lib/orchestrator";
+import { bosContract } from "./contract";
+import { getBuildEnv, hasZephyrConfig, loadBosEnv, ZEPHYR_DOCS_URL } from "./lib/env";
+import { ensureNearCli, executeTransaction } from "./lib/near-cli";
+import { type DevOrchestrator, startDev } from "./lib/orchestrator";
 import { run } from "./utils/run";
+import { colors, icons } from "./utils/theme";
 
 interface BosDeps {
   bosConfig: BosConfigType;
   configDir: string;
-  near: Near | null;
+  nearPrivateKey?: string;
 }
 
 function serializeConfigForFastFS(config: BosConfigType, relativePath: string): Uint8Array {
@@ -84,56 +85,56 @@ function buildDevConfig(options: { host?: string; ui?: string; api?: string; pro
 
 function buildDescription(config: DevConfig): string {
   const parts: string[] = [];
-  
+
   if (config.host === "local" && config.ui === "local" && config.api === "local" && !config.proxy) {
     return "Full Local Development";
   }
-  
+
   if (config.host === "remote") parts.push("Remote Host");
   else parts.push("Local Host");
-  
+
   if (config.ui === "remote") parts.push("Remote UI");
   if (config.proxy) parts.push("Proxy API → Production");
   else if (config.api === "remote") parts.push("Remote API");
-  
+
   return parts.join(" + ");
 }
 
 function determineProcesses(config: DevConfig): string[] {
   const processes: string[] = [];
-  
+
   if (config.ui === "local") {
     processes.push("ui-ssr");
     processes.push("ui");
   }
-  
+
   if (config.api === "local" && !config.proxy) {
     processes.push("api");
   }
-  
+
   processes.push("host");
-  
+
   return processes;
 }
 
 function buildEnvVars(config: DevConfig): Record<string, string> {
   const env: Record<string, string> = {};
-  
+
   env.HOST_SOURCE = config.host;
   env.UI_SOURCE = config.ui;
   env.API_SOURCE = config.api;
-  
+
   if (config.host === "remote") {
     const remoteUrl = getHostRemoteUrl();
     if (remoteUrl) {
       env.HOST_REMOTE_URL = remoteUrl;
     }
   }
-  
+
   if (config.proxy) {
     env.API_PROXY = "true";
   }
-  
+
   return env;
 }
 
@@ -159,16 +160,11 @@ export default createPlugin({
       const bosConfig = loadConfig(config.variables.configPath);
       const configDir = getConfigDir();
 
-      let near: Near | null = null;
-      if (config.secrets.nearPrivateKey) {
-        near = new Near({
-          network: "mainnet",
-          privateKey: config.secrets.nearPrivateKey as `ed25519:${string}`,
-          defaultSignerId: bosConfig.account,
-        });
-      }
-
-      return { bosConfig, configDir, near };
+      return {
+        bosConfig,
+        configDir,
+        nearPrivateKey: config.secrets.nearPrivateKey
+      };
     }),
 
   shutdown: () => Effect.void,
@@ -247,6 +243,7 @@ export default createPlugin({
         devConfig: startConfig,
         port,
         interactive: input.interactive,
+        noLogs: true,
       };
 
       startDev(orchestrator);
@@ -269,72 +266,110 @@ export default createPlugin({
       };
     }),
 
-    build: builder.build.handler(async ({ input }) => {
+    build: builder.build.handler(async ({ input: buildInput }) => {
       const packages = getPackages();
       const { configDir } = deps;
 
-      if (input.package !== "all" && !packages.includes(input.package)) {
+      if (buildInput.package !== "all" && !packages.includes(buildInput.package)) {
         return {
           status: "error" as const,
           built: [],
         };
       }
 
-      const targets = input.package === "all" ? packages : [input.package];
+      const targets = buildInput.package === "all" ? packages : [buildInput.package];
       const built: string[] = [];
 
-      for (const target of targets) {
-        const buildConfig = buildCommands[target];
-        if (!buildConfig) continue;
+      const buildEffect = Effect.gen(function* () {
+        const bosEnv = yield* loadBosEnv;
+        const env = getBuildEnv(bosEnv);
 
-        await run("bun", ["run", buildConfig.cmd, ...buildConfig.args], {
-          cwd: `${configDir}/${target}`,
-        });
-        built.push(target);
-      }
+        if (!buildInput.deploy) {
+          env.NODE_ENV = "development";
+        } else {
+          env.NODE_ENV = "production";
+          if (!hasZephyrConfig(bosEnv)) {
+            console.log(colors.dim(`  ${icons.config} Zephyr tokens not configured - you may be prompted to login`));
+            console.log(colors.dim(`  Setup: ${ZEPHYR_DOCS_URL}`));
+            console.log();
+          }
+        }
+
+        for (const target of targets) {
+          const buildConfig = buildCommands[target];
+          if (!buildConfig) continue;
+
+          yield* Effect.tryPromise({
+            try: () => run("bun", ["run", buildConfig.cmd, ...buildConfig.args], {
+              cwd: `${configDir}/${target}`,
+              env,
+            }),
+            catch: (e) => new Error(`Build failed for ${target}: ${e}`),
+          });
+          built.push(target);
+        }
+      });
+
+      await Effect.runPromise(buildEffect);
 
       return {
         status: "success" as const,
         built,
+        deployed: buildInput.deploy,
       };
     }),
 
-    publish: builder.publish.handler(async () => {
-      const { bosConfig, near } = deps;
+    publish: builder.publish.handler(async ({ input: publishInput }) => {
+      const { bosConfig, nearPrivateKey } = deps;
 
-      if (!near) {
+      const relativePath = publishInput.path;
+      const contractId = "fastfs.near";
+
+      const publishEffect = Effect.gen(function* () {
+        yield* ensureNearCli;
+
+        const bosEnv = yield* loadBosEnv;
+        const privateKey = nearPrivateKey || bosEnv.NEAR_PRIVATE_KEY;
+
+        const serializedData = serializeConfigForFastFS(bosConfig, relativePath);
+        const argsBase64 = Buffer.from(serializedData).toString("base64");
+
+        if (publishInput.dryRun) {
+          return {
+            status: "dry-run" as const,
+            txHash: "",
+            registryUrl: `https://${bosConfig.account}.fastfs.io/${contractId}/${relativePath}`,
+          };
+        }
+
+        const result = yield* executeTransaction({
+          account: bosConfig.account,
+          contract: contractId,
+          method: "__fastdata_fastfs",
+          argsBase64,
+          network: publishInput.network,
+          privateKey,
+          gas: "300Tgas",
+          deposit: "0NEAR",
+        });
+
+        return {
+          status: "published" as const,
+          txHash: result.txHash || "unknown",
+          registryUrl: `https://${bosConfig.account}.fastfs.io/${contractId}/${relativePath}`,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(publishEffect);
+      } catch (error) {
         return {
           status: "error" as const,
           txHash: "",
           registryUrl: "",
+          error: error instanceof Error ? error.message : "Unknown error",
         };
       }
-
-      const relativePath = "bos.config.json";
-      const contractId = "fastfs.near";
-      const serializedData = serializeConfigForFastFS(bosConfig, relativePath);
-
-      const result = await near
-        .transaction(bosConfig.account)
-        .functionCall(
-          contractId,
-          "__fastdata_fastfs",
-          serializedData,
-          {
-            gas: "300 Tgas",
-            attachedDeposit: "0 NEAR",
-          }
-        )
-        .send();
-
-      const txHash = result.transaction?.hash || result.transaction_outcome?.id || "unknown";
-      const registryUrl = `https://${bosConfig.account}.fastfs.io/${contractId}/${relativePath}`;
-
-      return {
-        status: "published" as const,
-        txHash,
-        registryUrl,
-      };
     }),
 
     create: builder.create.handler(async ({ input }) => {
@@ -489,13 +524,13 @@ export default createPlugin({
         try {
           await Bun.spawn(["rm", "-rf", distPath]).exited;
           removed.push(`${pkg}/dist`);
-        } catch {}
+        } catch { }
 
         const nodeModulesPath = `${configDir}/${pkg}/node_modules`;
         try {
           await Bun.spawn(["rm", "-rf", nodeModulesPath]).exited;
           removed.push(`${pkg}/node_modules`);
-        } catch {}
+        } catch { }
       }
 
       return {

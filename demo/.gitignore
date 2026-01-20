@@ -1,4 +1,4 @@
-### macOS template
+ ### macOS template
 # General
 .DS_Store
 .AppleDouble
@@ -151,6 +151,7 @@ web_modules/
 
 # dotenv environment variables file
 .env
+.env.bos
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

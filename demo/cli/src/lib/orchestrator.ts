@@ -19,6 +19,7 @@ export interface DevOrchestrator {
   devConfig: DevConfig;
   port?: number;
   interactive?: boolean;
+  noLogs?: boolean;
 }
 
 const isInteractiveSupported = (): boolean => {
@@ -84,11 +85,13 @@ export const runDevServers = (orchestrator: DevOrchestrator) =>
     let view: DevViewHandle | null = null;
     let shuttingDown = false;
 
-    yield* Effect.promise(async () => {
-      await ensureLogDir();
-      logFile = getLogFile();
-      await Bun.write(logFile, `# BOS Dev Session: ${orchestrator.description}\n# Started: ${new Date().toISOString()}\n\n`);
-    });
+    if (!orchestrator.noLogs) {
+      yield* Effect.promise(async () => {
+        await ensureLogDir();
+        logFile = getLogFile();
+        await Bun.write(logFile, `# BOS Dev Session: ${orchestrator.description}\n# Started: ${new Date().toISOString()}\n\n`);
+      });
+    }
 
     const killAll = async () => {
       const reversed = [...handles].reverse();

@@ -204,13 +204,23 @@ async function main() {
 
   program
     .command("build")
-    .description(`Build packages (${packages.join(", ")})`)
+    .description(`Build packages (${packages.join(", ")}). Deploys to Zephyr Cloud by default.`)
     .argument("[package]", "Package to build", "all")
     .option("--force", "Force rebuild")
+    .option("--no-deploy", "Build locally without Zephyr deploy")
+    .addHelpText("after", `
+Zephyr Configuration:
+  Set ZE_SERVER_TOKEN and ZE_USER_EMAIL in .env.bos for CI/CD deployment.
+  Docs: https://docs.zephyr-cloud.io/features/ci-cd-server-token
+`)
     .action(async (pkg: string, options) => {
+      console.log();
+      console.log(`  ${icons.pkg} Building${options.deploy ? " & deploying" : ""}...`);
+
       const result = await client.build({
         package: pkg,
         force: options.force || false,
+        deploy: options.deploy !== false,
       });
 
       if (result.status === "error") {
@@ -220,21 +230,47 @@ async function main() {
 
       console.log();
       console.log(colors.green(`${icons.ok} Built: ${result.built.join(", ")}`));
+      if (result.deployed) {
+        console.log(colors.dim(`  Deployed to Zephyr Cloud`));
+      }
       console.log();
     });
 
   program
     .command("publish")
-    .description("Publish bos.config.json to on-chain registry")
-    .action(async () => {
+    .description("Publish bos.config.json to on-chain registry (FastFS)")
+    .option("--sign-with <method>", "Signing method: keychain | ledger | seed-phrase | access-key-file")
+    .option("--network <network>", "Network: mainnet | testnet", "mainnet")
+    .option("--path <path>", "FastFS relative path", "bos.config.json")
+    .option("--dry-run", "Show what would be published without sending")
+    .action(async (options) => {
       console.log();
       console.log(`  ${icons.pkg} Publishing to FastFS...`);
+      console.log(colors.dim(`  Account: ${config.account}`));
+      console.log(colors.dim(`  Network: ${options.network}`));
 
-      const result = await client.publish({});
+      if (options.dryRun) {
+        console.log(colors.cyan(`  ${icons.scan} Dry run mode - no transaction will be sent`));
+      }
+
+      const result = await client.publish({
+        signWith: options.signWith as any,
+        network: options.network as "mainnet" | "testnet",
+        path: options.path,
+        dryRun: options.dryRun || false,
+      });
 
       if (result.status === "error") {
-        console.error(colors.error(`${icons.err} Publish failed. Did you set NEAR_PRIVATE_KEY?`));
+        console.error(colors.error(`${icons.err} Publish failed: ${result.error || "Unknown error"}`));
         process.exit(1);
+      }
+
+      if (result.status === "dry-run") {
+        console.log();
+        console.log(colors.cyan(`${icons.ok} Dry run complete`));
+        console.log(`  ${colors.dim("Would publish to:")} ${result.registryUrl}`);
+        console.log();
+        return;
       }
 
       console.log();

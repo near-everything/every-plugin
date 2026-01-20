@@ -44,17 +44,35 @@ const ServeResultSchema = z.object({
 const BuildOptionsSchema = z.object({
   package: z.string().default("all"),
   force: z.boolean().default(false),
+  deploy: z.boolean().default(true),
 });
 
 const BuildResultSchema = z.object({
   status: z.enum(["success", "error"]),
   built: z.array(z.string()),
+  deployed: z.boolean().optional(),
+});
+
+const SigningMethodSchema = z.enum([
+  "keychain",
+  "ledger",
+  "seed-phrase",
+  "access-key-file",
+  "private-key",
+]);
+
+const PublishOptionsSchema = z.object({
+  signWith: SigningMethodSchema.optional(),
+  network: z.enum(["mainnet", "testnet"]).default("mainnet"),
+  path: z.string().default("bos.config.json"),
+  dryRun: z.boolean().default(false),
 });
 
 const PublishResultSchema = z.object({
-  status: z.enum(["published", "error"]),
+  status: z.enum(["published", "error", "dry-run"]),
   txHash: z.string(),
   registryUrl: z.string(),
+  error: z.string().optional(),
 });
 
 const CreateOptionsSchema = z.object({
@@ -149,6 +167,7 @@ export const bosContract = oc.router({
 
   publish: oc
     .route({ method: "POST", path: "/publish" })
+    .input(PublishOptionsSchema)
     .output(PublishResultSchema),
 
   create: oc
@@ -179,6 +198,8 @@ export type ServeOptions = z.infer<typeof ServeOptionsSchema>;
 export type ServeResult = z.infer<typeof ServeResultSchema>;
 export type BuildOptions = z.infer<typeof BuildOptionsSchema>;
 export type BuildResult = z.infer<typeof BuildResultSchema>;
+export type SigningMethod = z.infer<typeof SigningMethodSchema>;
+export type PublishOptions = z.infer<typeof PublishOptionsSchema>;
 export type PublishResult = z.infer<typeof PublishResultSchema>;
 export type CreateOptions = z.infer<typeof CreateOptionsSchema>;
 export type CreateResult = z.infer<typeof CreateResultSchema>;
