@@ -6,7 +6,6 @@ import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { RPCHandler } from "@orpc/server/fetch";
 import { BatchHandlerPlugin } from "@orpc/server/plugins";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { logger } from "@rsbuild/core";
 import { Effect, ManagedRuntime } from "every-plugin/effect";
 import { formatORPCError } from "every-plugin/errors";
 import { onError } from "every-plugin/orpc";
@@ -22,6 +21,7 @@ import { closeDatabase, DatabaseService } from "./services/database";
 import { loadRouterModule, type RouterModule } from "./services/federation.server";
 import { type PluginResult, PluginsService } from "./services/plugins";
 import { createRouter } from "./services/router";
+import { logger } from "./utils/logger";
 
 function nodeHeadersToHeaders(nodeHeaders: IncomingHttpHeaders): Headers {
   const headers = new Headers();
@@ -330,7 +330,7 @@ export const runServer = (bootstrap?: BootstrapConfig): ServerHandle => {
 
   let resolveReady: () => void;
   let rejectReady: (err: unknown) => void;
-  
+
   const ready = new Promise<void>((resolve, reject) => {
     resolveReady = resolve;
     rejectReady = reject;
@@ -357,13 +357,13 @@ export const runServer = (bootstrap?: BootstrapConfig): ServerHandle => {
 
 export const runServerBlocking = async () => {
   const handle = runServer();
-  
+
   process.on("SIGINT", () => void handle.shutdown().then(() => process.exit(0)));
   process.on("SIGTERM", () => void handle.shutdown().then(() => process.exit(0)));
 
   try {
     await handle.ready;
-    await new Promise(() => {});
+    await new Promise(() => { });
   } catch (err) {
     console.error("Failed to start server:", err);
     process.exit(1);
