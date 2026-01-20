@@ -128,7 +128,7 @@ function setupApiRoutes(
 }
 
 export const createStartServer = (onReady?: () => void) => Effect.gen(function* () {
-  const port = Number(process.env.PORT) || 3001;
+  const port = Number(process.env.PORT) || 3000;
   const isDev = process.env.NODE_ENV !== "production";
 
   const config = yield* ConfigService;
@@ -144,8 +144,6 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
       origin: process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()) ?? [
         config.hostUrl,
         config.ui.url,
-        "http://localhost:3001",
-        "http://localhost:3002",
       ],
       credentials: true,
     })

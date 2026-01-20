@@ -2,47 +2,50 @@ import gradient from "gradient-string";
 import chalk from "chalk";
 
 export const gradients = {
-  cyber: gradient(["#00f5ff", "#ff00ff"]),
-  neon: gradient(["#39ff14", "#00ff88", "#00f5ff"]),
-  sunset: gradient(["#ff6b6b", "#ffa500", "#ffff00"]),
-  matrix: gradient(["#003300", "#00ff00"]),
-  frost: gradient(["#a8edea", "#fed6e3"]),
+  cyber: gradient(["#00ffff", "#ff00ff"]),
+  matrix: gradient(["#003300", "#00ff41"]),
+  frost: gradient(["#0080ff", "#00ffff"]),
+  neon: gradient(["#00ff41", "#00ffff"]),
 };
 
 export const colors = {
-  cyan: chalk.hex("#00f5ff"),
+  cyan: chalk.hex("#00ffff"),
   magenta: chalk.hex("#ff00ff"),
-  neonGreen: chalk.hex("#39ff14"),
-  orange: chalk.hex("#ffa500"),
+  green: chalk.hex("#00ff41"),
+  blue: chalk.hex("#0080ff"),
+  purple: chalk.hex("#bf00ff"),
+  white: chalk.hex("#f0f0f0"),
+  gray: chalk.hex("#555555"),
   dim: chalk.dim,
   bold: chalk.bold,
-  white: chalk.white,
+  error: chalk.hex("#ff3366"),
 };
 
 export const icons = {
-  config: "[-]",
-  host: "[+]",
-  pkg: "[>]",
-  scan: "[o]",
-  run: ">>",
-  test: "[~]",
-  db: "[=]",
-  clean: "[x]",
-  ok: "[-]",
-  err: "[!]",
-  pending: "[ ]",
-  arrow: ">",
-  line: "-",
-  dot: ".",
-  bar: "|",
-  corner: "+",
+  config: "◆",
+  host: "●",
+  pkg: "▸",
+  scan: "○",
+  run: "▶",
+  test: "◇",
+  db: "▪",
+  clean: "✕",
+  ok: "✓",
+  err: "✗",
+  pending: "○",
+  arrow: "→",
+  line: "─",
+  dot: "·",
+  bar: "│",
+  corner: "└",
+  app: "◉",
 };
 
 export const frames = {
-  top: (width: number) => `+${"-".repeat(width - 2)}+`,
-  bottom: (width: number) => `+${"-".repeat(width - 2)}+`,
-  side: "|",
-  empty: (width: number) => `|${" ".repeat(width - 2)}|`,
+  top: (width: number) => `┌${"─".repeat(width - 2)}┐`,
+  bottom: (width: number) => `└${"─".repeat(width - 2)}┘`,
+  side: "│",
+  empty: (width: number) => `│${" ".repeat(width - 2)}│`,
 };
 
 export function box(content: string, width = 50): string {
@@ -64,7 +67,8 @@ export function box(content: string, width = 50): string {
 }
 
 function stripAnsi(str: string): string {
-  return str.replace(/\x1b\[[0-9;]*m/g, "");
+  const ansiPattern = new RegExp("\\x1b\\[[0-9;]*m", "g");
+  return str.replace(ansiPattern, "");
 }
 
 export function header(text: string): string {
@@ -73,7 +77,7 @@ export function header(text: string): string {
 }
 
 export function divider(width = 48): string {
-  return colors.dim("-".repeat(width));
+  return colors.dim("─".repeat(width));
 }
 
 export function label(text: string): string {
@@ -85,11 +89,11 @@ export function value(text: string): string {
 }
 
 export function success(text: string): string {
-  return colors.neonGreen(text);
+  return colors.green(text);
 }
 
 export function error(text: string): string {
-  return chalk.red(text);
+  return colors.error(text);
 }
 
 export function statusIcon(ok: boolean): string {

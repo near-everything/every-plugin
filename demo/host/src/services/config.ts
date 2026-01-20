@@ -6,6 +6,7 @@ import { ConfigError } from "./errors";
 export interface BootstrapConfig {
   configPath?: string;
   secrets?: Record<string, string>;
+  host?: { url?: string };
   ui?: { source?: SourceMode };
   api?: { source?: SourceMode; proxy?: string };
   database?: { url?: string };
@@ -126,7 +127,7 @@ export const loadConfig = Effect.gen(function* () {
     env,
     account: config.account,
     title: config.app.host.title,
-    hostUrl: config.app.host[env],
+    hostUrl: bootstrap?.host?.url ?? config.app.host[env],
     ui: {
       name: config.app.ui.name,
       url: uiUrl,

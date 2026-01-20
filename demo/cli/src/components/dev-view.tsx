@@ -1,6 +1,6 @@
 import { Box, render, Text, useApp, useInput } from "ink";
 import { useEffect, useState } from "react";
-import { colors, divider, gradients, icons } from "../utils/theme";
+import { colors, divider, gradients, icons, frames } from "../utils/theme";
 
 export type ProcessStatus = "pending" | "starting" | "ready" | "error";
 
@@ -9,6 +9,7 @@ export interface ProcessState {
   status: ProcessStatus;
   port: number;
   message?: string;
+  source?: "local" | "remote";
 }
 
 export interface LogEntry {
@@ -22,7 +23,6 @@ interface DevViewProps {
   processes: ProcessState[];
   logs: LogEntry[];
   description: string;
-  env: Record<string, string>;
   onExit?: () => void;
   onExportLogs?: () => void;
 }
@@ -30,42 +30,30 @@ interface DevViewProps {
 function StatusIcon({ status }: { status: ProcessStatus }) {
   switch (status) {
     case "pending":
-      return <Text color="gray">[ ]</Text>;
+      return <Text color="gray">{icons.pending}</Text>;
     case "starting":
-      return <Text color="cyan">[~]</Text>;
+      return <Text color="#00ffff">{icons.scan}</Text>;
     case "ready":
-      return <Text color="green">[-]</Text>;
+      return <Text color="#00ff41">{icons.ok}</Text>;
     case "error":
-      return <Text color="magenta">[!]</Text>;
+      return <Text color="#ff3366">{icons.err}</Text>;
   }
 }
 
 function getServiceColor(name: string): string {
-  return name === "host" ? "cyan" : name === "ui" ? "magenta" : "green";
-}
-
-function UrlRow({ proc }: { proc: ProcessState }) {
-  const color = getServiceColor(proc.name);
-  const url = `http://localhost:${proc.port}`;
-  const isReady = proc.status === "ready";
-
-  return (
-    <Box>
-      <Text>{"  "}</Text>
-      <Text color={isReady ? color : "gray"}>{url}</Text>
-      <Text color="gray"> ({proc.name})</Text>
-    </Box>
-  );
+  return name === "host" ? "#00ffff" : name === "ui" ? "#ff00ff" : "#0080ff";
 }
 
 function ProcessRow({ proc }: { proc: ProcessState }) {
   const color = getServiceColor(proc.name);
+  const portStr = proc.port > 0 ? `:${proc.port}` : "";
+  const sourceLabel = proc.source ? ` (${proc.source})` : "";
 
   const statusText =
     proc.status === "pending"
-      ? "waiting..."
+      ? "waiting"
       : proc.status === "starting"
-        ? "starting..."
+        ? "starting"
         : proc.status === "ready"
           ? "running"
           : "failed";
@@ -75,26 +63,25 @@ function ProcessRow({ proc }: { proc: ProcessState }) {
       <Text>{"  "}</Text>
       <StatusIcon status={proc.status} />
       <Text> </Text>
-      <Text color={color}>{proc.name.toUpperCase().padEnd(8)}</Text>
-      <Text color={proc.status === "ready" ? "green" : "gray"}>
+      <Text color={color} bold>{proc.name.toUpperCase().padEnd(6)}</Text>
+      <Text color="gray">{sourceLabel.padEnd(10)}</Text>
+      <Text color={proc.status === "ready" ? "#00ff41" : "gray"}>
         {statusText}
       </Text>
+      {proc.port > 0 && (
+        <Text color="#00ffff"> {portStr}</Text>
+      )}
     </Box>
   );
 }
 
 function LogLine({ entry }: { entry: LogEntry }) {
-  const color =
-    entry.source === "host"
-      ? "cyan"
-      : entry.source === "ui"
-        ? "magenta"
-        : "green";
+  const color = getServiceColor(entry.source);
 
   return (
     <Box>
       <Text color={color}>[{entry.source}]</Text>
-      <Text color={entry.isError ? "red" : undefined}> {entry.line}</Text>
+      <Text color={entry.isError ? "#ff3366" : undefined}> {entry.line}</Text>
     </Box>
   );
 }
@@ -103,7 +90,6 @@ function DevView({
   processes,
   logs,
   description,
-  env,
   onExit,
   onExportLogs,
 }: DevViewProps) {
@@ -123,29 +109,38 @@ function DevView({
   const readyCount = processes.filter((p) => p.status === "ready").length;
   const total = processes.length;
   const allReady = readyCount === total;
+  const hostProcess = processes.find((p) => p.name === "host");
+  const hostPort = hostProcess?.port || 3000;
 
-  const recentLogs = logs.slice(-15);
+  const recentLogs = logs.slice(-12);
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={0}>
-        <Text>{colors.cyan(`+${"-".repeat(50)}+`)}</Text>
+        <Text color="#00ffff">{frames.top(52)}</Text>
       </Box>
       <Box>
         <Text>
           {"  "}
-          {icons.run} {gradients.cyber(`LAUNCHING ${description}`)}
+          {icons.run} {gradients.cyber(description.toUpperCase())}
         </Text>
       </Box>
       <Box marginBottom={1}>
-        <Text>{colors.cyan(`+${"-".repeat(50)}+`)}</Text>
+        <Text color="#00ffff">{frames.bottom(52)}</Text>
       </Box>
 
-      {processes.filter((proc) => proc.port > 0).map((proc) => (
-        <UrlRow key={`url-${proc.name}`} proc={proc} />
-      ))}
+      {allReady && (
+        <Box marginBottom={1} flexDirection="column">
+          <Box>
+            <Text color="#00ff41">{"  "}{icons.app} APP READY</Text>
+          </Box>
+          <Box>
+            <Text color="#00ff41" bold>{"  "}{icons.arrow} http://localhost:{hostPort}</Text>
+          </Box>
+        </Box>
+      )}
 
-      <Box marginTop={1} marginBottom={0}>
+      <Box marginTop={0} marginBottom={0}>
         <Text>{colors.dim(divider(52))}</Text>
       </Box>
 
@@ -153,29 +148,18 @@ function DevView({
         <ProcessRow key={proc.name} proc={proc} />
       ))}
 
-      {Object.keys(env).length > 0 && (
-        <Box marginTop={1} flexDirection="column">
-          {Object.entries(env).map(([k, v]) => (
-            <Text key={k} color="gray">
-              {"  "}
-              {k}={v}
-            </Text>
-          ))}
-        </Box>
-      )}
-
-      <Box marginTop={1} marginBottom={1}>
+      <Box marginTop={1} marginBottom={0}>
         <Text>{colors.dim(divider(52))}</Text>
       </Box>
 
-      <Box>
-        <Text color={allReady ? "green" : "cyan"}>
+      <Box marginTop={0}>
+        <Text color={allReady ? "#00ff41" : "#00ffff"}>
           {"  "}
           {allReady
             ? `${icons.ok} All ${total} services running`
             : `${icons.scan} ${readyCount}/${total} ready`}
         </Text>
-        <Text color="gray"> • q quit • l export logs</Text>
+        <Text color="gray"> {icons.dot} q quit {icons.dot} l logs</Text>
       </Box>
 
       {recentLogs.length > 0 && (
@@ -183,7 +167,7 @@ function DevView({
           <Box marginTop={1} marginBottom={0}>
             <Text>{colors.dim(divider(52))}</Text>
           </Box>
-          <Box flexDirection="column" marginTop={1}>
+          <Box flexDirection="column" marginTop={0}>
             {recentLogs.map((entry, i) => (
               <LogLine key={`${entry.timestamp}-${i}`} entry={entry} />
             ))}
@@ -247,7 +231,6 @@ export function renderDevView(
         processes={processes}
         logs={logs}
         description={description}
-        env={env}
         onExit={onExit}
         onExportLogs={onExportLogs}
       />

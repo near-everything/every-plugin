@@ -11,6 +11,8 @@ import {
   getRemotes,
   getHost,
   getConfigDir,
+  getPortsFromConfig,
+  getConfigPath,
   type BosConfig as BosConfigType,
   type DevConfig,
   DEFAULT_DEV_CONFIG,
@@ -200,6 +202,7 @@ export default createPlugin({
         env,
         description,
         devConfig,
+        port: input.port,
       };
 
       startDev(orchestrator);
@@ -212,10 +215,43 @@ export default createPlugin({
     }),
 
     start: builder.start.handler(async ({ input }) => {
-      const host = getHost();
+      const remoteUrl = getHostRemoteUrl();
+      if (!remoteUrl) {
+        return {
+          status: "error" as const,
+          url: "",
+        };
+      }
+
+      const ports = getPortsFromConfig();
+      const port = input.port ?? ports.host;
+
+      const startConfig: DevConfig = {
+        host: "remote",
+        ui: "remote",
+        api: "remote",
+      };
+
+      const env: Record<string, string> = {
+        HOST_SOURCE: "remote",
+        UI_SOURCE: "remote",
+        API_SOURCE: "remote",
+        HOST_REMOTE_URL: remoteUrl,
+      };
+
+      const orchestrator: DevOrchestrator = {
+        packages: ["host"],
+        env,
+        description: "Production Mode (all remotes)",
+        devConfig: startConfig,
+        port,
+      };
+
+      startDev(orchestrator);
+
       return {
         status: "running" as const,
-        url: host.production,
+        url: `http://localhost:${port}`,
       };
     }),
 
@@ -303,6 +339,8 @@ export default createPlugin({
       const { execa } = await import("execa");
       const { join } = await import("path");
 
+      const ports = getPortsFromConfig();
+
       const DEFAULT_TEMPLATES: Record<string, string> = {
         project: "near-everything/every-plugin/demo",
         ui: "near-everything/every-plugin/demo/ui",
@@ -324,12 +362,12 @@ export default createPlugin({
               host: {
                 title: input.name,
                 description: `${input.name} BOS application`,
-                development: "http://localhost:3001",
+                development: `http://localhost:${ports.host}`,
                 production: `https://${input.name}.example.com`,
               },
               ui: {
                 name: "ui",
-                development: "http://localhost:3002",
+                development: `http://localhost:${ports.ui}`,
                 production: "",
                 exposes: {
                   App: "./App",
@@ -340,7 +378,7 @@ export default createPlugin({
               },
               api: {
                 name: "api",
-                development: "http://localhost:3014",
+                development: `http://localhost:${ports.api}`,
                 production: "",
                 variables: {},
                 secrets: [],

@@ -40,19 +40,19 @@ export function loadSecretsFor(component: string): Record<string, string> {
     return {};
   }
   
+  let fileEnvVars: Record<string, string> = {};
   const envPath = resolve(configDir, component, ".env");
-  if (!existsSync(envPath)) {
-    console.warn(`⚠️  No .env file found for ${component} at ${envPath}`);
-    return {};
+  if (existsSync(envPath)) {
+    const envContent = readFileSync(envPath, "utf-8");
+    fileEnvVars = parseEnvFile(envContent);
   }
-  
-  const envContent = readFileSync(envPath, "utf-8");
-  const allEnvVars = parseEnvFile(envContent);
   
   const secrets: Record<string, string> = {};
   for (const name of secretNames) {
-    if (allEnvVars[name]) {
-      secrets[name] = allEnvVars[name];
+    if (fileEnvVars[name]) {
+      secrets[name] = fileEnvVars[name];
+    } else if (process.env[name]) {
+      secrets[name] = process.env[name]!;
     }
   }
   

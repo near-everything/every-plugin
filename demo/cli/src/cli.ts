@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 import { program } from "commander";
 import { createPluginRuntime } from "every-plugin";
-import { getPackages, getTitle, loadConfig } from "./config";
+import { getPackages, getTitle, loadConfig, getConfigPath } from "./config";
 import BosPlugin from "./plugin";
 import { printBanner } from "./utils/banner";
-import { colors, gradients, icons } from "./utils/theme";
+import { colors, gradients, icons, frames } from "./utils/theme";
 
 async function main() {
   let config: ReturnType<typeof loadConfig>;
@@ -12,13 +12,14 @@ async function main() {
   try {
     config = loadConfig();
   } catch {
-    console.error(colors.magenta(`${icons.err} Could not find bos.config.json`));
+    console.error(colors.error(`${icons.err} Could not find bos.config.json`));
     console.log(colors.dim("  Run 'bos create project <name>' to create a new project"));
     process.exit(1);
   }
 
   const packages = getPackages();
   const title = getTitle();
+  const configPath = getConfigPath();
 
   printBanner(title);
 
@@ -45,17 +46,18 @@ async function main() {
     const lines: string[] = [];
 
     lines.push("");
-    lines.push(colors.cyan(`+${"-".repeat(50)}+`));
+    lines.push(colors.cyan(frames.top(52)));
     lines.push(`  ${icons.config} ${gradients.cyber("BOS CLI")} ${colors.dim("v1.0.0")}`);
-    lines.push(colors.cyan(`+${"-".repeat(50)}+`));
+    lines.push(colors.cyan(frames.bottom(52)));
     lines.push("");
     lines.push(`  ${colors.dim("Account")} ${colors.cyan(config.account)}`);
     lines.push(`  ${colors.dim("URL    ")} ${colors.white(host.production)}`);
+    lines.push(`  ${colors.dim("Config ")} ${colors.dim(configPath)}`);
     if (host.description) {
       lines.push(`  ${colors.dim("About  ")} ${colors.white(host.description)}`);
     }
     lines.push("");
-    lines.push(colors.cyan(`+${"-".repeat(50)}+`));
+    lines.push(colors.cyan(frames.top(52)));
     lines.push("");
 
     return lines.join("\n");
@@ -73,13 +75,43 @@ async function main() {
       const result = await client.info({});
 
       console.log();
-      console.log(colors.cyan(`+${"-".repeat(46)}+`));
+      console.log(colors.cyan(frames.top(52)));
       console.log(`  ${icons.config} ${gradients.cyber("CONFIGURATION")}`);
-      console.log(colors.cyan(`+${"-".repeat(46)}+`));
+      console.log(colors.cyan(frames.bottom(52)));
       console.log();
-      console.log(colors.white("  Account:"), colors.cyan(result.config.account));
-      console.log(colors.white("  Packages:"), colors.cyan(result.packages.join(", ")));
-      console.log(colors.white("  Remotes:"), colors.cyan(result.remotes.join(", ")));
+      
+      console.log(`  ${colors.dim("Account")}  ${colors.cyan(result.config.account)}`);
+      console.log(`  ${colors.dim("Config ")}  ${colors.dim(configPath)}`);
+      console.log();
+
+      const host = result.config.app.host;
+      console.log(colors.magenta(`  ┌─ HOST ${"─".repeat(42)}┐`));
+      console.log(`  ${colors.magenta("│")} ${colors.dim("title")}        ${colors.white(host.title)}`);
+      if (host.description) {
+        console.log(`  ${colors.magenta("│")} ${colors.dim("description")}  ${colors.gray(host.description)}`);
+      }
+      console.log(`  ${colors.magenta("│")} ${colors.dim("development")}  ${colors.cyan(host.development)}`);
+      console.log(`  ${colors.magenta("│")} ${colors.dim("production")}   ${colors.green(host.production)}`);
+      if (host.remote) {
+        console.log(`  ${colors.magenta("│")} ${colors.dim("remote")}       ${colors.blue(host.remote)}`);
+      }
+      console.log(colors.magenta(`  └${"─".repeat(49)}┘`));
+
+      for (const remoteName of result.remotes) {
+        const remote = result.config.app[remoteName];
+        if (!remote || !("name" in remote)) continue;
+        
+        console.log();
+        const color = remoteName === "ui" ? colors.cyan : colors.blue;
+        console.log(color(`  ┌─ ${remoteName.toUpperCase()} ${"─".repeat(46 - remoteName.length)}┐`));
+        console.log(`  ${color("│")} ${colors.dim("development")}  ${colors.cyan(remote.development)}`);
+        console.log(`  ${color("│")} ${colors.dim("production")}   ${colors.green(remote.production)}`);
+        if ("ssr" in remote && remote.ssr) {
+          console.log(`  ${color("│")} ${colors.dim("ssr")}          ${colors.purple(remote.ssr as string)}`);
+        }
+        console.log(color(`  └${"─".repeat(49)}┘`));
+      }
+
       console.log();
     });
 
@@ -91,15 +123,15 @@ async function main() {
       const result = await client.status({ env: options.env as "development" | "production" });
 
       console.log();
-      console.log(colors.cyan(`+${"-".repeat(46)}+`));
+      console.log(colors.cyan(frames.top(48)));
       console.log(`  ${icons.scan} ${gradients.cyber("ENDPOINT STATUS")}`);
-      console.log(colors.cyan(`+${"-".repeat(46)}+`));
+      console.log(colors.cyan(frames.bottom(48)));
       console.log();
 
       for (const endpoint of result.endpoints) {
         const status = endpoint.healthy
-          ? colors.neonGreen(`${icons.ok} healthy`)
-          : colors.magenta(`${icons.err} unhealthy`);
+          ? colors.green(`${icons.ok} healthy`)
+          : colors.error(`${icons.err} unhealthy`);
         const latency = endpoint.latency ? colors.dim(` (${endpoint.latency}ms)`) : "";
         console.log(`  ${endpoint.name}: ${status}${latency}`);
         console.log(colors.dim(`    ${endpoint.url}`));
@@ -114,32 +146,35 @@ async function main() {
     .option("--ui <mode>", "UI mode: local (default) | remote", "local")
     .option("--api <mode>", "API mode: local (default) | remote", "local")
     .option("--proxy", "Proxy API requests to production")
+    .option("-p, --port <port>", "Host port (default: from config)")
     .action(async (options) => {
       const result = await client.dev({
         host: options.host as "local" | "remote",
         ui: options.ui as "local" | "remote",
         api: options.api as "local" | "remote",
         proxy: options.proxy || false,
+        port: options.port ? parseInt(options.port, 10) : undefined,
       });
 
       if (result.status === "error") {
-        console.error(colors.magenta(`${icons.err} ${result.description}`));
+        console.error(colors.error(`${icons.err} ${result.description}`));
         process.exit(1);
       }
     });
 
   program
     .command("start")
-    .description("Start production server")
-    .option("-p, --port <port>", "Port to run on", "3001")
+    .description("Start with production modules (all remotes from production URLs)")
+    .option("-p, --port <port>", "Host port (default: from config)")
     .action(async (options) => {
       const result = await client.start({
-        port: parseInt(options.port, 10),
+        port: options.port ? parseInt(options.port, 10) : undefined,
       });
 
-      console.log();
-      console.log(colors.neonGreen(`${icons.ok} Production server: ${result.url}`));
-      console.log();
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} Failed to start`));
+        process.exit(1);
+      }
     });
 
   program
@@ -152,9 +187,9 @@ async function main() {
       });
 
       console.log();
-      console.log(colors.cyan(`+${"-".repeat(46)}+`));
+      console.log(colors.cyan(frames.top(48)));
       console.log(`  ${icons.run} ${gradients.cyber("CLI SERVER")}`);
-      console.log(colors.cyan(`+${"-".repeat(46)}+`));
+      console.log(colors.cyan(frames.bottom(48)));
       console.log();
       console.log(`  ${colors.dim("URL:")}  ${colors.white(result.url)}`);
       console.log(`  ${colors.dim("RPC:")}  ${colors.white(result.endpoints.rpc)}`);
@@ -174,12 +209,12 @@ async function main() {
       });
 
       if (result.status === "error") {
-        console.error(colors.magenta(`${icons.err} Build failed`));
+        console.error(colors.error(`${icons.err} Build failed`));
         process.exit(1);
       }
 
       console.log();
-      console.log(colors.neonGreen(`${icons.ok} Built: ${result.built.join(", ")}`));
+      console.log(colors.green(`${icons.ok} Built: ${result.built.join(", ")}`));
       console.log();
     });
 
@@ -193,12 +228,12 @@ async function main() {
       const result = await client.publish({});
 
       if (result.status === "error") {
-        console.error(colors.magenta(`${icons.err} Publish failed. Did you set NEAR_PRIVATE_KEY?`));
+        console.error(colors.error(`${icons.err} Publish failed. Did you set NEAR_PRIVATE_KEY?`));
         process.exit(1);
       }
 
       console.log();
-      console.log(colors.neonGreen(`${icons.ok} Published!`));
+      console.log(colors.green(`${icons.ok} Published!`));
       console.log(`  ${colors.dim("TX:")} ${result.txHash}`);
       console.log(`  ${colors.dim("URL:")} ${result.registryUrl}`);
       console.log();
@@ -211,7 +246,7 @@ async function main() {
       const result = await client.clean({});
 
       console.log();
-      console.log(colors.neonGreen(`${icons.ok} Cleaned: ${result.removed.join(", ")}`));
+      console.log(colors.green(`${icons.ok} Cleaned: ${result.removed.join(", ")}`));
       console.log();
     });
 
@@ -232,12 +267,12 @@ async function main() {
       });
 
       if (result.status === "error") {
-        console.error(colors.magenta(`${icons.err} Failed to create project`));
+        console.error(colors.error(`${icons.err} Failed to create project`));
         process.exit(1);
       }
 
       console.log();
-      console.log(colors.neonGreen(`${icons.ok} Created project at ${result.path}`));
+      console.log(colors.green(`${icons.ok} Created project at ${result.path}`));
       console.log();
       console.log(colors.dim("  Next steps:"));
       console.log(`  ${colors.dim("1.")} cd ${result.path}`);
@@ -257,7 +292,7 @@ async function main() {
       });
 
       if (result.status === "created") {
-        console.log(colors.neonGreen(`${icons.ok} Created UI at ${result.path}`));
+        console.log(colors.green(`${icons.ok} Created UI at ${result.path}`));
       }
     });
 
@@ -272,7 +307,7 @@ async function main() {
       });
 
       if (result.status === "created") {
-        console.log(colors.neonGreen(`${icons.ok} Created API at ${result.path}`));
+        console.log(colors.green(`${icons.ok} Created API at ${result.path}`));
       }
     });
 
@@ -287,7 +322,7 @@ async function main() {
       });
 
       if (result.status === "created") {
-        console.log(colors.neonGreen(`${icons.ok} Created host at ${result.path}`));
+        console.log(colors.green(`${icons.ok} Created host at ${result.path}`));
       }
     });
 
@@ -302,7 +337,7 @@ async function main() {
       });
 
       if (result.status === "created") {
-        console.log(colors.neonGreen(`${icons.ok} Created CLI at ${result.path}`));
+        console.log(colors.green(`${icons.ok} Created CLI at ${result.path}`));
       }
     });
 
@@ -310,6 +345,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(colors.magenta(`${icons.err} Fatal error:`), error);
+  console.error(colors.error(`${icons.err} Fatal error:`), error);
   process.exit(1);
 });

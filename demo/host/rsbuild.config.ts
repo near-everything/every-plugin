@@ -59,9 +59,6 @@ export default defineConfig({
   dev: {
     progressBar: false,
   },
-  server: {
-    port: 3001,
-  },
   tools: {
     rspack: {
       target: "async-node",

@@ -8,6 +8,7 @@ const DevOptionsSchema = z.object({
   ui: SourceModeSchema.default("local"),
   api: SourceModeSchema.default("local"),
   proxy: z.boolean().default(false),
+  port: z.number().optional(),
 });
 
 const DevResultSchema = z.object({
@@ -17,7 +18,7 @@ const DevResultSchema = z.object({
 });
 
 const StartOptionsSchema = z.object({
-  port: z.number().default(3001),
+  port: z.number().optional(),
 });
 
 const StartResultSchema = z.object({

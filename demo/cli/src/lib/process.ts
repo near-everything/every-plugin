@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { Command } from "@effect/platform";
 import { Deferred, Effect, Fiber, Ref, Stream } from "effect";
-import type { SourceMode } from "../config";
+import { getConfigDir, getPortsFromConfig, type SourceMode } from "../config";
 import type { ProcessStatus } from "../components/dev-view";
 import { loadSecretsFor } from "./secrets";
 
@@ -16,13 +16,21 @@ export interface DevProcess {
   errorPatterns: RegExp[];
 }
 
-const pkgConfigs: Record<string, Omit<DevProcess, "env">> = {
+interface ProcessConfigBase {
+  name: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  readyPatterns: RegExp[];
+  errorPatterns: RegExp[];
+}
+
+const processConfigBases: Record<string, ProcessConfigBase> = {
   host: {
     name: "host",
     command: "bun",
     args: ["run", "tsx", "server.ts"],
     cwd: "host",
-    port: 3001,
     readyPatterns: [/listening on/i, /server started/i, /ready/i, /running at/i],
     errorPatterns: [/error:/i, /failed/i, /exception/i],
   },
@@ -31,7 +39,6 @@ const pkgConfigs: Record<string, Omit<DevProcess, "env">> = {
     command: "bun",
     args: ["run", "rsbuild", "build", "--watch"],
     cwd: "ui",
-    port: 0,
     readyPatterns: [/built in/i, /compiled.*successfully/i],
     errorPatterns: [/error/i, /failed/i],
   },
@@ -40,7 +47,6 @@ const pkgConfigs: Record<string, Omit<DevProcess, "env">> = {
     command: "bun",
     args: ["run", "rsbuild", "dev"],
     cwd: "ui",
-    port: 3002,
     readyPatterns: [/ready in/i, /compiled.*successfully/i, /➜.*local:/i],
     errorPatterns: [/error/i, /failed to compile/i],
   },
@@ -49,7 +55,6 @@ const pkgConfigs: Record<string, Omit<DevProcess, "env">> = {
     command: "bun",
     args: ["run", "rspack", "serve"],
     cwd: "api",
-    port: 3014,
     readyPatterns: [/compiled.*successfully/i, /listening/i, /started/i],
     errorPatterns: [/error/i, /failed/i],
   },
@@ -57,16 +62,30 @@ const pkgConfigs: Record<string, Omit<DevProcess, "env">> = {
 
 export const getProcessConfig = (
   pkg: string,
-  env?: Record<string, string>
+  env?: Record<string, string>,
+  portOverride?: number
 ): DevProcess | null => {
-  const config = pkgConfigs[pkg];
-  if (!config) return null;
+  const base = processConfigBases[pkg];
+  if (!base) return null;
+
+  const ports = getPortsFromConfig();
+  
+  let port: number;
+  if (pkg === "host") {
+    port = portOverride ?? ports.host;
+  } else if (pkg === "ui" || pkg === "ui-ssr") {
+    port = pkg === "ui-ssr" ? 0 : ports.ui;
+  } else if (pkg === "api") {
+    port = ports.api;
+  } else {
+    port = 0;
+  }
 
   const processEnv = pkg === "ui-ssr"
     ? { ...env, BUILD_TARGET: "server" }
     : env;
 
-  return { ...config, env: processEnv };
+  return { ...base, port, env: processEnv };
 };
 
 export interface ProcessCallbacks {
@@ -104,7 +123,8 @@ export const spawnDevProcess = (
   callbacks: ProcessCallbacks
 ) =>
   Effect.gen(function* () {
-    const fullCwd = `${process.cwd()}/${config.cwd}`;
+    const configDir = getConfigDir();
+    const fullCwd = `${configDir}/${config.cwd}`;
     const readyDeferred = yield* Deferred.make<void>();
     const statusRef = yield* Ref.make<ProcessStatus>("starting");
 
@@ -117,6 +137,7 @@ export const spawnDevProcess = (
         ...config.env,
         BOS_CONFIG_PATH: "../bos.config.json",
         FORCE_COLOR: "1",
+        ...(config.port > 0 ? { PORT: String(config.port) } : {}),
       })
     );
 
@@ -185,6 +206,7 @@ interface ServerHandle {
 interface BootstrapConfig {
   configPath?: string;
   secrets?: Record<string, string>;
+  host?: { url?: string };
   ui?: { source?: SourceMode };
   api?: { source?: SourceMode; proxy?: string };
   database?: { url?: string };
@@ -203,12 +225,14 @@ export const spawnRemoteHost = (
     }
 
     callbacks.onStatus(config.name, "starting");
-    callbacks.onLog(config.name, `Loading host from remote: ${remoteUrl}`);
 
-    const configPath = resolve(process.cwd(), "bos.config.json");
-    
+    const configDir = getConfigDir();
+    const configPath = resolve(configDir, "bos.config.json");
+    const localUrl = `http://localhost:${config.port}`;
+
     const hostSecrets = loadSecretsFor("host");
-    callbacks.onLog(config.name, `Loaded ${Object.keys(hostSecrets).length} host secrets`);
+    const apiSecrets = loadSecretsFor("api");
+    const allSecrets = { ...hostSecrets, ...apiSecrets };
 
     const uiSource = (config.env?.UI_SOURCE as SourceMode) ?? "local";
     const apiSource = (config.env?.API_SOURCE as SourceMode) ?? "local";
@@ -216,12 +240,13 @@ export const spawnRemoteHost = (
 
     const bootstrap: BootstrapConfig = {
       configPath,
-      secrets: hostSecrets,
+      secrets: allSecrets,
+      host: { url: localUrl },
       ui: { source: uiSource },
       api: { source: apiSource, proxy: apiProxy },
     };
 
-    callbacks.onLog(config.name, `Bootstrap config: UI=${uiSource}, API=${apiSource}`);
+    callbacks.onLog(config.name, `Remote: ${remoteUrl}`);
 
     let serverHandle: ServerHandle | null = null;
 
@@ -243,26 +268,21 @@ export const spawnRemoteHost = (
           ? remoteUrl
           : `${remoteUrl}/remoteEntry.js`;
 
-        callbacks.onLog(config.name, `Registering host remote: ${remoteEntryUrl}`);
         mf.registerRemotes([{
           name: "host",
           entry: remoteEntryUrl,
         }]);
 
-        callbacks.onLog(config.name, "Loading host/Server module...");
         const hostModule = await mf.loadRemote<{ runServer: (bootstrap?: BootstrapConfig) => ServerHandle }>("host/Server");
 
         if (!hostModule?.runServer) {
           throw new Error("Host module does not export runServer function");
         }
 
-        callbacks.onLog(config.name, "Starting remote host server with bootstrap config...");
         serverHandle = hostModule.runServer(bootstrap);
-
         await serverHandle.ready;
 
         callbacks.onStatus(config.name, "ready");
-        callbacks.onLog(config.name, `Remote host ready at http://localhost:${config.port}`);
         Deferred.unsafeDone(readyDeferred, Effect.void);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.stack || error.message : String(error);
@@ -294,10 +314,11 @@ export const spawnRemoteHost = (
 export const makeDevProcess = (
   pkg: string,
   env: Record<string, string> | undefined,
-  callbacks: ProcessCallbacks
+  callbacks: ProcessCallbacks,
+  portOverride?: number
 ) =>
   Effect.gen(function* () {
-    const config = getProcessConfig(pkg, env);
+    const config = getProcessConfig(pkg, env, portOverride);
     if (!config) {
       return yield* Effect.fail(new Error(`Unknown package: ${pkg}`));
     }

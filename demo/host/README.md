@@ -39,7 +39,7 @@ All configuration from `bos.config.json`:
   "app": {
     "host": {
       "title": "App Title",
-      "development": "http://localhost:3001",
+      "development": "http://localhost:3000",
       "production": "https://example.com"
     },
     "ui": {
@@ -94,7 +94,7 @@ API_PROXY=https://production.example.com bun dev
 
 ## Available Scripts
 
-- `bun dev` - Start dev server (port 3001)
+- `bun dev` - Start dev server (port 3000)
 - `bun build` - Build MF bundle for production (outputs `remoteEntry.js`)
 - `bun bootstrap` - Run host from remote MF URL (requires `HOST_REMOTE_URL`)
 - `bun preview` - Run production server locally

@@ -21,7 +21,7 @@ bun dev
 ```
 
 **Services:**
-- **Host**: http://localhost:3001 - Unified gateway (serves UI + API)
+- **Host**: http://localhost:3000 - Unified gateway (serves UI + API)
 - **UI**: http://localhost:3002 - React dev server (Module Federation remote)
 - **API**: http://localhost:3014 - Plugin API (Module Federation remote)
 
@@ -184,7 +184,7 @@ Runtime configuration drives the entire system:
   "app": {
     "host": {
       "title": "Demo App",
-      "development": "http://localhost:3001",
+      "development": "http://localhost:3000",
       "production": "https://demo.everything.dev"
     },
     "ui": {
@@ -207,7 +207,7 @@ Runtime configuration drives the entire system:
 ```bash
 # demo/host/.env
 BETTER_AUTH_SECRET=your-secret
-BETTER_AUTH_URL=http://localhost:3001
+BETTER_AUTH_URL=http://localhost:3000
 API_DATABASE_URL=file:./api.db
 
 # demo/api/.env

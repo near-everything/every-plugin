@@ -12,7 +12,7 @@ bun demo db migrate   # Run database migrations
 bun demo dev       # Start all services (API, UI, Host)
 ```
 
-Visit http://localhost:3001 to see the application.
+Visit http://localhost:3000 to see the application.
 
 ## Documentation
 
@@ -130,7 +130,7 @@ All runtime configuration lives in `bos.config.json`:
   "app": {
     "host": {
       "title": "App Title",
-      "development": "http://localhost:3001",
+      "development": "http://localhost:3000",
       "production": "https://example.com"
     },
     "ui": {

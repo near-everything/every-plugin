@@ -10,7 +10,7 @@ bun db:migrate           # Run database migrations
 bun dev                  # Start all services
 ```
 
-Visit http://localhost:3001 to see the application.
+Visit http://localhost:3000 to see the application.
 
 **Need more details?** See [README.md](./README.md) for architecture overview and [LLM.txt](./LLM.txt) for technical deep-dive.
 

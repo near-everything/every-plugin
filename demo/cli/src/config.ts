@@ -178,3 +178,34 @@ export function getHostRemoteUrl(): string | undefined {
   const config = loadConfig();
   return config.app.host.remote;
 }
+
+export function parsePort(url: string): number {
+  try {
+    const parsed = new URL(url);
+    return parsed.port ? parseInt(parsed.port, 10) : (parsed.protocol === "https:" ? 443 : 80);
+  } catch {
+    return 3000;
+  }
+}
+
+export interface PortConfig {
+  host: number;
+  ui: number;
+  api: number;
+}
+
+export function getPortsFromConfig(): PortConfig {
+  const config = loadConfig();
+  return {
+    host: parsePort(config.app.host.development),
+    ui: config.app.ui ? parsePort((config.app.ui as RemoteConfig).development) : 3002,
+    api: config.app.api ? parsePort((config.app.api as RemoteConfig).development) : 3014,
+  };
+}
+
+export function getConfigPath(): string {
+  if (!configDir) {
+    loadConfig();
+  }
+  return `${configDir}/bos.config.json`;
+}

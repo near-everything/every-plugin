@@ -16,6 +16,7 @@ export interface DevOrchestrator {
   env: Record<string, string>;
   description: string;
   devConfig: DevConfig;
+  port?: number;
 }
 
 const STARTUP_ORDER = ["ui-ssr", "ui", "api", "host"];
@@ -54,11 +55,20 @@ export const runDevServers = (orchestrator: DevOrchestrator) =>
     const orderedPackages = sortByOrder(orchestrator.packages);
 
     const initialProcesses: ProcessState[] = orderedPackages.map((pkg) => {
-      const config = getProcessConfig(pkg);
+      const portOverride = pkg === "host" ? orchestrator.port : undefined;
+      const config = getProcessConfig(pkg, undefined, portOverride);
+      const source = pkg === "host" 
+        ? orchestrator.devConfig.host 
+        : pkg === "ui" || pkg === "ui-ssr"
+          ? orchestrator.devConfig.ui
+          : pkg === "api" 
+            ? orchestrator.devConfig.api 
+            : undefined;
       return {
         name: pkg,
         status: "pending" as const,
         port: config?.port ?? 0,
+        source,
       };
     });
 
@@ -134,7 +144,8 @@ export const runDevServers = (orchestrator: DevOrchestrator) =>
     };
 
     for (const pkg of orderedPackages) {
-      const handle = yield* makeDevProcess(pkg, orchestrator.env, callbacks);
+      const portOverride = pkg === "host" ? orchestrator.port : undefined;
+      const handle = yield* makeDevProcess(pkg, orchestrator.env, callbacks, portOverride);
       handles.push(handle);
 
       if (pkg !== orderedPackages[orderedPackages.length - 1]) {
