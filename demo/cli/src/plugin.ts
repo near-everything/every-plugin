@@ -203,6 +203,7 @@ export default createPlugin({
         description,
         devConfig,
         port: input.port,
+        interactive: input.interactive,
       };
 
       startDev(orchestrator);
@@ -245,6 +246,7 @@ export default createPlugin({
         description: "Production Mode (all remotes)",
         devConfig: startConfig,
         port,
+        interactive: input.interactive,
       };
 
       startDev(orchestrator);

@@ -258,7 +258,6 @@ export const spawnRemoteHost = (
   callbacks: ProcessCallbacks
 ) =>
   Effect.gen(function* () {
-    const readyDeferred = yield* Deferred.make<void>();
     const remoteUrl = config.env?.HOST_REMOTE_URL;
 
     if (!remoteUrl) {
@@ -289,67 +288,63 @@ export const spawnRemoteHost = (
 
     callbacks.onLog(config.name, `Remote: ${remoteUrl}`);
 
-    let serverHandle: ServerHandle | null = null;
-    let restoreConsole: (() => void) | null = null;
+    const restoreConsole = patchConsole(config.name, callbacks);
 
-    const loadAndRun = async () => {
-      restoreConsole = patchConsole(config.name, callbacks);
-      try {
-        const { createInstance, getInstance } = await import("@module-federation/enhanced/runtime");
-        const { setGlobalFederationInstance } = await import("@module-federation/runtime-core");
+    callbacks.onLog(config.name, "Loading Module Federation runtime...");
 
-        let mf = getInstance();
-        if (!mf) {
-          mf = createInstance({
-            name: "cli-host",
-            remotes: [],
-          });
-          setGlobalFederationInstance(mf);
-        }
+    const mfRuntime = yield* Effect.tryPromise({
+      try: () => import("@module-federation/enhanced/runtime"),
+      catch: (e) => new Error(`Failed to load MF runtime: ${e}`),
+    });
 
-        const remoteEntryUrl = remoteUrl.endsWith("/remoteEntry.js")
-          ? remoteUrl
-          : `${remoteUrl}/remoteEntry.js`;
+    const mfCore = yield* Effect.tryPromise({
+      try: () => import("@module-federation/runtime-core"),
+      catch: (e) => new Error(`Failed to load MF core: ${e}`),
+    });
 
-        mf.registerRemotes([{
-          name: "host",
-          entry: remoteEntryUrl,
-        }]);
+    let mf = mfRuntime.getInstance();
+    if (!mf) {
+      mf = mfRuntime.createInstance({ name: "cli-host", remotes: [] });
+      mfCore.setGlobalFederationInstance(mf);
+    }
 
-        const hostModule = await mf.loadRemote<{ runServer: (bootstrap?: BootstrapConfig) => ServerHandle }>("host/Server");
+    const remoteEntryUrl = remoteUrl.endsWith("/remoteEntry.js")
+      ? remoteUrl
+      : `${remoteUrl}/remoteEntry.js`;
 
-        if (!hostModule?.runServer) {
-          throw new Error("Host module does not export runServer function");
-        }
+    mf.registerRemotes([{ name: "host", entry: remoteEntryUrl }]);
 
-        serverHandle = hostModule.runServer(bootstrap);
-        await serverHandle.ready;
+    callbacks.onLog(config.name, `Loading host from ${remoteEntryUrl}...`);
 
-        callbacks.onStatus(config.name, "ready");
-        Deferred.unsafeDone(readyDeferred, Effect.void);
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.stack || error.message : String(error);
-        callbacks.onLog(config.name, `Error: ${errorMsg}`, true);
-        callbacks.onStatus(config.name, "error");
-        Deferred.unsafeDone(readyDeferred, Effect.void);
-        throw error;
-      }
-    };
+    const hostModule = yield* Effect.tryPromise({
+      try: () => mf.loadRemote<{ runServer: (bootstrap?: BootstrapConfig) => ServerHandle }>("host/Server"),
+      catch: (e) => new Error(`Failed to load host module: ${e}`),
+    });
 
-    const serverPromise = loadAndRun();
+    if (!hostModule?.runServer) {
+      return yield* Effect.fail(new Error("Host module does not export runServer function"));
+    }
+
+    callbacks.onLog(config.name, "Starting server...");
+    const serverHandle = hostModule.runServer(bootstrap);
+
+    yield* Effect.tryPromise({
+      try: () => serverHandle.ready,
+      catch: (e) => new Error(`Server failed to start: ${e}`),
+    });
+
+    callbacks.onStatus(config.name, "ready");
 
     const handle: ProcessHandle = {
       name: config.name,
       pid: process.pid,
       kill: async () => {
         callbacks.onLog(config.name, "Shutting down remote host...");
-        restoreConsole?.();
-        if (serverHandle) {
-          await serverHandle.shutdown();
-        }
+        restoreConsole();
+        await serverHandle.shutdown();
       },
-      waitForReady: Deferred.await(readyDeferred),
-      waitForExit: Effect.promise(() => serverPromise),
+      waitForReady: Effect.void,
+      waitForExit: Effect.never,
     };
 
     return handle;

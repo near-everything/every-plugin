@@ -9,6 +9,7 @@ import {
   type ProcessState,
   renderDevView,
 } from "../components/dev-view";
+import { renderStreamingView, type StreamingViewHandle } from "../components/streaming-view";
 import { getProcessConfig, makeDevProcess, type ProcessCallbacks, type ProcessHandle } from "./process";
 
 export interface DevOrchestrator {
@@ -17,7 +18,12 @@ export interface DevOrchestrator {
   description: string;
   devConfig: DevConfig;
   port?: number;
+  interactive?: boolean;
 }
+
+const isInteractiveSupported = (): boolean => {
+  return process.stdin.isTTY === true && process.stdout.isTTY === true;
+};
 
 const STARTUP_ORDER = ["ui-ssr", "ui", "api", "host"];
 
@@ -114,13 +120,23 @@ export const runDevServers = (orchestrator: DevOrchestrator) =>
       }
     };
 
-    view = renderDevView(
-      initialProcesses,
-      orchestrator.description,
-      orchestrator.env,
-      () => cleanup(false),
-      () => cleanup(true)
-    );
+    const useInteractive = orchestrator.interactive ?? isInteractiveSupported();
+    
+    view = useInteractive
+      ? renderDevView(
+          initialProcesses,
+          orchestrator.description,
+          orchestrator.env,
+          () => cleanup(false),
+          () => cleanup(true)
+        )
+      : renderStreamingView(
+          initialProcesses,
+          orchestrator.description,
+          orchestrator.env,
+          () => cleanup(false),
+          () => cleanup(true)
+        );
 
     const callbacks: ProcessCallbacks = {
       onStatus: (name, status, message) => {
@@ -148,16 +164,14 @@ export const runDevServers = (orchestrator: DevOrchestrator) =>
       const handle = yield* makeDevProcess(pkg, orchestrator.env, callbacks, portOverride);
       handles.push(handle);
 
-      if (pkg !== orderedPackages[orderedPackages.length - 1]) {
-        yield* Effect.race(
-          handle.waitForReady,
-          Effect.sleep("30 seconds").pipe(
-            Effect.andThen(Effect.sync(() => {
-              callbacks.onLog(pkg, "Timeout waiting for ready, continuing...", true);
-            }))
-          )
-        );
-      }
+      yield* Effect.race(
+        handle.waitForReady,
+        Effect.sleep("30 seconds").pipe(
+          Effect.andThen(Effect.sync(() => {
+            callbacks.onLog(pkg, "Timeout waiting for ready, continuing...", true);
+          }))
+        )
+      );
     }
 
     yield* Effect.addFinalizer(() =>

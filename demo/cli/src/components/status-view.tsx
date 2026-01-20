@@ -44,7 +44,7 @@ function StatusRow({
       : status === "pending"
         ? colors.dim("[ ]")
         : status.ok
-          ? colors.neonGreen("[-]")
+          ? colors.green("[-]")
           : colors.magenta("[!]");
 
   const timing =
@@ -53,7 +53,7 @@ function StatusRow({
       : status === "pending"
         ? colors.dim("--")
         : status.ok
-          ? colors.neonGreen(`${status.ms}ms`)
+          ? colors.green(`${status.ms}ms`)
           : colors.magenta(`${status.ms}ms`);
 
   return (
@@ -144,7 +144,7 @@ function StatusView({ endpoints, env, onComplete }: StatusViewProps) {
         <Text>
           {"  "}
           {done
-            ? colors.neonGreen(`${healthy}/${total} healthy`)
+            ? colors.green(`${healthy}/${total} healthy`)
             : colors.cyan(`${checking} checking...`)}
         </Text>
       </Box>

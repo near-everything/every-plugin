@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 import { program } from "commander";
 import { createPluginRuntime } from "every-plugin";
-import { getPackages, getTitle, loadConfig, getConfigPath } from "./config";
+import { getConfigPath, getPackages, getTitle, loadConfig } from "./config";
 import BosPlugin from "./plugin";
 import { printBanner } from "./utils/banner";
-import { colors, gradients, icons, frames } from "./utils/theme";
+import { colors, frames, gradients, icons } from "./utils/theme";
 
 async function main() {
   let config: ReturnType<typeof loadConfig>;
@@ -32,6 +32,7 @@ async function main() {
     }
   });
 
+  // biome-ignore lint/correctness/useHookAtTopLevel: usePlugin is not a React hook
   const result = await runtime.usePlugin("bos-cli", {
     variables: {},
     secrets: {
@@ -79,7 +80,7 @@ async function main() {
       console.log(`  ${icons.config} ${gradients.cyber("CONFIGURATION")}`);
       console.log(colors.cyan(frames.bottom(52)));
       console.log();
-      
+
       console.log(`  ${colors.dim("Account")}  ${colors.cyan(result.config.account)}`);
       console.log(`  ${colors.dim("Config ")}  ${colors.dim(configPath)}`);
       console.log();
@@ -100,7 +101,7 @@ async function main() {
       for (const remoteName of result.remotes) {
         const remote = result.config.app[remoteName];
         if (!remote || !("name" in remote)) continue;
-        
+
         console.log();
         const color = remoteName === "ui" ? colors.cyan : colors.blue;
         console.log(color(`  ┌─ ${remoteName.toUpperCase()} ${"─".repeat(46 - remoteName.length)}┐`));
@@ -147,6 +148,7 @@ async function main() {
     .option("--api <mode>", "API mode: local (default) | remote", "local")
     .option("--proxy", "Proxy API requests to production")
     .option("-p, --port <port>", "Host port (default: from config)")
+    .option("--no-interactive", "Disable interactive UI (streaming logs)")
     .action(async (options) => {
       const result = await client.dev({
         host: options.host as "local" | "remote",
@@ -154,6 +156,7 @@ async function main() {
         api: options.api as "local" | "remote",
         proxy: options.proxy || false,
         port: options.port ? parseInt(options.port, 10) : undefined,
+        interactive: options.interactive,
       });
 
       if (result.status === "error") {
@@ -166,9 +169,11 @@ async function main() {
     .command("start")
     .description("Start with production modules (all remotes from production URLs)")
     .option("-p, --port <port>", "Host port (default: from config)")
+    .option("--no-interactive", "Disable interactive UI (streaming logs)")
     .action(async (options) => {
       const result = await client.start({
         port: options.port ? parseInt(options.port, 10) : undefined,
+        interactive: options.interactive,
       });
 
       if (result.status === "error") {
