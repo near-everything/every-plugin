@@ -12,7 +12,7 @@
       "description": "This is a demo application orchestrated by a bos.config.json in the project root.",
       "development": "http://localhost:3000",
       "production": "https://demo.everything.dev",
-      "remote": "https://elliot-braem-1708-host-every-plugin-near-everythi-b2be6ec3e-ze.zephyrcloud.app",
+      "remote": "https://elliot-braem-1712-host-every-plugin-near-everythi-4b08bcc93-ze.zephyrcloud.app",
       "secrets": [
         "HOST_DATABASE_URL",
         "HOST_DATABASE_AUTH_TOKEN",
@@ -23,19 +23,19 @@
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1709-ui-every-plugin-near-everything-f4d4dd504-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1713-ui-every-plugin-near-everything-7a29a09ba-ze.zephyrcloud.app",
       "exposes": {
         "App": "./App",
         "components": "./components",
         "providers": "./providers",
         "types": "./types"
       },
-      "ssr": "https://elliot-braem-1710-ui-every-plugin-near-everything-7cb2ad5b1-ze.zephyrcloud.app"
+      "ssr": "https://elliot-braem-1714-ui-every-plugin-near-everything-50801e6dc-ze.zephyrcloud.app"
     },
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://elliot-braem-1711-api-every-plugin-near-everythin-b8111851e-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1715-api-every-plugin-near-everythin-ce2b59736-ze.zephyrcloud.app",
       "variables": {},
       "secrets": [
         "API_DATABASE_URL",
