@@ -2,7 +2,7 @@ import { appendFile } from "node:fs/promises";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect } from "effect";
 import path from "path";
-import type { DevConfig } from "../config";
+import type { AppConfig } from "../config";
 import {
   type DevViewHandle,
   type LogEntry,
@@ -12,11 +12,11 @@ import {
 import { renderStreamingView, type StreamingViewHandle } from "../components/streaming-view";
 import { getProcessConfig, makeDevProcess, type ProcessCallbacks, type ProcessHandle } from "./process";
 
-export interface DevOrchestrator {
+export interface AppOrchestrator {
   packages: string[];
   env: Record<string, string>;
   description: string;
-  devConfig: DevConfig;
+  appConfig: AppConfig;
   port?: number;
   interactive?: boolean;
   noLogs?: boolean;
@@ -57,7 +57,7 @@ const formatLogLine = (entry: LogEntry): string => {
   return `[${ts}] [${entry.source}] [${prefix}] ${entry.line}`;
 };
 
-export const runDevServers = (orchestrator: DevOrchestrator) =>
+export const runDevServers = (orchestrator: AppOrchestrator) =>
   Effect.gen(function* () {
     const orderedPackages = sortByOrder(orchestrator.packages);
 
@@ -65,11 +65,11 @@ export const runDevServers = (orchestrator: DevOrchestrator) =>
       const portOverride = pkg === "host" ? orchestrator.port : undefined;
       const config = getProcessConfig(pkg, undefined, portOverride);
       const source = pkg === "host" 
-        ? orchestrator.devConfig.host 
+        ? orchestrator.appConfig.host 
         : pkg === "ui" || pkg === "ui-ssr"
-          ? orchestrator.devConfig.ui
+          ? orchestrator.appConfig.ui
           : pkg === "api" 
-            ? orchestrator.devConfig.api 
+            ? orchestrator.appConfig.api 
             : undefined;
       return {
         name: pkg,
@@ -184,11 +184,20 @@ export const runDevServers = (orchestrator: DevOrchestrator) =>
     yield* Effect.never;
   });
 
-export const startDev = (orchestrator: DevOrchestrator) => {
+export const startApp = (orchestrator: AppOrchestrator) => {
   const program = Effect.scoped(runDevServers(orchestrator)).pipe(
     Effect.provide(BunContext.layer),
     Effect.catchAll((e) => Effect.sync(() => {
-      console.error("Dev server error:", e);
+      if (e instanceof Error) {
+        console.error("App server error:", e.message);
+        if (e.stack) {
+          console.error(e.stack);
+        }
+      } else if (typeof e === 'object' && e !== null) {
+        console.error("App server error:", JSON.stringify(e, null, 2));
+      } else {
+        console.error("App server error:", e);
+      }
     }))
   );
 

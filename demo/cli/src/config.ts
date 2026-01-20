@@ -2,14 +2,14 @@ import { dirname, join } from "path";
 
 export type SourceMode = "local" | "remote";
 
-export interface DevConfig {
+export interface AppConfig {
   host: SourceMode;
   ui: SourceMode;
   api: SourceMode;
   proxy?: boolean;
 }
 
-export const DEFAULT_DEV_CONFIG: DevConfig = {
+export const DEFAULT_DEV_CONFIG: AppConfig = {
   host: "local",
   ui: "local",
   api: "local",

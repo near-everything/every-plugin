@@ -6,7 +6,7 @@ import { z } from "every-plugin/zod";
 import {
   type BosConfig as BosConfigType,
   DEFAULT_DEV_CONFIG,
-  type DevConfig,
+  type AppConfig,
   getConfigDir,
   getHost,
   getHostRemoteUrl,
@@ -19,7 +19,7 @@ import {
 import { bosContract } from "./contract";
 import { getBuildEnv, hasZephyrConfig, loadBosEnv, ZEPHYR_DOCS_URL } from "./lib/env";
 import { ensureNearCli, executeTransaction } from "./lib/near-cli";
-import { type DevOrchestrator, startDev } from "./lib/orchestrator";
+import { type AppOrchestrator, startApp } from "./lib/orchestrator";
 import { run } from "./utils/run";
 import { colors, icons } from "./utils/theme";
 
@@ -74,7 +74,7 @@ function parseSourceMode(value: string | undefined, defaultValue: SourceMode): S
   return defaultValue;
 }
 
-function buildDevConfig(options: { host?: string; ui?: string; api?: string; proxy?: boolean }): DevConfig {
+function buildAppConfig(options: { host?: string; ui?: string; api?: string; proxy?: boolean }): AppConfig {
   return {
     host: parseSourceMode(options.host, DEFAULT_DEV_CONFIG.host),
     ui: parseSourceMode(options.ui, DEFAULT_DEV_CONFIG.ui),
@@ -83,7 +83,7 @@ function buildDevConfig(options: { host?: string; ui?: string; api?: string; pro
   };
 }
 
-function buildDescription(config: DevConfig): string {
+function buildDescription(config: AppConfig): string {
   const parts: string[] = [];
 
   if (config.host === "local" && config.ui === "local" && config.api === "local" && !config.proxy) {
@@ -100,7 +100,7 @@ function buildDescription(config: DevConfig): string {
   return parts.join(" + ");
 }
 
-function determineProcesses(config: DevConfig): string[] {
+function determineProcesses(config: AppConfig): string[] {
   const processes: string[] = [];
 
   if (config.ui === "local") {
@@ -117,7 +117,7 @@ function determineProcesses(config: DevConfig): string[] {
   return processes;
 }
 
-function buildEnvVars(config: DevConfig): Record<string, string> {
+function buildEnvVars(config: AppConfig): Record<string, string> {
   const env: Record<string, string> = {};
 
   env.HOST_SOURCE = config.host;
@@ -171,14 +171,14 @@ export default createPlugin({
 
   createRouter: (deps: BosDeps, builder) => ({
     dev: builder.dev.handler(async ({ input }) => {
-      const devConfig = buildDevConfig({
+      const appConfig = buildAppConfig({
         host: input.host,
         ui: input.ui,
         api: input.api,
         proxy: input.proxy,
       });
 
-      if (devConfig.host === "remote") {
+      if (appConfig.host === "remote") {
         const remoteUrl = getHostRemoteUrl();
         if (!remoteUrl) {
           return {
@@ -189,20 +189,20 @@ export default createPlugin({
         }
       }
 
-      const processes = determineProcesses(devConfig);
-      const env = buildEnvVars(devConfig);
-      const description = buildDescription(devConfig);
+      const processes = determineProcesses(appConfig);
+      const env = buildEnvVars(appConfig);
+      const description = buildDescription(appConfig);
 
-      const orchestrator: DevOrchestrator = {
+      const orchestrator: AppOrchestrator = {
         packages: processes,
         env,
         description,
-        devConfig,
+        appConfig,
         port: input.port,
         interactive: input.interactive,
       };
 
-      startDev(orchestrator);
+      startApp(orchestrator);
 
       return {
         status: "started" as const,
@@ -223,7 +223,7 @@ export default createPlugin({
       const ports = getPortsFromConfig();
       const port = input.port ?? ports.host;
 
-      const startConfig: DevConfig = {
+      const startConfig: AppConfig = {
         host: "remote",
         ui: "remote",
         api: "remote",
@@ -236,17 +236,17 @@ export default createPlugin({
         HOST_REMOTE_URL: remoteUrl,
       };
 
-      const orchestrator: DevOrchestrator = {
+      const orchestrator: AppOrchestrator = {
         packages: ["host"],
         env,
         description: "Production Mode (all remotes)",
-        devConfig: startConfig,
+        appConfig: startConfig,
         port,
         interactive: input.interactive,
         noLogs: true,
       };
 
-      startDev(orchestrator);
+      startApp(orchestrator);
 
       return {
         status: "running" as const,
