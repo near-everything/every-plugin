@@ -1,30 +1,60 @@
 {
   "name": "monorepo",
   "private": true,
-  "workspaces": [
-    "api",
-    "host",
-    "ui"
-  ],
+  "workspaces": {
+    "packages": [
+      "api",
+      "ui",
+      "host",
+      "cli"
+    ],
+    "catalog": {
+      "react": "^19.2.3",
+      "react-dom": "^19.2.3",
+      "@tanstack/react-query": "^5.90.11",
+      "@tanstack/react-router": "^1.153.2",
+      "near-kit": "^0.7.0",
+      "@hot-labs/near-connect": "^0.8.2",
+      "drizzle-orm": "^0.45.1",
+      "drizzle-kit": "^0.31.8",
+      "@libsql/client": "^0.17.0",
+      "better-auth": "^1.4.6",
+      "better-near-auth": "^0.3.2",
+      "every-plugin": "0.8.8",
+      "typescript": "^5.9.3",
+      "vitest": "^4.0.17",
+      "@types/node": "^25.0.3",
+      "@types/react": "^19.2.7",
+      "@types/react-dom": "^19.2.3"
+    }
+  },
   "scripts": {
-    "dev": "turbo dev",
-    "dev:ui": "USE_REMOTE_API=true turbo dev --filter=host --filter=ui",
-    "dev:api": "USE_REMOTE_UI=true turbo dev --filter=host --filter=api",
-    "start": "turbo preview --filter=host",
-    "build": "turbo build",
-    "build:api": "turbo build --filter=api",
-    "build:host": "turbo build --filter=host",
-    "build:ui": "turbo build --filter=ui",
-    "deploy": "NODE_ENV=production turbo build --filter=ui --filter=api",
-    "typecheck": "turbo typecheck",
-    "db:push": "turbo db:push",
-    "db:studio": "turbo db:studio",
-    "db:generate": "turbo db:generate",
-    "db:migrate": "turbo db:migrate",
-    "db:sync": "bun run scripts/sync-db.ts"
+    "bos": "bun run cli/src/cli.ts",
+    "dev": "bun run cli/src/cli.ts dev",
+    "dev:ui": "bun run cli/src/cli.ts dev --ui",
+    "dev:api": "bun run cli/src/cli.ts dev --api",
+    "dev:host": "bun run cli/src/cli.ts dev --host",
+    "dev:proxy": "bun run cli/src/cli.ts dev --proxy",
+    "build": "bun run cli/src/cli.ts build",
+    "build:api": "bun run --cwd api rsbuild build",
+    "build:host": "bun run --cwd host rsbuild build",
+    "build:ui": "bun run --cwd ui rsbuild build",
+    "deploy": "NODE_ENV=production bun run build:ui && bun run build:api",
+    "test": "bun run cli/src/cli.ts test",
+    "typecheck": "bun run --cwd host tsc --noEmit && bun run --cwd ui tsc --noEmit && bun run --cwd api tsc --noEmit",
+    "start": "NODE_ENV=production bun run --cwd host tsx server.ts",
+    "db:push": "bun run --cwd host drizzle-kit push",
+    "db:studio": "bun run --cwd host drizzle-kit studio",
+    "db:generate": "bun run --cwd host drizzle-kit generate",
+    "db:migrate": "bun run --cwd host drizzle-kit migrate",
+    "db:sync": "bun run scripts/sync-db.ts",
+    "seed-docs": "bun run scripts/seed-docs.ts"
+  },
+  "packageManager": "bun@1.2.20",
+  "dependencies": {
+    "@types/bun": "^1.3.6"
   },
   "devDependencies": {
-    "turbo": "^2.6.3"
-  },
-  "packageManager": "bun@1.2.20"
+    "every-plugin": "0.8.8"
+  }
 }

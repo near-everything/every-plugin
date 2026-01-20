@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/contract";
-import { Data } from "effect";
+import { Cause, Data } from "effect";
 import type { z } from "zod";
 
 export class PluginRuntimeError extends Data.TaggedError("PluginRuntimeError")<{
@@ -266,6 +266,37 @@ export const wrapORPCError = (
 		retryable: isRetryableORPCCode(orpcError.code),
 		cause: orpcError as Error
 	});
+};
+
+/**
+ * Extracts the underlying error from Effect's FiberFailure wrapper.
+ * When Effect.runPromise rejects, errors are wrapped in FiberFailure.
+ * This extracts the original error so oRPC can handle it properly.
+ */
+export const extractFromFiberFailure = (error: unknown): unknown => {
+	if (!error || typeof error !== 'object') return error;
+	
+	if ('cause' in error) {
+		const cause = (error as { cause?: unknown }).cause;
+		
+		if (cause && typeof cause === 'object' && '_tag' in cause) {
+			try {
+				const squashed = Cause.squash(cause as Cause.Cause<unknown>);
+				if (squashed instanceof ORPCError) {
+					return squashed;
+				}
+				return squashed;
+			} catch {
+				// Not a valid Cause
+			}
+		}
+		
+		if (cause instanceof ORPCError) {
+			return cause;
+		}
+	}
+	
+	return error;
 };
 
 // Universal error converter for the runtime

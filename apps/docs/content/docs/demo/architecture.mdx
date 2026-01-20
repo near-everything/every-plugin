@@ -1,0 +1,130 @@
+---
+title: Multi-Tenant Architecture
+description: Architecture for the every-plugin multi-tenant system with WASI host, NDS integration, and FastFS configuration storage
+---
+
+This document describes the architecture for the every-plugin multi-tenant system with WASI host, NDS integration, and FastFS configuration storage.
+
+## Overview
+
+The system enables deploying a single host that serves multiple tenants, each with their own:
+- Custom domain (verified via NDS)
+- UI remote (Module Federation)
+- API plugins (every-plugin)
+- Configuration (stored on FastFS)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Request Flow                         │
+│                                                         │
+│  https://mystore.com/products/123                       │
+│           │                                             │
+│           ▼                                             │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │              WASI Host Module                    │   │
+│  │  1. Extract domain: mystore.com                  │   │
+│  │  2. NDS lookup → mystore.near                    │   │
+│  │  3. Load config from FastFS                      │   │
+│  │  4. Route: HTML or API proxy                     │   │
+│  └─────────────────────────────────────────────────┘   │
+│           │                     │                       │
+│           ▼                     ▼                       │
+│    ┌────────────┐        ┌─────────────┐               │
+│    │  CDN UI    │        │  API Plugin │               │
+│    │  Remote    │        │  Service    │               │
+│    └────────────┘        └─────────────┘               │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Core Components
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| WASI Host | Rust | HTTP routing, NDS resolution, SSR meta tags |
+| UI | React + Rsbuild | Frontend, Module Federation remote |
+| API Plugins | TypeScript + oRPC | Business logic, data access |
+| Config | FastFS | Tenant configuration storage |
+| Identity | NDS | Domain to NEAR account mapping |
+
+## Configuration: bos.config.json
+
+Each account stores their configuration at a predictable path based on the domain:
+
+```
+https://{subdomain}.near.fastfs.io/fastfs.near/settings/{domain}/bos.config.json
+```
+
+**Examples:**
+```
+efiz.everything.dev    → efiz.near/settings/everything.dev/bos.config.json
+efiz.everything.market → efiz.near/settings/everything.market/bos.config.json
+demo.everything.dev    → demo.near/settings/everything.dev/bos.config.json
+```
+
+This convention-based approach is:
+- **Permissionless** - Anyone can publish their config for any domain
+- **Generic** - Works with whatever origin/domain the host is deployed to
+- **Self-sovereign** - Each NEAR account controls their own settings path
+
+Example configuration:
+
+```json
+{
+  "account": "mystore.near",
+  "app": {
+    "title": "My Store",
+    "description": "The best store on NEAR",
+    "host": {
+      "domain": "mystore.com"
+    },
+    "ui": {
+      "name": "ui",
+      "remote": "https://cdn.zephyrcloud.app/mystore-ui/remoteEntry.js",
+      "cssUrl": "https://cdn.zephyrcloud.app/mystore-ui/static/css/index.css"
+    },
+    "plugins": [
+      {
+        "name": "api",
+        "remote": "https://cdn.zephyrcloud.app/mystore-api/remoteEntry.js",
+        "proxy": "/api/*",
+        "variables": { "network": "mainnet" },
+        "secrets": ["API_DATABASE_URL"]
+      }
+    ]
+  }
+}
+```
+
+## Development vs Production
+
+The architecture maintains familiar development workflows while enabling production multi-tenancy:
+
+### Local Development
+
+```bash
+cd demo
+bun dev
+
+# Services:
+# - UI:   http://localhost:3002 (Rsbuild dev server)
+# - API:  http://localhost:3014 (Plugin dev server)
+# - Host: http://localhost:3000 (Node.js host)
+```
+
+- Full hot reload support
+- TypeScript type checking
+- Tailwind CSS compilation
+- All npm packages work normally
+
+### Production
+
+- WASI host handles HTTP routing
+- UI served from CDN as Module Federation remote
+- API plugins deployed as services
+- Config loaded from FastFS per tenant
+
+## Next Steps
+
+- [NDS Integration](/docs/demo/nds) - Domain verification with NEAR
+- [WASI Host](/docs/demo/wasi-host) - Rust implementation details
+- [Development Guide](/docs/demo/development) - Local setup and workflows

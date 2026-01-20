@@ -1,0 +1,276 @@
+---
+title: Development Guide
+description: Local development setup and workflows for the every-plugin multi-tenant system
+---
+
+This guide covers local development setup and workflows for the every-plugin multi-tenant system.
+
+## Quick Start
+
+```bash
+# Clone and install
+git clone https://github.com/near-everything/every-plugin
+cd every-plugin/demo
+bun install
+
+# Run database migrations
+bun db:migrate
+
+# Start all services
+bun dev
+```
+
+**Services:**
+- **Host**: http://localhost:3000 - Unified gateway (serves UI + API)
+- **UI**: http://localhost:3002 - React dev server (Module Federation remote)
+- **API**: http://localhost:3014 - Plugin API (Module Federation remote)
+
+## Project Structure
+
+```
+demo/
+├── host/                 # Server host
+│   ├── server.ts        # Hono.js entry point
+│   ├── src/
+│   │   ├── config.ts    # bos.config.json loader
+│   │   ├── runtime.ts   # Plugin initialization
+│   │   ├── ssr.tsx      # Server-side rendering
+│   │   └── routers/     # API route composition
+│   └── migrations/      # Database migrations
+│
+├── ui/                   # React frontend
+│   ├── src/
+│   │   ├── routes/      # TanStack Router pages
+│   │   ├── components/  # UI components
+│   │   └── utils/       # API client, helpers
+│   └── rsbuild.config.ts
+│
+├── api/                  # API plugin
+│   ├── src/
+│   │   ├── contract.ts  # oRPC contract
+│   │   ├── index.ts     # Plugin definition
+│   │   └── services/    # Business logic
+│   └── rspack.config.cjs
+│
+└── bos.config.json       # Runtime configuration
+```
+
+## Development Modes
+
+The host supports multiple development modes for different workflows:
+
+| Script | UI Source | API Code | API Data | Use Case |
+|--------|-----------|----------|----------|----------|
+| `bun dev` | local:3002 | local:3014 | local secrets | Full local development |
+| `bun dev:ui` | local:3002 | remote bundle | local secrets | UI dev with stable API code |
+| `bun dev:api` | remote | local:3014 | local secrets | API development |
+| `bun dev:host` | remote | remote bundle | local secrets | Host-only changes |
+| `bun dev:proxy` | local:3002 | N/A (proxy) | remote (prod) | Test with production data |
+
+### Environment Variables
+
+- **UI_SOURCE**: `local` | `remote` - Where to load UI remoteEntry.js from
+- **API_SOURCE**: `local` | `remote` - Where to load API remoteEntry.js from  
+- **API_PROXY**: `true` | URL - If `true`, uses `host.production` from bos.config.json; if URL, proxies to that URL
+
+### Examples
+
+```bash
+# Full local development
+bun dev
+
+# UI development with production API code (but local database)
+bun dev:ui
+
+# API development with production UI
+bun dev:api
+
+# Host-only changes (auth, SSR, routing)
+bun dev:host
+
+# Test with production data (proxies to deployed API)
+bun dev:proxy
+```
+
+## Development Workflows
+
+### Making UI Changes
+
+UI uses TanStack Router with file-based routing:
+
+```bash
+# Create a new route
+touch demo/ui/src/routes/_layout/_page/my-page.tsx
+```
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/_layout/_page/my-page")({
+  component: MyPage,
+});
+
+function MyPage() {
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold">My Page</h1>
+      <p className="text-muted-foreground">Content here</p>
+    </div>
+  );
+}
+```
+
+Route tree regenerates automatically on save.
+
+### Making API Changes
+
+API follows the every-plugin pattern:
+
+1. **Update contract** (`api/src/contract.ts`):
+```typescript
+myEndpoint: oc
+  .route({ method: 'POST', path: '/my-endpoint' })
+  .input(z.object({ id: z.string() }))
+  .output(z.object({ result: z.string() }))
+```
+
+2. **Add handler** (`api/src/index.ts`):
+```typescript
+myEndpoint: builder.myEndpoint.handler(async ({ input }) => {
+  return { result: `Processed ${input.id}` };
+})
+```
+
+3. **Call from UI**:
+```typescript
+const result = await apiClient.myEndpoint({ id: "123" });
+```
+
+### Adding Components
+
+Components live in `ui/src/components/`:
+
+```bash
+# Using shadcn/ui pattern
+touch demo/ui/src/components/ui/my-component.tsx
+```
+
+```tsx
+import { cn } from "@/lib/utils";
+
+interface MyComponentProps {
+  className?: string;
+  children: React.ReactNode;
+}
+
+export function MyComponent({ className, children }: MyComponentProps) {
+  return (
+    <div className={cn("p-4 border rounded-lg", className)}>
+      {children}
+    </div>
+  );
+}
+```
+
+## Configuration
+
+### bos.config.json
+
+Runtime configuration drives the entire system:
+
+```json
+{
+  "account": "demo.everything.near",
+  "app": {
+    "host": {
+      "title": "Demo App",
+      "development": "http://localhost:3000",
+      "production": "https://demo.everything.dev"
+    },
+    "ui": {
+      "name": "ui",
+      "development": "http://localhost:3002",
+      "production": "https://cdn.../remoteEntry.js"
+    },
+    "api": {
+      "name": "api",
+      "development": "http://localhost:3014",
+      "production": "https://cdn.../remoteEntry.js",
+      "secrets": ["API_DATABASE_URL"]
+    }
+  }
+}
+```
+
+### Environment Variables
+
+```bash
+# demo/host/.env
+BETTER_AUTH_SECRET=your-secret
+BETTER_AUTH_URL=http://localhost:3000
+API_DATABASE_URL=file:./api.db
+
+# demo/api/.env
+API_DATABASE_URL=file:./api.db
+```
+
+## Testing
+
+```bash
+# Run all tests
+bun test
+
+# Test specific package
+cd demo/api && bun test
+
+# Type checking
+bun typecheck
+```
+
+## Database
+
+Using Drizzle ORM with SQLite:
+
+```bash
+# Generate migration
+cd demo/host && bun db:generate
+
+# Apply migrations
+cd demo/host && bun db:migrate
+
+# Open Drizzle Studio
+cd demo/host && bun db:studio
+```
+
+## Troubleshooting
+
+### Module Federation Issues
+
+```bash
+# Clear browser cache
+# Check bos.config.json URLs are accessible
+# Verify shared dependency versions match
+```
+
+### Type Errors
+
+```bash
+# Regenerate route types
+cd demo/ui && rm src/routeTree.gen.ts && bun dev
+
+# Check contract types
+cd demo/api && bun typecheck
+```
+
+### Database Issues
+
+```bash
+# Reset database
+cd demo/host && rm -f *.db && bun db:migrate
+```
+
+## Next Steps
+
+- [Architecture Overview](/docs/demo/architecture) - System design
+- [WASI Host](/docs/demo/wasi-host) - Production deployment
+- [NDS Integration](/docs/demo/nds) - Custom domains

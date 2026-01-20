@@ -1,0 +1,145 @@
+---
+title: NDS Integration
+description: How NEAR Domain System (NDS) provides optional domain verification for multi-tenant routing
+---
+
+NEAR Domain System (NDS) provides an **optional verification layer** for linking traditional web domains to NEAR accounts.
+
+## Convention vs Verification
+
+The multi-tenant system uses **convention-based routing** by default:
+
+```
+{subdomain}.{domain} → {subdomain}.near/settings/{domain}/bos.config.json
+```
+
+NDS adds **verification** on top of this convention:
+
+| Layer | Purpose | Required? |
+|-------|---------|-----------|
+| Convention | Route subdomain to NEAR account | Yes |
+| NDS | Verify account owns the domain | Optional |
+
+## What is NDS?
+
+NDS links web domains (like `mystore.com`) to NEAR accounts (like `mystore.near`) through DNS TXT records. This enables:
+
+- **Trust verification** - Users can verify domain ownership on-chain
+- **Custom domains** - Map `mystore.com` to `mystore.everything.market`
+- **Decentralized identity** - One name across web2 and web3
+
+## How It Works
+
+### DNS TXT Record Format
+
+```
+nds=mystore.near:https://mystore.com/:8Qe2m1ws9hepfnRypPkgT6gqveCm9BRhrCk46UiTvsPi
+```
+
+The record contains:
+1. **NEAR account** - `mystore.near`
+2. **Domain URL** - `https://mystore.com/`
+3. **Transaction hash** - Proof of on-chain registration
+
+### Verification Flow
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   NDS Verification                       │
+│                                                         │
+│  1. User calls NDS contract with domain claim           │
+│     └── Transaction hash generated                      │
+│                                                         │
+│  2. User adds TXT record to DNS                         │
+│     └── nds=account:url:tx_hash                        │
+│                                                         │
+│  3. Verifier checks DNS and confirms match              │
+│     └── Domain ↔ Account link established              │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Integration with WASI Host
+
+The WASI host uses NDS to resolve incoming requests:
+
+```rust
+async fn resolve_tenant(host: &str) -> Result<String, Error> {
+    // Check DNS TXT record for NDS entry
+    let txt_records = dns_lookup_txt(host).await?;
+    
+    for record in txt_records {
+        if record.starts_with("nds=") {
+            // Parse: nds=mystore.near:https://mystore.com/:tx_hash
+            let parts: Vec<&str> = record[4..].split(':').collect();
+            let near_account = parts[0];
+            let verified_domain = parts[1].trim_matches('/');
+            
+            // Confirm domain matches request
+            if verified_domain.contains(host) {
+                return Ok(near_account.to_string());
+            }
+        }
+    }
+    
+    // Fallback: subdomain mapping
+    let subdomain = host.split('.').next().unwrap_or("default");
+    Ok(format!("{}.everything.near", subdomain))
+}
+```
+
+## Tenant Onboarding
+
+### Basic Setup (Convention-Based)
+
+For subdomain tenants, only steps 1-3 are required:
+
+1. **User owns a NEAR account**
+   - `efiz.near` (NEAR account)
+
+2. **Create bos.config.json**
+   ```json
+   {
+     "account": "efiz.near",
+     "app": {
+       "title": "Efiz's App",
+       "ui": { "remote": "https://cdn.../remoteEntry.js" },
+       "api": { "remote": "https://cdn.../api/remoteEntry.js" }
+     }
+   }
+   ```
+
+3. **Upload config to FastFS**
+   - Sign with NEAR wallet
+   - Config stored at: `efiz.near/settings/everything.dev/bos.config.json`
+   - Subdomain is live at: `efiz.everything.dev`
+
+### Custom Domain (NDS Verification)
+
+For custom domains like `mystore.com`, add NDS verification:
+
+4. **Register with NDS contract**
+   - Call verification contract
+   - Receive transaction hash
+
+5. **Add DNS TXT record**
+   ```
+   TXT: nds=mystore.near:https://mystore.com/:tx_hash
+   ```
+
+6. **Custom domain is live!**
+   - WASI host resolves `mystore.com` → `mystore.near`
+   - Config loaded from FastFS
+   - UI and API served per configuration
+
+## Benefits
+
+- **No central authority** - Domain ownership verified on-chain
+- **Portable identity** - NEAR account works across all apps
+- **Flexible routing** - Custom domains without infrastructure changes
+- **Verifiable trust** - Anyone can confirm domain ownership
+
+## Related Resources
+
+- [NDS Dashboard](https://nds.near.tools) - Manage domain registrations
+- [NDS Verifier](https://verify.nds.near.tools) - Check domain verification
+- [Architecture Overview](/docs/demo/architecture) - Full system design

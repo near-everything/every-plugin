@@ -1,8 +1,9 @@
 import type { AnyContractRouter, AnySchema, InferSchemaOutput } from "@orpc/contract";
 import type { Context, Implementer, Router } from "@orpc/server";
+import { ORPCError } from "@orpc/contract";
 import { implement, onError, os } from "@orpc/server";
 import { Effect, type Scope } from "effect";
-import { formatORPCError } from "./runtime/errors";
+import { extractFromFiberFailure, formatORPCError } from "./runtime/errors";
 
 type ContextOutput<T> = T extends AnySchema ? InferSchemaOutput<T> : {};
 
@@ -128,6 +129,12 @@ export function createPlugin<
 			const base = os
 				.$context<ContextOutput<TRequestContext>>()
 				.use(onError((error) => {
+					const unwrapped = extractFromFiberFailure(error);
+					
+					if (unwrapped !== error && unwrapped instanceof ORPCError) {
+						throw unwrapped;
+					}
+					
 					formatORPCError(error);
 				}));
 			const builder = implement(config.contract, base);

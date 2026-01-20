@@ -201,10 +201,12 @@ export const Loading: FC = () => (
     style={{
       width: "100%",
       height: "100%",
+      minHeight: "100vh",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      opacity: 0.7,
+      backgroundColor: "var(--host-bg, #ffffff)",
+      transition: "background-color 0.2s ease",
     }}
   />
 );

@@ -4,21 +4,16 @@ import {
 } from "@module-federation/enhanced/runtime";
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
 import { Effect } from "effect";
+import { getMajorMinorVersion } from "../../build/shared-deps";
 import type { AnyPlugin } from "../../types";
 import { ModuleFederationError } from "../errors";
 import { getNormalizedRemoteName } from "./normalize";
 
-type RemoteModule = 
-  | (new () => AnyPlugin)
-  | { default: new () => AnyPlugin };
+type RemoteModule =
+	| (new () => AnyPlugin)
+	| { default: new () => AnyPlugin };
 
 import pkg from "../../../package.json";
-
-function getMajorVersionRange(version: string): string {
-	const match = version.match(/^[\^~]?(\d+)/);
-	const major = match ? match[1] : '0';
-	return `^${major}.0.0`;
-}
 
 const createModuleFederationInstance = Effect.cached(
 	Effect.sync(() => {
@@ -35,7 +30,7 @@ const createModuleFederationInstance = Effect.cached(
 							get: () => import("every-plugin").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
-								requiredVersion: getMajorVersionRange(pkg.version),
+								requiredVersion: getMajorMinorVersion(pkg.version),
 								eager: false,
 								strictVersion: false,
 							},
@@ -45,7 +40,7 @@ const createModuleFederationInstance = Effect.cached(
 							get: () => import("effect").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
-								requiredVersion: getMajorVersionRange(pkg.dependencies.effect),
+								requiredVersion: getMajorMinorVersion(pkg.dependencies.effect),
 								eager: false,
 								strictVersion: false,
 							},
@@ -55,7 +50,7 @@ const createModuleFederationInstance = Effect.cached(
 							get: () => import("zod").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
-								requiredVersion: getMajorVersionRange(pkg.dependencies.zod),
+								requiredVersion: getMajorMinorVersion(pkg.dependencies.zod),
 								eager: false,
 								strictVersion: false,
 							},
@@ -65,7 +60,7 @@ const createModuleFederationInstance = Effect.cached(
 							get: () => import("@orpc/contract").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
-								requiredVersion: getMajorVersionRange(pkg.dependencies["@orpc/contract"]),
+								requiredVersion: getMajorMinorVersion(pkg.dependencies["@orpc/contract"]),
 								eager: false,
 								strictVersion: false,
 							},
@@ -75,7 +70,7 @@ const createModuleFederationInstance = Effect.cached(
 							get: () => import("@orpc/server").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
-								requiredVersion: getMajorVersionRange(pkg.dependencies["@orpc/server"]),
+								requiredVersion: getMajorMinorVersion(pkg.dependencies["@orpc/server"]),
 								eager: false,
 								strictVersion: false,
 							},
@@ -137,7 +132,7 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 
 							// Support multiple export patterns: direct function, default export, named exports
 							let Constructor: any;
-							
+
 							if (typeof container === "function") {
 								// Direct function export
 								Constructor = container;
@@ -149,7 +144,7 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 								Constructor = Object.values(container).find(
 									(exp) => typeof exp === "function" && (exp as any).binding !== undefined
 								);
-								
+
 								// Fallback to any function export if no binding found
 								if (!Constructor) {
 									Constructor = Object.values(container).find(
@@ -200,4 +195,4 @@ export class ModuleFederationService extends Effect.Service<ModuleFederationServ
 				}),
 		};
 	}),
-}) {}
+}) { }

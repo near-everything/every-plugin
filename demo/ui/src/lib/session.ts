@@ -9,4 +9,5 @@ export const sessionQueryOptions = queryOptions({
   },
   staleTime: 0,
   gcTime: 1000 * 60 * 10,
+  enabled: typeof window !== 'undefined',
 });

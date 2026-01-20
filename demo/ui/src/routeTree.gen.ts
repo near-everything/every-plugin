@@ -11,12 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutLoginRouteImport } from './routes/_layout/login'
-import { Route as LayoutPageRouteImport } from './routes/_layout/_page'
 import { Route as LayoutAuthenticatedRouteImport } from './routes/_layout/_authenticated'
 import { Route as LayoutAuthenticatedIndexRouteImport } from './routes/_layout/_authenticated/index'
-import { Route as LayoutPageTermsOfServiceRouteImport } from './routes/_layout/_page/terms-of-service'
-import { Route as LayoutPagePrivacyPolicyRouteImport } from './routes/_layout/_page/privacy-policy'
+import { Route as LayoutPKeyRouteImport } from './routes/_layout/p/$key'
 import { Route as LayoutAuthenticatedAdminRouteImport } from './routes/_layout/_authenticated/_admin'
+import { Route as LayoutAuthenticatedKeysIndexRouteImport } from './routes/_layout/_authenticated/keys/index'
 import { Route as LayoutAuthenticatedKeysKeyRouteImport } from './routes/_layout/_authenticated/keys/$key'
 import { Route as LayoutAuthenticatedAdminDashboardRouteImport } from './routes/_layout/_authenticated/_admin/dashboard'
 
@@ -29,10 +28,6 @@ const LayoutLoginRoute = LayoutLoginRouteImport.update({
   path: '/login',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutPageRoute = LayoutPageRouteImport.update({
-  id: '/_page',
-  getParentRoute: () => LayoutRoute,
-} as any)
 const LayoutAuthenticatedRoute = LayoutAuthenticatedRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => LayoutRoute,
@@ -43,20 +38,20 @@ const LayoutAuthenticatedIndexRoute =
     path: '/',
     getParentRoute: () => LayoutAuthenticatedRoute,
   } as any)
-const LayoutPageTermsOfServiceRoute =
-  LayoutPageTermsOfServiceRouteImport.update({
-    id: '/terms-of-service',
-    path: '/terms-of-service',
-    getParentRoute: () => LayoutPageRoute,
-  } as any)
-const LayoutPagePrivacyPolicyRoute = LayoutPagePrivacyPolicyRouteImport.update({
-  id: '/privacy-policy',
-  path: '/privacy-policy',
-  getParentRoute: () => LayoutPageRoute,
+const LayoutPKeyRoute = LayoutPKeyRouteImport.update({
+  id: '/p/$key',
+  path: '/p/$key',
+  getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutAuthenticatedAdminRoute =
   LayoutAuthenticatedAdminRouteImport.update({
     id: '/_admin',
+    getParentRoute: () => LayoutAuthenticatedRoute,
+  } as any)
+const LayoutAuthenticatedKeysIndexRoute =
+  LayoutAuthenticatedKeysIndexRouteImport.update({
+    id: '/keys/',
+    path: '/keys/',
     getParentRoute: () => LayoutAuthenticatedRoute,
   } as any)
 const LayoutAuthenticatedKeysKeyRoute =
@@ -74,62 +69,48 @@ const LayoutAuthenticatedAdminDashboardRoute =
 
 export interface FileRoutesByFullPath {
   '/login': typeof LayoutLoginRoute
-  '/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
-  '/terms-of-service': typeof LayoutPageTermsOfServiceRoute
+  '/p/$key': typeof LayoutPKeyRoute
   '/': typeof LayoutAuthenticatedIndexRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
+  '/keys': typeof LayoutAuthenticatedKeysIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LayoutLoginRoute
-  '/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
-  '/terms-of-service': typeof LayoutPageTermsOfServiceRoute
+  '/p/$key': typeof LayoutPKeyRoute
   '/': typeof LayoutAuthenticatedIndexRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
+  '/keys': typeof LayoutAuthenticatedKeysIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
   '/_layout/_authenticated': typeof LayoutAuthenticatedRouteWithChildren
-  '/_layout/_page': typeof LayoutPageRouteWithChildren
   '/_layout/login': typeof LayoutLoginRoute
   '/_layout/_authenticated/_admin': typeof LayoutAuthenticatedAdminRouteWithChildren
-  '/_layout/_page/privacy-policy': typeof LayoutPagePrivacyPolicyRoute
-  '/_layout/_page/terms-of-service': typeof LayoutPageTermsOfServiceRoute
+  '/_layout/p/$key': typeof LayoutPKeyRoute
   '/_layout/_authenticated/': typeof LayoutAuthenticatedIndexRoute
   '/_layout/_authenticated/_admin/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/_layout/_authenticated/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
+  '/_layout/_authenticated/keys/': typeof LayoutAuthenticatedKeysIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/login'
-    | '/privacy-policy'
-    | '/terms-of-service'
-    | '/'
-    | '/dashboard'
-    | '/keys/$key'
+  fullPaths: '/login' | '/p/$key' | '/' | '/dashboard' | '/keys/$key' | '/keys'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/login'
-    | '/privacy-policy'
-    | '/terms-of-service'
-    | '/'
-    | '/dashboard'
-    | '/keys/$key'
+  to: '/login' | '/p/$key' | '/' | '/dashboard' | '/keys/$key' | '/keys'
   id:
     | '__root__'
     | '/_layout'
     | '/_layout/_authenticated'
-    | '/_layout/_page'
     | '/_layout/login'
     | '/_layout/_authenticated/_admin'
-    | '/_layout/_page/privacy-policy'
-    | '/_layout/_page/terms-of-service'
+    | '/_layout/p/$key'
     | '/_layout/_authenticated/'
     | '/_layout/_authenticated/_admin/dashboard'
     | '/_layout/_authenticated/keys/$key'
+    | '/_layout/_authenticated/keys/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -152,13 +133,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutLoginRouteImport
       parentRoute: typeof LayoutRoute
     }
-    '/_layout/_page': {
-      id: '/_layout/_page'
-      path: ''
-      fullPath: ''
-      preLoaderRoute: typeof LayoutPageRouteImport
-      parentRoute: typeof LayoutRoute
-    }
     '/_layout/_authenticated': {
       id: '/_layout/_authenticated'
       path: ''
@@ -173,25 +147,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAuthenticatedIndexRouteImport
       parentRoute: typeof LayoutAuthenticatedRoute
     }
-    '/_layout/_page/terms-of-service': {
-      id: '/_layout/_page/terms-of-service'
-      path: '/terms-of-service'
-      fullPath: '/terms-of-service'
-      preLoaderRoute: typeof LayoutPageTermsOfServiceRouteImport
-      parentRoute: typeof LayoutPageRoute
-    }
-    '/_layout/_page/privacy-policy': {
-      id: '/_layout/_page/privacy-policy'
-      path: '/privacy-policy'
-      fullPath: '/privacy-policy'
-      preLoaderRoute: typeof LayoutPagePrivacyPolicyRouteImport
-      parentRoute: typeof LayoutPageRoute
+    '/_layout/p/$key': {
+      id: '/_layout/p/$key'
+      path: '/p/$key'
+      fullPath: '/p/$key'
+      preLoaderRoute: typeof LayoutPKeyRouteImport
+      parentRoute: typeof LayoutRoute
     }
     '/_layout/_authenticated/_admin': {
       id: '/_layout/_authenticated/_admin'
       path: ''
       fullPath: ''
       preLoaderRoute: typeof LayoutAuthenticatedAdminRouteImport
+      parentRoute: typeof LayoutAuthenticatedRoute
+    }
+    '/_layout/_authenticated/keys/': {
+      id: '/_layout/_authenticated/keys/'
+      path: '/keys'
+      fullPath: '/keys'
+      preLoaderRoute: typeof LayoutAuthenticatedKeysIndexRouteImport
       parentRoute: typeof LayoutAuthenticatedRoute
     }
     '/_layout/_authenticated/keys/$key': {
@@ -230,41 +204,29 @@ interface LayoutAuthenticatedRouteChildren {
   LayoutAuthenticatedAdminRoute: typeof LayoutAuthenticatedAdminRouteWithChildren
   LayoutAuthenticatedIndexRoute: typeof LayoutAuthenticatedIndexRoute
   LayoutAuthenticatedKeysKeyRoute: typeof LayoutAuthenticatedKeysKeyRoute
+  LayoutAuthenticatedKeysIndexRoute: typeof LayoutAuthenticatedKeysIndexRoute
 }
 
 const LayoutAuthenticatedRouteChildren: LayoutAuthenticatedRouteChildren = {
   LayoutAuthenticatedAdminRoute: LayoutAuthenticatedAdminRouteWithChildren,
   LayoutAuthenticatedIndexRoute: LayoutAuthenticatedIndexRoute,
   LayoutAuthenticatedKeysKeyRoute: LayoutAuthenticatedKeysKeyRoute,
+  LayoutAuthenticatedKeysIndexRoute: LayoutAuthenticatedKeysIndexRoute,
 }
 
 const LayoutAuthenticatedRouteWithChildren =
   LayoutAuthenticatedRoute._addFileChildren(LayoutAuthenticatedRouteChildren)
 
-interface LayoutPageRouteChildren {
-  LayoutPagePrivacyPolicyRoute: typeof LayoutPagePrivacyPolicyRoute
-  LayoutPageTermsOfServiceRoute: typeof LayoutPageTermsOfServiceRoute
-}
-
-const LayoutPageRouteChildren: LayoutPageRouteChildren = {
-  LayoutPagePrivacyPolicyRoute: LayoutPagePrivacyPolicyRoute,
-  LayoutPageTermsOfServiceRoute: LayoutPageTermsOfServiceRoute,
-}
-
-const LayoutPageRouteWithChildren = LayoutPageRoute._addFileChildren(
-  LayoutPageRouteChildren,
-)
-
 interface LayoutRouteChildren {
   LayoutAuthenticatedRoute: typeof LayoutAuthenticatedRouteWithChildren
-  LayoutPageRoute: typeof LayoutPageRouteWithChildren
   LayoutLoginRoute: typeof LayoutLoginRoute
+  LayoutPKeyRoute: typeof LayoutPKeyRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAuthenticatedRoute: LayoutAuthenticatedRouteWithChildren,
-  LayoutPageRoute: LayoutPageRouteWithChildren,
   LayoutLoginRoute: LayoutLoginRoute,
+  LayoutPKeyRoute: LayoutPKeyRoute,
 }
 
 const LayoutRouteWithChildren =

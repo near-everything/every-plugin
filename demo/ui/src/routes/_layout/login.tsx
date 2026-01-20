@@ -9,6 +9,7 @@ type SearchParams = {
 };
 
 export const Route = createFileRoute("/_layout/login")({
+  ssr: false,
   validateSearch: (search: Record<string, unknown>): SearchParams => ({
     redirect: typeof search.redirect === "string" ? search.redirect : undefined,
   }),
@@ -36,7 +37,7 @@ function LoginPage() {
     setIsConnectingWallet(true);
     try {
       await authClient.requestSignIn.near(
-        { recipient: import.meta.env.PUBLIC_ACCOUNT_ID || "every.near" },
+        { recipient: window.__RUNTIME_CONFIG__?.account ?? "every.near" },
         {
           onSuccess: () => {
             setIsConnectingWallet(false);
@@ -64,7 +65,7 @@ function LoginPage() {
     setIsSigningInWithNear(true);
     try {
       await authClient.signIn.near(
-        { recipient: import.meta.env.PUBLIC_ACCOUNT_ID || "every.near" },
+        { recipient: window.__RUNTIME_CONFIG__?.account ?? "every.near" },
         {
           onSuccess: () => {
             setIsSigningInWithNear(false);

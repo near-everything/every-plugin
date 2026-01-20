@@ -10,6 +10,14 @@ export type SetValueResult = Awaited<ReturnType<typeof apiClient.setValue>>;
 export type GetValueResult = Awaited<ReturnType<typeof apiClient.getValue>>;
 
 export const Route = createFileRoute("/_layout/_authenticated/")({
+  head: () => ({
+    meta: [
+      { title: "Dashboard | demo.everything" },
+      { name: "description", content: "Manage your key-value store and test API endpoints." },
+      { property: "og:title", content: "Dashboard | demo.everything" },
+      { property: "og:description", content: "Manage your key-value store and test API endpoints." },
+    ],
+  }),
   component: Dashboard,
 });
 
@@ -70,12 +78,20 @@ function Dashboard() {
         <span className="text-xs text-muted-foreground font-mono">
           {accountId}
         </span>
-        <Link
-          to="/dashboard"
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-        >
-          admin
-        </Link>
+        <div className="flex gap-4">
+          <Link
+            to="/keys"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+          >
+            my keys
+          </Link>
+          <Link
+            to="/dashboard"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+          >
+            admin
+          </Link>
+        </div>
       </div>
 
       <div className="space-y-6">

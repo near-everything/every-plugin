@@ -7,12 +7,12 @@ Built with React, Hono.js, oRPC, Better-Auth, and Module Federation.
 ## Quick Start
 
 ```bash
-bun install       # Install dependencies
-bun db:migrate    # Run database migrations
-bun dev           # Start all services (API, UI, Host)
+bun install        # Install dependencies
+bun demo db migrate   # Run database migrations
+bun demo dev       # Start all services (API, UI, Host)
 ```
 
-Visit http://localhost:3001 to see the application.
+Visit http://localhost:3000 to see the application.
 
 ## Documentation
 
@@ -69,6 +69,57 @@ See [LLM.txt](./LLM.txt) for complete architecture details.
 - SQLite (libsql) + Drizzle ORM
 - Better-Auth with NEAR Protocol support
 
+## CLI Commands
+
+The demo monorepo includes a CLI for common workflows. Run commands with `bun demo <command>`.
+
+### Development
+
+```bash
+bun demo dev           # Full local development (API + UI + Host)
+bun demo dev --ui      # UI development (remote API, local UI)
+bun demo dev --api     # API development (remote UI, local API)
+bun demo dev --host    # Host only (all remote)
+bun demo dev --proxy   # Proxy mode (proxy API requests to remote)
+```
+
+### Build
+
+```bash
+bun demo build         # Build all packages
+bun demo build ui      # Build UI only
+bun demo build api     # Build API only
+bun demo build host    # Build host only
+bun demo build --force # Force rebuild (ignore turbo cache)
+```
+
+### Testing
+
+```bash
+bun demo test              # Run all tests (host + api)
+bun demo test -f host      # Run host tests only
+bun demo test -f api       # Run API tests only
+bun demo test:ssr          # Run SSR integration tests (uses existing UI bundle)
+bun demo test:ssr --watch  # Watch mode - rebuild UI on changes
+```
+
+### Database
+
+```bash
+bun demo db migrate        # Run migrations
+bun demo db push           # Push schema changes
+bun demo db generate       # Generate migrations
+bun demo db studio         # Open Drizzle Studio
+bun demo db sync           # Sync database schema
+bun demo db migrate -f api # Run API database migrations
+```
+
+### Utilities
+
+```bash
+bun demo clean             # Clean build artifacts and caches
+```
+
 ## Configuration
 
 All runtime configuration lives in `bos.config.json`:
@@ -79,7 +130,7 @@ All runtime configuration lives in `bos.config.json`:
   "app": {
     "host": {
       "title": "App Title",
-      "development": "http://localhost:3001",
+      "development": "http://localhost:3000",
       "production": "https://example.com"
     },
     "ui": {
@@ -103,41 +154,30 @@ All runtime configuration lives in `bos.config.json`:
 - Update CDN URLs without code changes
 - Template injection for secrets
 
-## Available Scripts
-
-```bash
-# Development
-bun dev              # All services (API: 3014, UI: 3002, Host: 3001)
-bun dev:api          # API plugin only
-bun dev:ui           # UI remote only
-bun dev:host         # Host server only
-
-# Production
-bun build            # Build all packages
-bun build:api        # Build API plugin → uploads to CDN
-bun build:ui         # Build UI remote → uploads to CDN
-bun build:host       # Build host server
-
-# Database
-bun db:migrate       # Run migrations
-bun db:push          # Push schema changes
-bun db:studio        # Open Drizzle Studio
-
-# Testing
-bun test             # Run all tests
-bun typecheck        # Type checking
-```
-
 ## Development Workflow
 
 1. **Make changes** to any workspace (ui/, api/, host/)
 2. **Hot reload** works automatically during development
 3. **Build & deploy** independently:
-   - `bun build:ui` → uploads to CDN → updates `bos.config.json`
-   - `bun build:api` → uploads to CDN → updates `bos.config.json`
+   - `bun demo build ui` → uploads to CDN → updates `bos.config.json`
+   - `bun demo build api` → uploads to CDN → updates `bos.config.json`
    - Host automatically loads new versions!
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed development workflow.
+
+## SSR (Server-Side Rendering)
+
+The host uses **TanStack Router SSR streaming** to render UI on the server:
+
+- Routes can configure SSR behavior: `ssr: true`, `ssr: 'data-only'`, or `ssr: false`
+- Authenticated routes use `ssr: false` to skip server rendering (avoids auth on server)
+- The UI bundle is loaded via Module Federation at runtime
+
+**Testing SSR:**
+```bash
+bun demo build ui      # Build UI bundle first
+bun demo test:ssr      # Run SSR integration tests
+```
 
 ## Related Projects
 

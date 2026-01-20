@@ -42,7 +42,7 @@ The **entire system** is configured via `bos.config.json` - a runtime-loaded JSO
   "app": {
     "host": {
       "title": "App Title",
-      "development": "http://localhost:3001",
+      "development": "http://localhost:3000",
       "production": "https://example.com"
     },
     "ui": {
@@ -379,14 +379,14 @@ bun dev
 # Starts:
 # - API: http://localhost:3014
 # - UI: http://localhost:3002
-# - Host: http://localhost:3001
+# - Host: http://localhost:3000
 ```
 
 **Individual services:**
 ```bash
 bun dev:api   # API only (port 3014)
 bun dev:ui    # UI only (port 3002)
-bun dev:host  # Host only (port 3001)
+bun dev:host  # Host only (port 3000)
 ```
 
 **Environment switching:**

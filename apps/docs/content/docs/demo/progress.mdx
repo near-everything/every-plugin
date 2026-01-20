@@ -1,0 +1,112 @@
+---
+title: Implementation Progress
+description: Roadmap and progress tracking for the multi-tenant WASI architecture implementation
+---
+
+This document tracks the progress of the multi-tenant WASI architecture implementation.
+
+## Status Overview
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Core Demo System | ✅ Complete |
+| 2 | Documentation | ✅ Complete |
+| 3 | WASI Host | 🔲 Not Started |
+| 4 | Enhanced Config Schema | 🔲 Not Started |
+| 5 | Tenant Onboarding | 🔲 Not Started |
+
+## Completed
+
+### Phase 1: Core Demo System ✅
+
+The demo system provides a working implementation of:
+
+- **Host** - Hono.js server with SSR, auth, and plugin routing
+- **UI** - React frontend with TanStack Router and Module Federation
+- **API** - every-plugin API with oRPC contract
+
+### Phase 2: Documentation ✅
+
+Architecture documentation now lives in fumadocs:
+
+- [Architecture Overview](/docs/demo/architecture) - Multi-tenant system design
+- [NDS Integration](/docs/demo/nds) - Domain verification with NEAR
+- [WASI Host](/docs/demo/wasi-host) - Rust implementation guide
+- [Development Guide](/docs/demo/development) - Local setup and workflows
+
+## Remaining Work
+
+### Phase 3: WASI Host
+
+Create the Rust WASI host module for production deployment:
+
+```
+demo/host/wasi/
+├── Cargo.toml
+├── src/
+│   ├── main.rs
+│   ├── config.rs
+│   ├── nds.rs
+│   ├── proxy.rs
+│   └── ssr.rs
+└── templates/
+    └── shell.html
+```
+
+**Tasks:**
+- [ ] Create Rust project structure
+- [ ] Implement config loading from FastFS
+- [ ] Implement NDS resolution
+- [ ] Implement API proxy
+- [ ] Implement HTML shell generation
+- [ ] Test with wasmtime
+- [ ] Deploy to OutLayer
+
+### Phase 4: Enhanced bos.config.json
+
+Update schema for multi-tenant support:
+
+```json
+{
+  "account": "tenant.near",
+  "nds": {
+    "domain": "custom.com",
+    "verified": true
+  },
+  "app": {
+    "plugins": []
+  }
+}
+```
+
+### Phase 5: Tenant Onboarding
+
+Create tools for tenant setup:
+
+- CLI command for config validation
+- FastFS upload helper
+- NDS registration integration
+
+## Architecture Summary
+
+```
+┌─────────────────────────────────────────────────────────┐
+│               Multi-Tenant Architecture                  │
+│                                                         │
+│  Request → WASI Host → NDS Lookup → FastFS Config      │
+│                ↓                                        │
+│         Route: HTML (SSR meta) or API (proxy)          │
+│                ↓                                        │
+│     UI Remote (CDN) ← Client Hydration                 │
+│                ↓                                        │
+│     API Plugins (services) ← oRPC calls                │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Key Design Decisions
+
+1. **Node.js for development** - Full hot reload and debugging
+2. **WASI for production** - Secure, multi-tenant, fast cold starts
+3. **Documentation in fumadocs** - Static site generation, MDX support
+4. **Module Federation** - Dynamic UI loading without npm installs
+5. **every-plugin for APIs** - Type-safe, contract-first plugin system

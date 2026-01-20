@@ -1,0 +1,221 @@
+---
+title: WASI Host Implementation
+description: Rust binary compiled to WebAssembly for secure, multi-tenant hosting on NEAR OutLayer
+---
+
+The WASI host is a Rust binary compiled to WebAssembly, designed to run on NEAR OutLayer for secure, multi-tenant hosting.
+
+## Why WASI?
+
+WASI (WebAssembly System Interface) enables:
+
+- **TEE Security** - Runs in Trusted Execution Environment on OutLayer
+- **Fast Cold Starts** - Sub-50ms startup time
+- **Portable** - Same binary runs anywhere WASI is supported
+- **Sandboxed** - Secure isolation between tenants
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    WASI Host Module                      │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │                   main.rs                        │   │
+│  │  - Read request from stdin                       │   │
+│  │  - Parse JSON request                           │   │
+│  │  - Route to handlers                            │   │
+│  │  - Write response to stdout                     │   │
+│  └─────────────────────────────────────────────────┘   │
+│           │                                             │
+│   ┌───────┴───────┬───────────────┬─────────────┐     │
+│   ▼               ▼               ▼             ▼     │
+│ config.rs     nds.rs          proxy.rs       ssr.rs  │
+│ Load from     Resolve         Forward        Generate │
+│ FastFS        tenant          API calls      HTML     │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Request Flow
+
+### Input (stdin)
+
+```json
+{
+  "method": "GET",
+  "path": "/products/123",
+  "host": "mystore.com",
+  "headers": [["accept", "text/html"]],
+  "body": null
+}
+```
+
+### Processing
+
+1. **Resolve Config Path** - Convention-based: `{subdomain}.{domain}` → `{subdomain}.near/settings/{domain}/bos.config.json`
+2. **Load Config** - HTTP GET from FastFS
+3. **Route Request**:
+   - `/api/*` → Proxy to plugin service
+   - `/*` → Generate HTML with meta tags
+
+### Output (stdout)
+
+```json
+{
+  "status": 200,
+  "headers": [["content-type", "text/html"]],
+  "body": "<!DOCTYPE html>..."
+}
+```
+
+## Key Modules
+
+### config.rs - Configuration Loading
+
+Convention-based resolution derives the config path from the request host:
+
+```rust
+pub fn resolve_config_url(host: &str) -> String {
+    // efiz.everything.dev → ["efiz", "everything", "dev"]
+    let parts: Vec<&str> = host.split('.').collect();
+    let subdomain = parts[0];           // efiz
+    let domain = parts[1..].join(".");  // everything.dev
+    
+    format!(
+        "https://{subdomain}.near.fastfs.io/fastfs.near/settings/{domain}/bos.config.json"
+    )
+}
+
+pub async fn load_config(host: &str) -> Result<BosConfig, Error> {
+    let url = resolve_config_url(host);
+    let response = http_get(&url).await?;
+    let config: BosConfig = serde_json::from_str(&response)?;
+    Ok(config)
+}
+```
+
+**Examples:**
+```
+efiz.everything.dev    → https://efiz.near.fastfs.io/fastfs.near/settings/everything.dev/bos.config.json
+demo.everything.market → https://demo.near.fastfs.io/fastfs.near/settings/everything.market/bos.config.json
+```
+
+### proxy.rs - API Forwarding
+
+```rust
+pub fn handle_api_request(config: &BosConfig, request: &Request) -> Response {
+    // Find matching plugin
+    let plugin = config.app.plugins.iter()
+        .find(|p| request.path.starts_with(&p.proxy.replace("*", "")))
+        .expect("No plugin for route");
+    
+    // Forward request
+    let upstream = format!("{}{}", plugin.remote_api_url, request.path);
+    let result = http_request(&request.method, &upstream, &request.body)?;
+    
+    Response {
+        status: result.status,
+        headers: result.headers,
+        body: result.body,
+    }
+}
+```
+
+### ssr.rs - HTML Generation
+
+```rust
+pub fn render_html(config: &BosConfig, request: &Request) -> Response {
+    let meta_tags = generate_meta_tags(config, &request.path);
+    
+    let runtime_config = json!({
+        "tenant": config.account,
+        "title": config.app.title,
+        "ui": config.app.ui,
+        "apiBase": "/api"
+    });
+    
+    let html = HTML_TEMPLATE
+        .replace("{{TITLE}}", &config.app.title)
+        .replace("{{META_TAGS}}", &meta_tags)
+        .replace("{{RUNTIME_CONFIG}}", &runtime_config.to_string())
+        .replace("{{UI_REMOTE}}", &config.app.ui.remote);
+    
+    Response {
+        status: 200,
+        headers: vec![("content-type".into(), "text/html".into())],
+        body: html,
+    }
+}
+```
+
+## Building
+
+### Prerequisites
+
+```bash
+# Install Rust with WASI target
+rustup target add wasm32-wasip2
+
+# Install wasm optimization tools
+cargo install wasm-opt
+```
+
+### Build Commands
+
+```bash
+cd host/wasi
+
+# Development build
+cargo build --target wasm32-wasip2
+
+# Production build
+cargo build --target wasm32-wasip2 --release
+wasm-opt -O3 target/wasm32-wasip2/release/host.wasm -o host.wasm
+```
+
+### Testing Locally
+
+```bash
+# Test with wasmtime
+echo '{"method":"GET","path":"/","host":"demo.everything.dev"}' | \
+  wasmtime host.wasm
+
+# Test with environment variables (secrets)
+echo '{"method":"GET","path":"/api/health"}' | \
+  wasmtime --env API_KEY=test host.wasm
+```
+
+## Deployment to OutLayer
+
+OutLayer provides:
+- **TEE execution** - Secure enclave for secrets
+- **Premium RPC** - Fast NEAR blockchain access
+- **Host functions** - Direct contract calls from WASM
+
+### Deploy Steps
+
+1. Upload compiled WASM to FastFS or IPFS
+2. Register with OutLayer contract
+3. Configure DNS to route to OutLayer endpoint
+
+## Trade-offs
+
+### What WASI Host Does Well
+
+- ✅ Fast cold starts
+- ✅ Low memory footprint
+- ✅ Secure isolation
+- ✅ Multi-tenant by design
+
+### What Stays in Node.js
+
+- Development server (hot reload)
+- Full React SSR (if needed)
+- Complex database connections
+- Plugin development
+
+## Related
+
+- [Architecture Overview](/docs/demo/architecture) - Full system design
+- [Development Guide](/docs/demo/development) - Local workflows
+- [OutLayer Documentation](https://docs.outlayer.near) - Deployment platform
