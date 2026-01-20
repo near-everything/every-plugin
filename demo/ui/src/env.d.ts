@@ -1,15 +1,8 @@
 /// <reference types="@rsbuild/core/types" />
 
-interface ImportMetaEnv {
-  readonly PUBLIC_ACCOUNT_ID: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
-
 interface RuntimeConfig {
   env: string;
+  account: string;
   title: string;
   hostUrl: string;
   ui: {

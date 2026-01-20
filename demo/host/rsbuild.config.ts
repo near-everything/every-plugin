@@ -10,13 +10,12 @@ const isProduction = process.env.NODE_ENV === "production";
 
 const configPath =
   process.env.BOS_CONFIG_PATH ?? path.resolve(__dirname, "../bos.config.json");
-const bosConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
 
 function updateBosConfig(field: "production" | "remote", url: string) {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     config.app.host[field] = url;
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
     console.log(`   ✅ Updated bos.config.json: app.host.${field}`);
   } catch (err) {
     console.error(
@@ -46,9 +45,6 @@ export default defineConfig({
   source: {
     entry: {
       index: "./src/program.ts",
-    },
-    define: {
-      "process.env.PUBLIC_ACCOUNT_ID": JSON.stringify(bosConfig.account),
     },
   },
   resolve: {

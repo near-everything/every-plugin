@@ -193,11 +193,11 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
     }
 
     try {
-      const { env, title, hostUrl } = config;
+      const { env, account, title, hostUrl } = config;
       const assetsUrl = config.ui.url;
       const result = await ssrRouterModule.renderToStream(c.req.raw, {
         assetsUrl,
-        runtimeConfig: { env, title, hostUrl, assetsUrl, apiBase: "/api", rpcBase: "/api/rpc" },
+        runtimeConfig: { env, account, title, hostUrl, assetsUrl, apiBase: "/api", rpcBase: "/api/rpc" },
       });
       return new Response(result.stream, {
         status: result.statusCode,

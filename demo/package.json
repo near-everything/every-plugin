@@ -12,7 +12,7 @@
       "react": "^19.2.3",
       "react-dom": "^19.2.3",
       "@tanstack/react-query": "^5.90.11",
-      "@tanstack/react-router": "^1.139.14",
+      "@tanstack/react-router": "^1.153.2",
       "near-kit": "^0.7.0",
       "@hot-labs/near-connect": "^0.8.2",
       "drizzle-orm": "^0.45.1",

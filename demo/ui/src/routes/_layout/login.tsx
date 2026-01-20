@@ -36,7 +36,7 @@ function LoginPage() {
     setIsConnectingWallet(true);
     try {
       await authClient.requestSignIn.near(
-        { recipient: import.meta.env.PUBLIC_ACCOUNT_ID || "every.near" },
+        { recipient: window.__RUNTIME_CONFIG__?.account ?? "every.near" },
         {
           onSuccess: () => {
             setIsConnectingWallet(false);
@@ -64,7 +64,7 @@ function LoginPage() {
     setIsSigningInWithNear(true);
     try {
       await authClient.signIn.near(
-        { recipient: import.meta.env.PUBLIC_ACCOUNT_ID || "every.near" },
+        { recipient: window.__RUNTIME_CONFIG__?.account ?? "every.near" },
         {
           onSuccess: () => {
             setIsSigningInWithNear(false);

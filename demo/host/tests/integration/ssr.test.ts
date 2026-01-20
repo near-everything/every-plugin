@@ -44,6 +44,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -66,6 +67,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -87,6 +89,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -108,6 +111,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -129,6 +133,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -150,6 +155,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -174,6 +180,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -197,6 +204,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -230,6 +238,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -256,6 +265,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -281,6 +291,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -305,6 +316,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -330,6 +342,7 @@ describe("SSR Stream Lifecycle", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",

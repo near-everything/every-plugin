@@ -6,6 +6,7 @@ import type { AnyRouteMatch, AnyRouter, RouterHistory } from "@tanstack/react-ro
 // TODO: shared with host
 export interface ClientRuntimeConfig {
   env: string;
+  account: string;
   title: string;
   hostUrl: string;
   assetsUrl: string;

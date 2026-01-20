@@ -1,8 +1,8 @@
-import { Effect } from "every-plugin/effect";
-import { beforeAll, describe, expect, it, vi } from "vitest";
 import { loadBosConfig, type RuntimeConfig } from "@/services/config";
 import { loadRouterModule } from "@/services/federation.server";
 import type { HeadData, RouterModule } from "@/types";
+import { Effect } from "every-plugin/effect";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 declare global {
   var $apiClient: typeof mockApiClient;
@@ -101,6 +101,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -237,6 +238,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -257,6 +259,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -281,6 +284,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -308,6 +312,7 @@ describe("SEO Head Extraction", () => {
           assetsUrl: config.ui.url,
           runtimeConfig: {
             env: config.env,
+            account: config.account,
             title: config.title,
             hostUrl: config.hostUrl,
             apiBase: "/api",
@@ -328,6 +333,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -353,6 +359,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -378,6 +385,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -411,6 +419,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -428,6 +437,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -448,6 +458,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
@@ -466,6 +477,7 @@ describe("SEO Head Extraction", () => {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
+          account: config.account,
           title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",

@@ -17,9 +17,6 @@ const isProduction = process.env.NODE_ENV === "production";
 const buildTarget = process.env.BUILD_TARGET as "client" | "server" | undefined;
 const isServerBuild = buildTarget === "server";
 
-const configPath = path.resolve(__dirname, "../bos.config.json");
-const bosConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
-
 function updateBosConfig(field: "production" | "ssr", url: string) {
   try {
     const configPath = path.resolve(__dirname, "../bos.config.json");
@@ -31,7 +28,7 @@ function updateBosConfig(field: "production" | "ssr", url: string) {
     }
 
     config.app.ui[field] = url;
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
     console.log(`   ✅ Updated bos.config.json: app.ui.${field}`);
   } catch (err) {
     console.error(
@@ -81,9 +78,6 @@ function createClientConfig() {
       entry: {
         index: "./src/hydrate.tsx",
       },
-      define: {
-        "import.meta.env.PUBLIC_ACCOUNT_ID": JSON.stringify(bosConfig.account),
-      },
     },
     resolve: {
       alias: {
@@ -96,26 +90,6 @@ function createClientConfig() {
       client: {
         overlay: false,
       },
-      // setupMiddlewares: [
-      //   (middlewares) => {
-      //     middlewares.unshift((req: { url?: string }, res: import("node:http").ServerResponse, next: () => void) => {
-      //       if (req.url === "/remoteEntry.server.js") {
-      //         const filePath = path.join(__dirname, "dist/remoteEntry.server.js");
-      //         if (fs.existsSync(filePath)) {
-      //           res.setHeader("Content-Type", "application/javascript");
-      //           res.setHeader("Access-Control-Allow-Origin", "*");
-      //           fs.createReadStream(filePath).pipe(res);
-      //         } else {
-      //           res.statusCode = 503;
-      //           res.setHeader("Content-Type", "text/plain");
-      //           res.end("Server bundle not yet built. Run: bun build:server");
-      //         }
-      //       } else {
-      //         next();
-      //       }
-      //     });
-      //   },
-      // ],
     },
     server: {
       port: 3002,
@@ -176,9 +150,6 @@ function createServerConfig() {
     source: {
       entry: {
         index: "./src/router.server.tsx",
-      },
-      define: {
-        "import.meta.env.PUBLIC_ACCOUNT_ID": JSON.stringify(bosConfig.account),
       },
     },
     resolve: {

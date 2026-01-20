@@ -212,6 +212,47 @@ interface BootstrapConfig {
   database?: { url?: string };
 }
 
+const patchConsole = (
+  name: string,
+  callbacks: ProcessCallbacks
+): (() => void) => {
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const originalInfo = console.info;
+
+  const formatArgs = (args: unknown[]): string => {
+    return args
+      .map((arg) =>
+        typeof arg === "object" ? JSON.stringify(arg, null, 2) : String(arg)
+      )
+      .join(" ");
+  };
+
+  console.log = (...args: unknown[]) => {
+    callbacks.onLog(name, formatArgs(args), false);
+  };
+
+  console.error = (...args: unknown[]) => {
+    callbacks.onLog(name, formatArgs(args), true);
+  };
+
+  console.warn = (...args: unknown[]) => {
+    callbacks.onLog(name, formatArgs(args), false);
+  };
+
+  console.info = (...args: unknown[]) => {
+    callbacks.onLog(name, formatArgs(args), false);
+  };
+
+  return () => {
+    console.log = originalLog;
+    console.error = originalError;
+    console.warn = originalWarn;
+    console.info = originalInfo;
+  };
+};
+
 export const spawnRemoteHost = (
   config: DevProcess,
   callbacks: ProcessCallbacks
@@ -249,8 +290,10 @@ export const spawnRemoteHost = (
     callbacks.onLog(config.name, `Remote: ${remoteUrl}`);
 
     let serverHandle: ServerHandle | null = null;
+    let restoreConsole: (() => void) | null = null;
 
     const loadAndRun = async () => {
+      restoreConsole = patchConsole(config.name, callbacks);
       try {
         const { createInstance, getInstance } = await import("@module-federation/enhanced/runtime");
         const { setGlobalFederationInstance } = await import("@module-federation/runtime-core");
@@ -300,6 +343,7 @@ export const spawnRemoteHost = (
       pid: process.pid,
       kill: async () => {
         callbacks.onLog(config.name, "Shutting down remote host...");
+        restoreConsole?.();
         if (serverHandle) {
           await serverHandle.shutdown();
         }
