@@ -37,6 +37,11 @@ export interface RemoteConfig {
 export interface BosConfig {
   account: string;
   templates?: Record<string, string>;
+  create?: Record<string, string>;
+  cli?: {
+    remote?: string;
+    local?: string;
+  };
   app: {
     host: HostConfig;
     [remoteName: string]: HostConfig | RemoteConfig;
