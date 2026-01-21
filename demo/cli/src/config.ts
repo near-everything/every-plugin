@@ -55,6 +55,7 @@ export interface BosConfig {
 
 let cachedConfig: BosConfig | null = null;
 let configDir: string | null = null;
+let configLoaded = false;
 
 export function findConfigPath(startDir: string): string | null {
   let dir = startDir;
@@ -86,25 +87,33 @@ function findConfigPathSync(startDir: string): string | null {
   return null;
 }
 
-export function loadConfig(cwd?: string): BosConfig {
-  if (cachedConfig) return cachedConfig;
+export function loadConfig(cwd?: string): BosConfig | null {
+  if (configLoaded) return cachedConfig;
 
   const startDir = cwd ?? process.cwd();
   const configPath = findConfigPathSync(startDir);
 
   if (!configPath) {
-    throw new Error("Could not find bos.config.json in current directory or parents");
+    configLoaded = true;
+    configDir = startDir;
+    return null;
   }
 
   configDir = dirname(configPath);
-  const file = Bun.file(configPath);
   const content = require(configPath);
   cachedConfig = content as BosConfig;
+  configLoaded = true;
   return cachedConfig;
 }
 
+export function setConfig(config: BosConfig, dir?: string): void {
+  cachedConfig = config;
+  configDir = dir ?? process.cwd();
+  configLoaded = true;
+}
+
 export function getConfigDir(): string {
-  if (!configDir) {
+  if (!configLoaded) {
     loadConfig();
   }
   return configDir!;
@@ -112,16 +121,19 @@ export function getConfigDir(): string {
 
 export function getRemotes(): string[] {
   const config = loadConfig();
+  if (!config) return [];
   return Object.keys(config.app).filter((k) => k !== "host");
 }
 
 export function getPackages(): string[] {
   const config = loadConfig();
+  if (!config) return [];
   return Object.keys(config.app);
 }
 
 export function getRemote(name: string): RemoteConfig | undefined {
   const config = loadConfig();
+  if (!config) return undefined;
   const remote = config.app[name];
   if (remote && "name" in remote) {
     return remote as RemoteConfig;
@@ -131,6 +143,9 @@ export function getRemote(name: string): RemoteConfig | undefined {
 
 export function getHost(): HostConfig {
   const config = loadConfig();
+  if (!config) {
+    throw new Error("No bos.config.json found");
+  }
   return config.app.host;
 }
 
@@ -139,6 +154,7 @@ export function getUrl(
   env: "development" | "production" = "development"
 ): string | undefined {
   const config = loadConfig();
+  if (!config) return undefined;
   const pkg = config.app[packageName];
   if (!pkg) return undefined;
   return pkg[env];
@@ -146,11 +162,17 @@ export function getUrl(
 
 export function getAccount(): string {
   const config = loadConfig();
+  if (!config) {
+    throw new Error("No bos.config.json found");
+  }
   return config.account;
 }
 
 export function getTitle(): string {
   const config = loadConfig();
+  if (!config) {
+    throw new Error("No bos.config.json found");
+  }
   return config.app.host.title;
 }
 
@@ -159,6 +181,9 @@ export function getComponentUrl(
   source: SourceMode
 ): string {
   const config = loadConfig();
+  if (!config) {
+    throw new Error("No bos.config.json found");
+  }
 
   if (component === "host") {
     return source === "remote" ? config.app.host.production : config.app.host.development;
@@ -189,6 +214,9 @@ export interface PortConfig {
 
 export function getPortsFromConfig(): PortConfig {
   const config = loadConfig();
+  if (!config) {
+    return { host: 3000, ui: 3002, api: 3014 };
+  }
   return {
     host: parsePort(config.app.host.development),
     ui: config.app.ui ? parsePort((config.app.ui as RemoteConfig).development) : 3002,
@@ -205,10 +233,14 @@ export function getConfigPath(): string {
 
 export function getHostRemoteUrl(): string | undefined {
   const config = loadConfig();
+  if (!config) return undefined;
   return config.app.host.production || undefined;
 }
 
 export function getGatewayUrl(env: "development" | "production" = "development"): string {
   const config = loadConfig();
+  if (!config) {
+    throw new Error("No bos.config.json found");
+  }
   return config.gateway[env];
 }

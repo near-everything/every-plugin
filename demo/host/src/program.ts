@@ -282,10 +282,11 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
         onReady?.();
       });
     } else {
-      serve({ fetch: app.fetch, port }, (info: { port: number }) => {
-        logger.info(`Host production server running at http://localhost:${info.port}`);
-        logger.info(`  http://localhost:${info.port}/api     → REST API (OpenAPI docs)`);
-        logger.info(`  http://localhost:${info.port}/api/rpc → RPC endpoint`);
+      const hostname = process.env.HOST || "0.0.0.0";
+      serve({ fetch: app.fetch, port, hostname }, (info: { port: number }) => {
+        logger.info(`Host production server running at http://${hostname}:${info.port}`);
+        logger.info(`  http://${hostname}:${info.port}/api     → REST API (OpenAPI docs)`);
+        logger.info(`  http://${hostname}:${info.port}/api/rpc → RPC endpoint`);
         onReady?.();
       });
     }

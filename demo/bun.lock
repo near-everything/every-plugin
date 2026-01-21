@@ -38,7 +38,7 @@
     },
     "cli": {
       "name": "everything-dev",
-      "version": "0.0.1",
+      "version": "0.0.4",
       "bin": {
         "bos": "./src/cli.ts",
       },
@@ -47,6 +47,7 @@
         "@effect/platform": "^0.82.8",
         "@effect/platform-bun": "^0.58.1",
         "@inquirer/prompts": "^8.2.0",
+        "@libsql/client": "^0.17.0",
         "borsh": "^2.0.0",
         "boxen": "^8.0.1",
         "chalk": "^5.6.2",
@@ -76,6 +77,7 @@
       "dependencies": {
         "@cloudflare/containers": "^0.1.0",
         "@types/node": "^25.0.9",
+        "effect": "^3.19.14",
         "near-social-js": "^2.0.3",
         "nova-sdk-js": "^1.0.1",
       },

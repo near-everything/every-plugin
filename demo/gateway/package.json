@@ -12,6 +12,7 @@
   "dependencies": {
     "@cloudflare/containers": "^0.1.0",
     "@types/node": "^25.0.9",
+    "effect": "^3.19.14",
     "near-social-js": "^2.0.3",
     "nova-sdk-js": "^1.0.1"
   },

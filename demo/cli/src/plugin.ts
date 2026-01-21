@@ -14,6 +14,7 @@ import {
   getPortsFromConfig,
   getRemotes,
   loadConfig,
+  setConfig,
   type SourceMode
 } from "./config";
 import { bosContract } from "./contract";
@@ -37,7 +38,7 @@ import { run } from "./utils/run";
 import { colors, icons } from "./utils/theme";
 
 interface BosDeps {
-  bosConfig: BosConfigType;
+  bosConfig: BosConfigType | null;
   configDir: string;
   nearPrivateKey?: string;
 }
@@ -164,7 +165,7 @@ export default createPlugin({
         bosConfig,
         configDir,
         nearPrivateKey: config.secrets.nearPrivateKey
-      };
+      } as BosDeps;
     }),
 
   shutdown: () => Effect.void,
@@ -233,6 +234,7 @@ export default createPlugin({
             }
             if (typeof current === "string") {
               remoteConfig = JSON.parse(current) as BosConfigType;
+              setConfig(remoteConfig);
             }
           }
         } catch (error) {
@@ -253,6 +255,15 @@ export default createPlugin({
       }
 
       const config = remoteConfig || deps.bosConfig;
+      
+      if (!config) {
+        console.error("No configuration available. Provide --account and --domain, or run from a BOS project directory.");
+        return {
+          status: "error" as const,
+          url: "",
+        };
+      }
+
       const port = input.port ?? 3000;
 
       const env: Record<string, string> = {
@@ -261,6 +272,7 @@ export default createPlugin({
         UI_SOURCE: "remote",
         API_SOURCE: "remote",
         BOS_ACCOUNT: config.account,
+        HOST_REMOTE_URL: config.app.host.production,
         UI_REMOTE_URL: config.app.ui.production,
         API_REMOTE_URL: config.app.api.production,
       };
@@ -360,6 +372,15 @@ export default createPlugin({
     publish: builder.publish.handler(async ({ input: publishInput }) => {
       const { bosConfig, nearPrivateKey } = deps;
 
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          txHash: "",
+          registryUrl: "",
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
+
       const gatewayDomain = getGatewayDomain(bosConfig);
       const socialPath = `${bosConfig.account}/bos/gateways/${gatewayDomain}/bos.config.json`;
 
@@ -424,7 +445,7 @@ export default createPlugin({
         gateway: "near-everything/every-plugin/demo/gateway",
       };
 
-      const template = input.template || deps.bosConfig.create?.[input.type] || DEFAULT_TEMPLATES[input.type];
+      const template = input.template || deps.bosConfig?.create?.[input.type] || DEFAULT_TEMPLATES[input.type];
       const dest = input.type === "project" ? input.name! : input.type;
 
       try {
@@ -492,6 +513,11 @@ export default createPlugin({
 
     status: builder.status.handler(async ({ input }) => {
       const config = deps.bosConfig;
+      
+      if (!config) {
+        return { endpoints: [] };
+      }
+
       const host = getHost();
       const remotes = getRemotes();
       const env = input.env;
@@ -581,6 +607,14 @@ export default createPlugin({
     register: builder.register.handler(async ({ input }) => {
       const { bosConfig } = deps;
 
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          account: input.name,
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
+
       const registerEffect = Effect.gen(function* () {
         yield* ensureNearCli;
 
@@ -624,6 +658,14 @@ export default createPlugin({
     secretsSync: builder.secretsSync.handler(async ({ input }) => {
       const { bosConfig } = deps;
 
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          count: 0,
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
+
       const syncEffect = Effect.gen(function* () {
         const novaConfig = yield* getNovaConfig;
         const nova = createNovaClient(novaConfig);
@@ -658,6 +700,13 @@ export default createPlugin({
     secretsSet: builder.secretsSet.handler(async ({ input }) => {
       const { bosConfig } = deps;
 
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
+
       const setEffect = Effect.gen(function* () {
         const novaConfig = yield* getNovaConfig;
         const nova = createNovaClient(novaConfig);
@@ -683,6 +732,14 @@ export default createPlugin({
 
     secretsList: builder.secretsList.handler(async () => {
       const { bosConfig } = deps;
+
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          keys: [],
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
 
       const listEffect = Effect.gen(function* () {
         const novaConfig = yield* getNovaConfig;
@@ -720,6 +777,13 @@ export default createPlugin({
 
     secretsDelete: builder.secretsDelete.handler(async ({ input }) => {
       const { bosConfig } = deps;
+
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
 
       const deleteEffect = Effect.gen(function* () {
         const novaConfig = yield* getNovaConfig;
@@ -852,6 +916,15 @@ export default createPlugin({
 
     gatewayDeploy: builder.gatewayDeploy.handler(async ({ input }) => {
       const { configDir, bosConfig } = deps;
+
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          url: "",
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
+
       const gatewayDir = `${configDir}/gateway`;
 
       const deployEffect = Effect.gen(function* () {
@@ -895,6 +968,14 @@ export default createPlugin({
 
     gatewaySync: builder.gatewaySync.handler(async () => {
       const { configDir, bosConfig } = deps;
+
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
+
       const wranglerPath = `${configDir}/gateway/wrangler.toml`;
 
       try {

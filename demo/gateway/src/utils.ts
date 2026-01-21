@@ -8,6 +8,23 @@ export function extractAccount(
   gatewayDomain: string,
   gatewayAccount: string
 ): AccountResolution | null {
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return {
+      subdomain: null,
+      nearAccount: gatewayAccount,
+    };
+  }
+
+  if (hostname.endsWith(".localhost")) {
+    const subdomain = hostname.slice(0, -".localhost".length);
+    if (subdomain && !subdomain.includes(".")) {
+      return {
+        subdomain,
+        nearAccount: `${subdomain}.${gatewayAccount}`,
+      };
+    }
+  }
+
   const gatewayBase = gatewayDomain.replace(/^\./, "");
 
   if (hostname === gatewayBase) {

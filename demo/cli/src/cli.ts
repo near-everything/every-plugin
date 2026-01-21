@@ -60,7 +60,7 @@ async function main() {
   const client = result.createClient();
 
   function getHelpHeader(): string {
-    const host = config.app.host;
+    const host = config?.app.host;
     const lines: string[] = [];
 
     lines.push("");
@@ -68,11 +68,11 @@ async function main() {
     lines.push(`  ${icons.config} ${gradients.cyber("BOS CLI")} ${colors.dim("v1.0.0")}`);
     lines.push(colors.cyan(frames.bottom(52)));
     lines.push("");
-    lines.push(`  ${colors.dim("Account")} ${colors.cyan(config.account)}`);
-    lines.push(`  ${colors.dim("Gateway")} ${colors.white(config.gateway.production)}`);
+    lines.push(`  ${colors.dim("Account")} ${colors.cyan(config?.account)}`);
+    lines.push(`  ${colors.dim("Gateway")} ${colors.white(config?.gateway.production)}`);
     lines.push(`  ${colors.dim("Config ")} ${colors.dim(configPath)}`);
-    if (host.description) {
-      lines.push(`  ${colors.dim("About  ")} ${colors.white(host.description)}`);
+    if (host?.description) {
+      lines.push(`  ${colors.dim("About  ")} ${colors.white(host?.description)}`);
     }
     lines.push("");
     lines.push(colors.cyan(frames.top(52)));
@@ -256,14 +256,14 @@ Zephyr Configuration:
 
   program
     .command("publish")
-    .description("Publish bos.config.json to on-chain registry (FastFS)")
+    .description("Publish bos.config.json to on-chain registry (Near Social)")
     .option("--network <network>", "Network: mainnet | testnet", "mainnet")
-    .option("--path <path>", "FastFS relative path", "bos.config.json")
+    .option("--path <path>", "Near Social relative path", "bos.config.json")
     .option("--dry-run", "Show what would be published without sending")
     .action(async (options) => {
       console.log();
-      console.log(`  ${icons.pkg} Publishing to FastFS...`);
-      console.log(colors.dim(`  Account: ${config.account}`));
+      console.log(`  ${icons.pkg} Publishing to Near Social...`);
+      console.log(colors.dim(`  Account: ${config?.account}`));
       console.log(colors.dim(`  Network: ${options.network}`));
 
       if (options.dryRun) {
@@ -486,7 +486,7 @@ Zephyr Configuration:
   program
     .command("register")
     .description("Register a new tenant on the gateway")
-    .argument("<name>", `Account name (will create <name>.${config.account})`)
+    .argument("<name>", `Account name (will create <name>.${config?.account})`)
     .option("--network <network>", "Network: mainnet | testnet", "mainnet")
     .action(async (name: string, options: { network: string }) => {
       console.log();

@@ -3,8 +3,8 @@ main = "src/worker.ts"
 compatibility_date = "2026-01-20"
 
 [vars]
-GATEWAY_DOMAIN = "everything.dev"
-GATEWAY_ACCOUNT = "dev.everything.near"
+GATEWAY_DOMAIN = "ejlbraem.com"
+GATEWAY_ACCOUNT = "efiz.near"
 
 [[containers]]
 class_name = "TenantContainer"
@@ -20,4 +20,4 @@ new_sqlite_classes = ["TenantContainer"]
 tag = "v1"
 
 [env.production]
-vars = { GATEWAY_DOMAIN = "everything.dev", GATEWAY_ACCOUNT = "dev.everything.near" }
+vars = { GATEWAY_DOMAIN = "ejlbraem.com", GATEWAY_ACCOUNT = "efiz.near" }
