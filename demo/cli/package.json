@@ -26,6 +26,8 @@
     "gradient-string": "^3.0.0",
     "ink": "^5.2.1",
     "near-kit": "^0.7.0",
+    "nova-sdk-js": "^1.0.1",
+    "open": "^11.0.0",
     "react": "^18.3.1"
   },
   "devDependencies": {

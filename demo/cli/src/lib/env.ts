@@ -8,6 +8,8 @@ export interface BosEnv {
   ZE_SERVER_TOKEN?: string;
   ZE_USER_EMAIL?: string;
   NEAR_PRIVATE_KEY?: string;
+  GATEWAY_PRIVATE_KEY?: string;
+  NOVA_SECRETS_CID?: string;
 }
 
 function parseEnvFile(content: string): Record<string, string> {
@@ -55,12 +57,16 @@ export const loadBosEnv = Effect.gen(function* () {
       ZE_SERVER_TOKEN: parsed.ZE_SERVER_TOKEN,
       ZE_USER_EMAIL: parsed.ZE_USER_EMAIL,
       NEAR_PRIVATE_KEY: parsed.NEAR_PRIVATE_KEY,
+      GATEWAY_PRIVATE_KEY: parsed.GATEWAY_PRIVATE_KEY,
+      NOVA_SECRETS_CID: parsed.NOVA_SECRETS_CID,
     };
   }
 
   envVars.ZE_SERVER_TOKEN = envVars.ZE_SERVER_TOKEN || process.env.ZE_SERVER_TOKEN;
   envVars.ZE_USER_EMAIL = envVars.ZE_USER_EMAIL || process.env.ZE_USER_EMAIL;
   envVars.NEAR_PRIVATE_KEY = envVars.NEAR_PRIVATE_KEY || process.env.NEAR_PRIVATE_KEY;
+  envVars.GATEWAY_PRIVATE_KEY = envVars.GATEWAY_PRIVATE_KEY || process.env.GATEWAY_PRIVATE_KEY;
+  envVars.NOVA_SECRETS_CID = envVars.NOVA_SECRETS_CID || process.env.NOVA_SECRETS_CID;
 
   return envVars;
 });

@@ -20,7 +20,6 @@ export interface HostConfig {
   description?: string;
   development: string;
   production: string;
-  remote?: string;
   secrets?: string[];
 }
 
@@ -34,8 +33,14 @@ export interface RemoteConfig {
   secrets?: string[];
 }
 
+export interface GatewayConfig {
+  development: string;
+  production: string;
+}
+
 export interface BosConfig {
   account: string;
+  gateway: GatewayConfig;
   templates?: Record<string, string>;
   create?: Record<string, string>;
   cli?: {
@@ -156,14 +161,7 @@ export function getComponentUrl(
   const config = loadConfig();
 
   if (component === "host") {
-    if (source === "remote") {
-      const remoteUrl = config.app.host.remote;
-      if (!remoteUrl) {
-        throw new Error("No remote URL configured for host. Run 'bos build host' first.");
-      }
-      return remoteUrl;
-    }
-    return config.app.host.development;
+    return source === "remote" ? config.app.host.production : config.app.host.development;
   }
 
   const componentConfig = config.app[component];
@@ -172,11 +170,6 @@ export function getComponentUrl(
   }
 
   return source === "remote" ? componentConfig.production : componentConfig.development;
-}
-
-export function getHostRemoteUrl(): string | undefined {
-  const config = loadConfig();
-  return config.app.host.remote;
 }
 
 export function parsePort(url: string): number {
@@ -208,4 +201,14 @@ export function getConfigPath(): string {
     loadConfig();
   }
   return `${configDir}/bos.config.json`;
+}
+
+export function getHostRemoteUrl(): string | undefined {
+  const config = loadConfig();
+  return config.app.host.production || undefined;
+}
+
+export function getGatewayUrl(env: "development" | "production" = "development"): string {
+  const config = loadConfig();
+  return config.gateway[env];
 }

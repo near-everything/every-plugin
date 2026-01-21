@@ -10,6 +10,8 @@ export interface BootstrapConfig {
   ui?: { source?: SourceMode };
   api?: { source?: SourceMode; proxy?: string };
   database?: { url?: string };
+  gatewayConfig?: BosConfig;
+  gatewaySecrets?: Record<string, string>;
 }
 
 let globalBootstrap: BootstrapConfig | undefined;
@@ -18,15 +20,15 @@ export function setBootstrapConfig(config: BootstrapConfig): void {
   globalBootstrap = config;
 }
 
-interface BosConfig {
+export interface BosConfig {
   account: string;
+  gateway?: string;
   app: {
     host: {
       title: string;
       description?: string;
       development: string;
       production: string;
-      remote?: string;
       secrets?: string[];
     };
     ui: {
@@ -92,9 +94,48 @@ function resolveSource(
   return env === "production" ? "remote" : "local";
 }
 
+function loadConfigFromGateway(
+  gatewayConfig: BosConfig,
+  gatewaySecrets: Record<string, string> | undefined,
+  env: "development" | "production"
+): RuntimeConfig {
+  if (gatewaySecrets) {
+    for (const [key, value] of Object.entries(gatewaySecrets)) {
+      process.env[key] = value;
+    }
+  }
+
+  return {
+    env,
+    account: gatewayConfig.account,
+    title: gatewayConfig.app.host.title,
+    hostUrl: gatewayConfig.app.host.production,
+    ui: {
+      name: gatewayConfig.app.ui.name,
+      url: gatewayConfig.app.ui.production,
+      ssrUrl: gatewayConfig.app.ui.ssr || undefined,
+      source: "remote",
+      exposes: gatewayConfig.app.ui.exposes,
+    },
+    api: {
+      name: gatewayConfig.app.api.name,
+      url: gatewayConfig.app.api.production,
+      source: "remote",
+      proxy: undefined,
+      variables: gatewayConfig.app.api.variables,
+      secrets: gatewayConfig.app.api.secrets,
+    },
+  };
+}
+
 export const loadConfig = Effect.gen(function* () {
   const bootstrap = globalBootstrap;
   const env = (process.env.NODE_ENV as "development" | "production") || "development";
+
+  if (bootstrap?.gatewayConfig) {
+    return loadConfigFromGateway(bootstrap.gatewayConfig, bootstrap.gatewaySecrets, env);
+  }
+
   const path = bootstrap?.configPath ?? process.env.BOS_CONFIG_PATH ?? resolve(process.cwd(), "bos.config.json");
 
   if (bootstrap?.secrets) {

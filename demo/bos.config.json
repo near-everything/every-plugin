@@ -1,5 +1,9 @@
 {
-  "account": "demo.everything.near",
+  "account": "dev.everything.near",
+  "gateway": {
+    "development": "http://localhost:8787",
+    "production": "https://everything.dev"
+  },
   "create": {
     "project": "near-everything/every-plugin/demo",
     "ui": "near-everything/every-plugin/demo/ui",
@@ -11,8 +15,7 @@
       "title": "demo | everything",
       "description": "This is a demo application orchestrated by a bos.config.json in the project root.",
       "development": "http://localhost:3000",
-      "production": "https://demo.everything.dev",
-      "remote": "https://elliot-braem-1733-host-every-plugin-near-everythi-33abe003c-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1733-host-every-plugin-near-everythi-33abe003c-ze.zephyrcloud.app",
       "secrets": [
         "HOST_DATABASE_URL",
         "HOST_DATABASE_AUTH_TOKEN",

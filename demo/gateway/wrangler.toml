@@ -1,0 +1,26 @@
+name = "everything-gateway"
+main = "src/worker.ts"
+compatibility_date = "2026-01-20"
+
+[vars]
+GATEWAY_DOMAIN = "everything.dev"
+GATEWAY_ACCOUNT = "gateway.everything.near"
+
+[[containers]]
+class_name = "TenantContainer"
+image = "./Dockerfile"
+max_instances = 100
+
+[[durable_objects.bindings]]
+class_name = "TenantContainer"
+name = "TENANT_CONTAINER"
+
+[[migrations]]
+new_sqlite_classes = ["TenantContainer"]
+tag = "v1"
+
+[env.production]
+vars = { GATEWAY_DOMAIN = "everything.dev", GATEWAY_ACCOUNT = "gateway.everything.near" }
+
+[env.staging]
+vars = { GATEWAY_DOMAIN = "staging.everything.dev", GATEWAY_ACCOUNT = "gateway-staging.everything.near" }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { program } from "commander";
 import { createPluginRuntime } from "every-plugin";
-import { getConfigPath, getPackages, getTitle, loadConfig } from "./config";
+import { getConfigDir, getConfigPath, getPackages, getTitle, loadConfig } from "./config";
 import BosPlugin from "./plugin";
 import { printBanner } from "./utils/banner";
 import { colors, frames, gradients, icons } from "./utils/theme";
@@ -15,6 +15,23 @@ async function main() {
     console.error(colors.error(`${icons.err} Could not find bos.config.json`));
     console.log(colors.dim("  Run 'bos create project <name>' to create a new project"));
     process.exit(1);
+  }
+
+  const envPath = `${getConfigDir()}/.env.bos`;
+  const envFile = Bun.file(envPath);
+  if (await envFile.exists()) {
+    const content = await envFile.text();
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIndex = trimmed.indexOf("=");
+      if (eqIndex === -1) continue;
+      const key = trimmed.slice(0, eqIndex).trim();
+      const value = trimmed.slice(eqIndex + 1).trim();
+      if (key && !process.env[key]) {
+        process.env[key] = value;
+      }
+    }
   }
 
   const packages = getPackages();
@@ -52,7 +69,7 @@ async function main() {
     lines.push(colors.cyan(frames.bottom(52)));
     lines.push("");
     lines.push(`  ${colors.dim("Account")} ${colors.cyan(config.account)}`);
-    lines.push(`  ${colors.dim("URL    ")} ${colors.white(host.production)}`);
+    lines.push(`  ${colors.dim("Gateway")} ${colors.white(config.gateway.production)}`);
     lines.push(`  ${colors.dim("Config ")} ${colors.dim(configPath)}`);
     if (host.description) {
       lines.push(`  ${colors.dim("About  ")} ${colors.white(host.description)}`);
@@ -93,9 +110,6 @@ async function main() {
       }
       console.log(`  ${colors.magenta("│")} ${colors.dim("development")}  ${colors.cyan(host.development)}`);
       console.log(`  ${colors.magenta("│")} ${colors.dim("production")}   ${colors.green(host.production)}`);
-      if (host.remote) {
-        console.log(`  ${colors.magenta("│")} ${colors.dim("remote")}       ${colors.blue(host.remote)}`);
-      }
       console.log(colors.magenta(`  └${"─".repeat(49)}┘`));
 
       for (const remoteName of result.remotes) {
@@ -239,7 +253,6 @@ Zephyr Configuration:
   program
     .command("publish")
     .description("Publish bos.config.json to on-chain registry (FastFS)")
-    .option("--sign-with <method>", "Signing method: keychain | ledger | seed-phrase | access-key-file")
     .option("--network <network>", "Network: mainnet | testnet", "mainnet")
     .option("--path <path>", "FastFS relative path", "bos.config.json")
     .option("--dry-run", "Show what would be published without sending")
@@ -254,7 +267,6 @@ Zephyr Configuration:
       }
 
       const result = await client.publish({
-        signWith: options.signWith as any,
         network: options.network as "mainnet" | "testnet",
         path: options.path,
         dryRun: options.dryRun || false,
@@ -380,6 +392,313 @@ Zephyr Configuration:
       if (result.status === "created") {
         console.log(colors.green(`${icons.ok} Created CLI at ${result.path}`));
       }
+    });
+
+  create
+    .command("gateway")
+    .description("Scaffold a new gateway")
+    .option("-t, --template <url>", "Template URL")
+    .action(async (options: { template?: string }) => {
+      const result = await client.create({
+        type: "gateway",
+        template: options.template,
+      });
+
+      if (result.status === "created") {
+        console.log(colors.green(`${icons.ok} Created gateway at ${result.path}`));
+      }
+    });
+
+  const gateway = program
+    .command("gateway")
+    .description("Manage gateway deployment");
+
+  gateway
+    .command("dev")
+    .description("Run gateway locally (wrangler dev)")
+    .action(async () => {
+      console.log();
+      console.log(`  ${icons.run} Starting gateway dev server...`);
+
+      const result = await client.gatewayDev({});
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} ${result.error || "Failed to start gateway"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Gateway running at ${result.url}`));
+      console.log();
+    });
+
+  gateway
+    .command("deploy")
+    .description("Deploy gateway to Cloudflare")
+    .option("-e, --env <env>", "Environment (production | staging)")
+    .action(async (options: { env?: string }) => {
+      console.log();
+      console.log(`  ${icons.pkg} Deploying gateway...`);
+      if (options.env) {
+        console.log(colors.dim(`  Environment: ${options.env}`));
+      }
+
+      const result = await client.gatewayDeploy({
+        env: options.env as "production" | "staging" | undefined,
+      });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} ${result.error || "Deploy failed"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Deployed!`));
+      console.log(`  ${colors.dim("URL:")} ${result.url}`);
+      console.log();
+    });
+
+  program
+    .command("register")
+    .description("Register a new tenant on the gateway")
+    .argument("<name>", `Account name (will create <name>.${config.account})`)
+    .option("--network <network>", "Network: mainnet | testnet", "mainnet")
+    .action(async (name: string, options: { network: string }) => {
+      console.log();
+      console.log(`  ${icons.pkg} Registering ${name}...`);
+
+      const result = await client.register({
+        name,
+        network: options.network as "mainnet" | "testnet",
+      });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} Registration failed: ${result.error || "Unknown error"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Registered!`));
+      console.log(`  ${colors.dim("Account:")} ${result.account}`);
+      if (result.novaGroup) {
+        console.log(`  ${colors.dim("NOVA Group:")} ${result.novaGroup}`);
+      }
+      console.log();
+      console.log(colors.dim("  Next steps:"));
+      console.log(`  ${colors.dim("1.")} Update bos.config.json with account: "${result.account}"`);
+      console.log(`  ${colors.dim("2.")} bos secrets sync --env .env.local`);
+      console.log(`  ${colors.dim("3.")} bos publish`);
+      console.log();
+    });
+
+  const secrets = program
+    .command("secrets")
+    .description("Manage encrypted secrets via NOVA");
+
+  secrets
+    .command("sync")
+    .description("Sync secrets from .env file to NOVA")
+    .option("--env <path>", "Path to .env file", ".env.local")
+    .action(async (options: { env: string }) => {
+      console.log();
+      console.log(`  ${icons.pkg} Syncing secrets from ${options.env}...`);
+
+      const result = await client.secretsSync({
+        envPath: options.env,
+      });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} Sync failed: ${result.error || "Unknown error"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Synced ${result.count} secrets`));
+      if (result.cid) {
+        console.log(`  ${colors.dim("CID:")} ${result.cid}`);
+      }
+      console.log();
+    });
+
+  secrets
+    .command("set")
+    .description("Set a single secret")
+    .argument("<key=value>", "Secret key=value pair")
+    .action(async (keyValue: string) => {
+      const eqIndex = keyValue.indexOf("=");
+      if (eqIndex === -1) {
+        console.error(colors.error(`${icons.err} Invalid format. Use: bos secrets set KEY=value`));
+        process.exit(1);
+      }
+
+      const key = keyValue.slice(0, eqIndex);
+      const value = keyValue.slice(eqIndex + 1);
+
+      console.log();
+      console.log(`  ${icons.pkg} Setting secret ${key}...`);
+
+      const result = await client.secretsSet({ key, value });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} Failed: ${result.error || "Unknown error"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Secret set`));
+      if (result.cid) {
+        console.log(`  ${colors.dim("CID:")} ${result.cid}`);
+      }
+      console.log();
+    });
+
+  secrets
+    .command("list")
+    .description("List secret keys (not values)")
+    .action(async () => {
+      const result = await client.secretsList({});
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} Failed: ${result.error || "Unknown error"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.cyan(frames.top(48)));
+      console.log(`  ${icons.config} ${gradients.cyber("SECRETS")}`);
+      console.log(colors.cyan(frames.bottom(48)));
+      console.log();
+
+      if (result.keys.length === 0) {
+        console.log(colors.dim("  No secrets configured"));
+      } else {
+        for (const key of result.keys) {
+          console.log(`  ${colors.dim("•")} ${key}`);
+        }
+      }
+      console.log();
+    });
+
+  secrets
+    .command("delete")
+    .description("Delete a secret")
+    .argument("<key>", "Secret key to delete")
+    .action(async (key: string) => {
+      console.log();
+      console.log(`  ${icons.pkg} Deleting secret ${key}...`);
+
+      const result = await client.secretsDelete({ key });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} Failed: ${result.error || "Unknown error"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Secret deleted`));
+      console.log();
+    });
+
+  program
+    .command("login")
+    .description("Login to NOVA for encrypted secrets management")
+    .action(async () => {
+      const { default: open } = await import("open");
+      const { password, input } = await import("@inquirer/prompts");
+
+      console.log();
+      console.log(colors.cyan(frames.top(52)));
+      console.log(`  ${icons.config} ${gradients.cyber("NOVA LOGIN")}`);
+      console.log(colors.cyan(frames.bottom(52)));
+      console.log();
+      console.log(colors.dim("  NOVA provides encrypted secrets storage for your plugins."));
+      console.log();
+      console.log(colors.white("  To get your credentials:"));
+      console.log(colors.dim("  1. Login at nova-sdk.com"));
+      console.log(colors.dim("  2. Copy your account ID and session token from your profile"));
+      console.log();
+
+      try {
+        const shouldOpen = await input({
+          message: "Press Enter to open nova-sdk.com (or 'skip')",
+          default: "",
+        });
+
+        if (shouldOpen !== "skip") {
+          await open("https://nova-sdk.com");
+          console.log();
+          console.log(colors.dim("  Browser opened. Login and copy your credentials..."));
+          console.log();
+        }
+
+        const accountId = await input({
+          message: "Account ID (e.g., alice.nova-sdk.near):",
+          validate: (value: string) => {
+            if (!value.trim()) return "Account ID is required";
+            if (!value.includes(".")) return "Invalid account ID format";
+            return true;
+          },
+        });
+
+        const sessionToken = await input({
+          message: "Session Token (paste the full token):",
+          validate: (value: string) => {
+            if (!value.trim()) return "Session token is required";
+            if (value.length < 50) return "Token seems too short";
+            return true;
+          },
+        });
+
+        console.log();
+        console.log(`  ${icons.pkg} Verifying credentials...`);
+        console.log(colors.dim(`  Token length: ${sessionToken.length} characters`));
+
+        const result = await client.login({
+          accountId: accountId.trim(),
+          token: sessionToken.trim(),
+        });
+
+        if (result.status === "error") {
+          console.error(colors.error(`${icons.err} Login failed: ${result.error || "Unknown error"}`));
+          process.exit(1);
+        }
+
+        console.log();
+        console.log(colors.green(`${icons.ok} Logged in!`));
+        console.log(`  ${colors.dim("Account:")} ${result.accountId}`);
+        console.log(`  ${colors.dim("Saved to:")} .env.bos`);
+        console.log();
+        console.log(colors.dim("  You can now use 'bos register' and 'bos secrets' commands."));
+        console.log();
+      } catch (error) {
+        if (error instanceof Error && error.name === "ExitPromptError") {
+          console.log();
+          console.log(colors.dim("  Login cancelled."));
+          console.log();
+          process.exit(0);
+        }
+        throw error;
+      }
+    });
+
+  program
+    .command("logout")
+    .description("Logout from NOVA (removes credentials from .env.bos)")
+    .action(async () => {
+      console.log();
+      console.log(`  ${icons.pkg} Logging out...`);
+
+      const result = await client.logout({});
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} Logout failed: ${result.error || "Unknown error"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Logged out`));
+      console.log(colors.dim("  NOVA credentials removed from .env.bos"));
+      console.log();
     });
 
   program.parse();

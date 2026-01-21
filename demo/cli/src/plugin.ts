@@ -18,7 +18,20 @@ import {
 } from "./config";
 import { bosContract } from "./contract";
 import { getBuildEnv, hasZephyrConfig, loadBosEnv, ZEPHYR_DOCS_URL } from "./lib/env";
-import { ensureNearCli, executeTransaction } from "./lib/near-cli";
+import { createSubaccount, ensureNearCli, executeTransaction } from "./lib/near-cli";
+import {
+  createNovaClient,
+  getNovaConfig,
+  getSecretsGroupId,
+  hasNovaCredentials,
+  parseEnvFile,
+  registerSecretsGroup,
+  removeNovaCredentials,
+  retrieveSecrets,
+  saveNovaCredentials,
+  uploadSecrets,
+  verifyNovaCredentials,
+} from "./lib/nova";
 import { type AppOrchestrator, startApp } from "./lib/orchestrator";
 import { run } from "./utils/run";
 import { colors, icons } from "./utils/theme";
@@ -383,6 +396,7 @@ export default createPlugin({
         ui: "near-everything/every-plugin/demo/ui",
         api: "near-everything/every-plugin/demo/api",
         host: "near-everything/every-plugin/demo/host",
+        gateway: "near-everything/every-plugin/demo/gateway",
       };
 
       const template = input.template || deps.bosConfig.create?.[input.type] || DEFAULT_TEMPLATES[input.type];
@@ -537,6 +551,320 @@ export default createPlugin({
         status: "cleaned" as const,
         removed,
       };
+    }),
+
+    register: builder.register.handler(async ({ input }) => {
+      const { bosConfig } = deps;
+
+      const registerEffect = Effect.gen(function* () {
+        yield* ensureNearCli;
+
+        const bosEnv = yield* loadBosEnv;
+        const gatewayPrivateKey = bosEnv.GATEWAY_PRIVATE_KEY;
+
+        const fullAccount = `${input.name}.${bosConfig.account}`;
+        const parentAccount = bosConfig.account;
+
+        yield* createSubaccount({
+          newAccount: fullAccount,
+          parentAccount,
+          initialBalance: "0.1NEAR",
+          network: input.network,
+          privateKey: gatewayPrivateKey,
+        });
+
+        const novaConfig = yield* getNovaConfig;
+        const nova = createNovaClient(novaConfig);
+
+        yield* registerSecretsGroup(nova, fullAccount, parentAccount);
+
+        return {
+          status: "registered" as const,
+          account: fullAccount,
+          novaGroup: getSecretsGroupId(fullAccount),
+        };
+      });
+
+      try {
+        return await Effect.runPromise(registerEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          account: `${input.name}.${bosConfig.account}`,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    secretsSync: builder.secretsSync.handler(async ({ input }) => {
+      const { bosConfig } = deps;
+
+      const syncEffect = Effect.gen(function* () {
+        const novaConfig = yield* getNovaConfig;
+        const nova = createNovaClient(novaConfig);
+        const groupId = getSecretsGroupId(bosConfig.account);
+
+        const envContent = yield* Effect.tryPromise({
+          try: () => Bun.file(input.envPath).text(),
+          catch: (e) => new Error(`Failed to read env file: ${e}`),
+        });
+
+        const secrets = parseEnvFile(envContent);
+        const result = yield* uploadSecrets(nova, groupId, secrets);
+
+        return {
+          status: "synced" as const,
+          count: Object.keys(secrets).length,
+          cid: result.cid,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(syncEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          count: 0,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    secretsSet: builder.secretsSet.handler(async ({ input }) => {
+      const { bosConfig } = deps;
+
+      const setEffect = Effect.gen(function* () {
+        const novaConfig = yield* getNovaConfig;
+        const nova = createNovaClient(novaConfig);
+        const groupId = getSecretsGroupId(bosConfig.account);
+
+        const result = yield* uploadSecrets(nova, groupId, { [input.key]: input.value });
+
+        return {
+          status: "set" as const,
+          cid: result.cid,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(setEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    secretsList: builder.secretsList.handler(async () => {
+      const { bosConfig } = deps;
+
+      const listEffect = Effect.gen(function* () {
+        const novaConfig = yield* getNovaConfig;
+        const nova = createNovaClient(novaConfig);
+        const groupId = getSecretsGroupId(bosConfig.account);
+
+        const bosEnv = yield* loadBosEnv;
+        const cid = bosEnv.NOVA_SECRETS_CID;
+
+        if (!cid) {
+          return {
+            status: "listed" as const,
+            keys: [] as string[],
+          };
+        }
+
+        const secretsData = yield* retrieveSecrets(nova, groupId, cid);
+
+        return {
+          status: "listed" as const,
+          keys: Object.keys(secretsData.secrets),
+        };
+      });
+
+      try {
+        return await Effect.runPromise(listEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          keys: [],
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    secretsDelete: builder.secretsDelete.handler(async ({ input }) => {
+      const { bosConfig } = deps;
+
+      const deleteEffect = Effect.gen(function* () {
+        const novaConfig = yield* getNovaConfig;
+        const nova = createNovaClient(novaConfig);
+        const groupId = getSecretsGroupId(bosConfig.account);
+
+        const bosEnv = yield* loadBosEnv;
+        const cid = bosEnv.NOVA_SECRETS_CID;
+
+        if (!cid) {
+          return yield* Effect.fail(new Error("No secrets found to delete from"));
+        }
+
+        const secretsData = yield* retrieveSecrets(nova, groupId, cid);
+        const { [input.key]: _, ...remainingSecrets } = secretsData.secrets;
+
+        const result = yield* uploadSecrets(nova, groupId, remainingSecrets);
+
+        return {
+          status: "deleted" as const,
+          cid: result.cid,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(deleteEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    login: builder.login.handler(async ({ input }) => {
+      const loginEffect = Effect.gen(function* () {
+        const { token, accountId } = input;
+
+        if (!token || !accountId) {
+          return yield* Effect.fail(new Error("Both token and accountId are required"));
+        }
+
+        yield* verifyNovaCredentials(accountId, token);
+        yield* saveNovaCredentials(accountId, token);
+
+        return {
+          status: "logged-in" as const,
+          accountId,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(loginEffect);
+      } catch (error) {
+        let message = "Unknown error";
+        if (error instanceof Error) {
+          message = error.message;
+        } else if (typeof error === "object" && error !== null) {
+          if ("message" in error) {
+            message = String(error.message);
+          } else if ("_tag" in error && "error" in error) {
+            const inner = (error as { error: unknown }).error;
+            message = inner instanceof Error ? inner.message : String(inner);
+          } else {
+            message = JSON.stringify(error);
+          }
+        } else {
+          message = String(error);
+        }
+        console.error("Login error details:", error);
+        return {
+          status: "error" as const,
+          error: message,
+        };
+      }
+    }),
+
+    logout: builder.logout.handler(async () => {
+      const logoutEffect = Effect.gen(function* () {
+        yield* removeNovaCredentials;
+
+        return {
+          status: "logged-out" as const,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(logoutEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    gatewayDev: builder.gatewayDev.handler(async () => {
+      const { configDir } = deps;
+      const gatewayDir = `${configDir}/gateway`;
+
+      const devEffect = Effect.gen(function* () {
+        const { execa } = yield* Effect.tryPromise({
+          try: () => import("execa"),
+          catch: (e) => new Error(`Failed to import execa: ${e}`),
+        });
+
+        const subprocess = execa("npx", ["wrangler", "dev"], {
+          cwd: gatewayDir,
+          stdio: "inherit",
+        });
+
+        subprocess.catch(() => {});
+
+        return {
+          status: "started" as const,
+          url: "http://localhost:8787",
+        };
+      });
+
+      try {
+        return await Effect.runPromise(devEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          url: "",
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    gatewayDeploy: builder.gatewayDeploy.handler(async ({ input }) => {
+      const { configDir } = deps;
+      const gatewayDir = `${configDir}/gateway`;
+
+      const deployEffect = Effect.gen(function* () {
+        const { execa } = yield* Effect.tryPromise({
+          try: () => import("execa"),
+          catch: (e) => new Error(`Failed to import execa: ${e}`),
+        });
+
+        const args = ["wrangler", "deploy"];
+        if (input.env) {
+          args.push("--env", input.env);
+        }
+
+        yield* Effect.tryPromise({
+          try: () => execa("npx", args, {
+            cwd: gatewayDir,
+            stdio: "inherit",
+          }),
+          catch: (e) => new Error(`Deploy failed: ${e}`),
+        });
+
+        const domain = input.env === "staging" ? "staging.everything.dev" : "everything.dev";
+
+        return {
+          status: "deployed" as const,
+          url: `https://${domain}`,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(deployEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          url: "",
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
     }),
   }),
 });

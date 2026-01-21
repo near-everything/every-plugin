@@ -114,6 +114,95 @@ export const ensureNearCli = Effect.gen(function* () {
   yield* installNearCli;
 });
 
+export interface CreateSubaccountConfig {
+  newAccount: string;
+  parentAccount: string;
+  initialBalance?: string;
+  network: "mainnet" | "testnet";
+  privateKey?: string;
+}
+
+export interface CreateSubaccountResult {
+  success: boolean;
+  account: string;
+  error?: string;
+}
+
+export const createSubaccount = (config: CreateSubaccountConfig): Effect.Effect<CreateSubaccountResult, Error> =>
+  Effect.gen(function* () {
+    const balance = config.initialBalance || "0.1NEAR";
+    const network = config.network;
+
+    const args = [
+      "account",
+      "create-account",
+      "fund-myself",
+      config.newAccount,
+      balance,
+      "autogenerate-new-keypair",
+      "save-to-keychain",
+      "sign-as",
+      config.parentAccount,
+      "network-config",
+      network,
+    ];
+
+    if (config.privateKey) {
+      args.push("sign-with-plaintext-private-key", "--private-key", config.privateKey, "send");
+    }
+
+    console.log();
+    console.log(`  ${icons.run} Creating subaccount...`);
+    console.log(colors.dim(`  Account: ${config.newAccount}`));
+    console.log(colors.dim(`  Parent: ${config.parentAccount}`));
+    console.log(colors.dim(`  Balance: ${balance}`));
+    console.log();
+
+    const output = yield* Effect.tryPromise({
+      try: async () => {
+        return new Promise<string>((resolve, reject) => {
+          const proc = spawn("near", args, {
+            shell: true,
+            stdio: ["inherit", "pipe", "pipe"],
+          });
+
+          let stdout = "";
+          let stderr = "";
+
+          proc.stdout?.on("data", (data) => {
+            const text = data.toString();
+            stdout += text;
+            process.stdout.write(text);
+          });
+
+          proc.stderr?.on("data", (data) => {
+            const text = data.toString();
+            stderr += text;
+            process.stderr.write(text);
+          });
+
+          proc.on("close", (code) => {
+            if (code === 0) {
+              resolve(stdout);
+            } else {
+              reject(new Error(stderr || `Subaccount creation failed with code ${code}`));
+            }
+          });
+
+          proc.on("error", (err) => {
+            reject(new Error(err.message));
+          });
+        });
+      },
+      catch: (e) => e as Error,
+    });
+
+    return {
+      success: true,
+      account: config.newAccount,
+    };
+  });
+
 export const executeTransaction = (config: TransactionConfig): Effect.Effect<TransactionResult, Error> =>
   Effect.gen(function* () {
     const gas = (config.gas || "300Tgas").replace(/\s+/g, "");

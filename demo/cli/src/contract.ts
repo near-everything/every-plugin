@@ -76,7 +76,7 @@ const PublishResultSchema = z.object({
 });
 
 const CreateOptionsSchema = z.object({
-  type: z.enum(["project", "ui", "api", "host", "cli"]),
+  type: z.enum(["project", "ui", "api", "host", "cli", "gateway"]),
   name: z.string().optional(),
   template: z.string().optional(),
 });
@@ -101,7 +101,6 @@ const HostConfigSchema = z.object({
   description: z.string().optional(),
   development: z.string(),
   production: z.string(),
-  remote: z.string().optional(),
   secrets: z.array(z.string()).optional(),
 });
 
@@ -142,6 +141,90 @@ const StatusResultSchema = z.object({
 const CleanResultSchema = z.object({
   status: z.enum(["cleaned", "error"]),
   removed: z.array(z.string()),
+});
+
+const RegisterOptionsSchema = z.object({
+  name: z.string(),
+  network: z.enum(["mainnet", "testnet"]).default("mainnet"),
+});
+
+const RegisterResultSchema = z.object({
+  status: z.enum(["registered", "error"]),
+  account: z.string(),
+  novaGroup: z.string().optional(),
+  error: z.string().optional(),
+});
+
+const SecretsSyncOptionsSchema = z.object({
+  envPath: z.string(),
+});
+
+const SecretsSyncResultSchema = z.object({
+  status: z.enum(["synced", "error"]),
+  count: z.number(),
+  cid: z.string().optional(),
+  error: z.string().optional(),
+});
+
+const SecretsSetOptionsSchema = z.object({
+  key: z.string(),
+  value: z.string(),
+});
+
+const SecretsSetResultSchema = z.object({
+  status: z.enum(["set", "error"]),
+  cid: z.string().optional(),
+  error: z.string().optional(),
+});
+
+const SecretsListResultSchema = z.object({
+  status: z.enum(["listed", "error"]),
+  keys: z.array(z.string()),
+  error: z.string().optional(),
+});
+
+const SecretsDeleteOptionsSchema = z.object({
+  key: z.string(),
+});
+
+const SecretsDeleteResultSchema = z.object({
+  status: z.enum(["deleted", "error"]),
+  cid: z.string().optional(),
+  error: z.string().optional(),
+});
+
+const LoginOptionsSchema = z.object({
+  token: z.string().optional(),
+  accountId: z.string().optional(),
+});
+
+const LoginResultSchema = z.object({
+  status: z.enum(["logged-in", "error"]),
+  accountId: z.string().optional(),
+  error: z.string().optional(),
+});
+
+const LogoutResultSchema = z.object({
+  status: z.enum(["logged-out", "error"]),
+  error: z.string().optional(),
+});
+
+const GatewayDevOptionsSchema = z.object({});
+
+const GatewayDevResultSchema = z.object({
+  status: z.enum(["started", "error"]),
+  url: z.string(),
+  error: z.string().optional(),
+});
+
+const GatewayDeployOptionsSchema = z.object({
+  env: z.enum(["production", "staging"]).optional(),
+});
+
+const GatewayDeployResultSchema = z.object({
+  status: z.enum(["deployed", "error"]),
+  url: z.string(),
+  error: z.string().optional(),
 });
 
 export const bosContract = oc.router({
@@ -187,6 +270,49 @@ export const bosContract = oc.router({
   clean: oc
     .route({ method: "POST", path: "/clean" })
     .output(CleanResultSchema),
+
+  register: oc
+    .route({ method: "POST", path: "/register" })
+    .input(RegisterOptionsSchema)
+    .output(RegisterResultSchema),
+
+  secretsSync: oc
+    .route({ method: "POST", path: "/secrets/sync" })
+    .input(SecretsSyncOptionsSchema)
+    .output(SecretsSyncResultSchema),
+
+  secretsSet: oc
+    .route({ method: "POST", path: "/secrets/set" })
+    .input(SecretsSetOptionsSchema)
+    .output(SecretsSetResultSchema),
+
+  secretsList: oc
+    .route({ method: "GET", path: "/secrets/list" })
+    .output(SecretsListResultSchema),
+
+  secretsDelete: oc
+    .route({ method: "POST", path: "/secrets/delete" })
+    .input(SecretsDeleteOptionsSchema)
+    .output(SecretsDeleteResultSchema),
+
+  login: oc
+    .route({ method: "POST", path: "/login" })
+    .input(LoginOptionsSchema)
+    .output(LoginResultSchema),
+
+  logout: oc
+    .route({ method: "POST", path: "/logout" })
+    .output(LogoutResultSchema),
+
+  gatewayDev: oc
+    .route({ method: "POST", path: "/gateway/dev" })
+    .input(GatewayDevOptionsSchema)
+    .output(GatewayDevResultSchema),
+
+  gatewayDeploy: oc
+    .route({ method: "POST", path: "/gateway/deploy" })
+    .input(GatewayDeployOptionsSchema)
+    .output(GatewayDeployResultSchema),
 });
 
 export type BosContract = typeof bosContract;
@@ -208,3 +334,15 @@ export type InfoResult = z.infer<typeof InfoResultSchema>;
 export type StatusOptions = z.infer<typeof StatusOptionsSchema>;
 export type StatusResult = z.infer<typeof StatusResultSchema>;
 export type CleanResult = z.infer<typeof CleanResultSchema>;
+export type RegisterOptions = z.infer<typeof RegisterOptionsSchema>;
+export type RegisterResult = z.infer<typeof RegisterResultSchema>;
+export type SecretsSyncOptions = z.infer<typeof SecretsSyncOptionsSchema>;
+export type SecretsSyncResult = z.infer<typeof SecretsSyncResultSchema>;
+export type SecretsSetOptions = z.infer<typeof SecretsSetOptionsSchema>;
+export type SecretsSetResult = z.infer<typeof SecretsSetResultSchema>;
+export type SecretsListResult = z.infer<typeof SecretsListResultSchema>;
+export type SecretsDeleteOptions = z.infer<typeof SecretsDeleteOptionsSchema>;
+export type SecretsDeleteResult = z.infer<typeof SecretsDeleteResultSchema>;
+export type LoginOptions = z.infer<typeof LoginOptionsSchema>;
+export type LoginResult = z.infer<typeof LoginResultSchema>;
+export type LogoutResult = z.infer<typeof LogoutResultSchema>;
