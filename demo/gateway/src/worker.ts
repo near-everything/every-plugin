@@ -1,4 +1,4 @@
-import { Container, getContainer } from "@cloudflare/containers";
+import { type Container, getContainer } from "@cloudflare/containers";
 import {
   type BosConfig,
   fetchSecretsReference,
@@ -18,7 +18,7 @@ export interface Env {
 }
 
 interface TenantContext {
-  account: string;
+  subdomain: string | null;
   nearAccount: string;
   config: BosConfig;
   secrets: Record<string, string>;
@@ -28,12 +28,12 @@ async function resolveTenant(
   hostname: string,
   env: Env
 ): Promise<TenantContext | null> {
-  const resolution = extractAccount(hostname, env.GATEWAY_DOMAIN);
+  const resolution = extractAccount(hostname, env.GATEWAY_DOMAIN, env.GATEWAY_ACCOUNT);
   if (!resolution) {
     return null;
   }
 
-  const { account, nearAccount } = resolution;
+  const { subdomain, nearAccount } = resolution;
 
   const config = await fetchTenantConfig(nearAccount, env.GATEWAY_DOMAIN);
   if (!config) {
@@ -49,7 +49,7 @@ async function resolveTenant(
       const novaResult = await fetchSecretsFromNova(secretsRef, env.NOVA_SESSION_TOKEN);
 
       if (novaResult.error) {
-        console.warn(`[Gateway] Failed to fetch secrets for ${account}: ${novaResult.error}`);
+        console.warn(`[Gateway] Failed to fetch secrets for ${nearAccount}: ${novaResult.error}`);
       } else {
         secrets = filterSecrets(novaResult.secrets, requiredKeys);
       }
@@ -57,7 +57,7 @@ async function resolveTenant(
   }
 
   return {
-    account,
+    subdomain,
     nearAccount,
     config,
     secrets,
@@ -87,7 +87,7 @@ export default {
         JSON.stringify({
           error: "Tenant not found",
           message: `No configuration found for ${hostname}`,
-          hint: `Publish your bos.config.json to FastFS for your account`,
+          hint: `Publish your bos.config.json to social.near using 'bos publish'`,
         }),
         {
           status: 404,
@@ -96,15 +96,28 @@ export default {
       );
     }
 
-    const container = getContainer(env.TENANT_CONTAINER, tenant.account);
+    const container = getContainer(env.TENANT_CONTAINER, tenant.nearAccount);
+
+    const envVars: Record<string, string> = {
+      BOS_ACCOUNT: tenant.nearAccount,
+      GATEWAY_DOMAIN: env.GATEWAY_DOMAIN,
+      NODE_ENV: "production",
+    };
+
+    for (const [key, value] of Object.entries(tenant.secrets)) {
+      envVars[key] = value;
+    }
+
+    try {
+      await container.startAndWaitForPorts({
+        startOptions: { envVars },
+      });
+    } catch (startError) {
+      console.warn(`[Gateway] Container start warning for ${tenant.nearAccount}:`, startError);
+    }
 
     const headers = new Headers(request.headers);
-    headers.set("X-Bos-Config", JSON.stringify(tenant.config));
     headers.set("X-Bos-Account", tenant.nearAccount);
-
-    if (Object.keys(tenant.secrets).length > 0) {
-      headers.set("X-Bos-Secrets", JSON.stringify(tenant.secrets));
-    }
 
     const proxiedRequest = new Request(request.url, {
       method: request.method,
@@ -116,13 +129,13 @@ export default {
     try {
       return await container.fetch(proxiedRequest);
     } catch (error) {
-      console.error(`[Gateway] Container error for ${tenant.account}:`, error);
+      console.error(`[Gateway] Container error for ${tenant.nearAccount}:`, error);
 
       return new Response(
         JSON.stringify({
           error: "Container error",
           message: `Failed to route request to tenant container`,
-          account: tenant.account,
+          account: tenant.nearAccount,
         }),
         {
           status: 502,

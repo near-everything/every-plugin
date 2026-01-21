@@ -21,6 +21,8 @@ const DevResultSchema = z.object({
 const StartOptionsSchema = z.object({
   port: z.number().optional(),
   interactive: z.boolean().optional(),
+  account: z.string().optional(),
+  domain: z.string().optional(),
 });
 
 const StartResultSchema = z.object({
@@ -227,6 +229,15 @@ const GatewayDeployResultSchema = z.object({
   error: z.string().optional(),
 });
 
+const GatewaySyncOptionsSchema = z.object({});
+
+const GatewaySyncResultSchema = z.object({
+  status: z.enum(["synced", "error"]),
+  gatewayDomain: z.string().optional(),
+  gatewayAccount: z.string().optional(),
+  error: z.string().optional(),
+});
+
 export const bosContract = oc.router({
   dev: oc
     .route({ method: "POST", path: "/dev" })
@@ -313,6 +324,11 @@ export const bosContract = oc.router({
     .route({ method: "POST", path: "/gateway/deploy" })
     .input(GatewayDeployOptionsSchema)
     .output(GatewayDeployResultSchema),
+
+  gatewaySync: oc
+    .route({ method: "POST", path: "/gateway/sync" })
+    .input(GatewaySyncOptionsSchema)
+    .output(GatewaySyncResultSchema),
 });
 
 export type BosContract = typeof bosContract;

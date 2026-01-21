@@ -2,9 +2,33 @@
 
 ## Overview
 
-The Everything Gateway enables multi-tenant hosting where any NEAR account holder can deploy their BOS application and access it via:
-- `<account>.everything.dev` (traditional DNS via Cloudflare)
-- `<account>.everything.near` (decentralized via NEAR DNS)
+The Everything Gateway enables multi-tenant hosting where any NEAR account holder can deploy their BOS application. Each gateway deployment serves a specific domain with tenants as subaccounts of the gateway account.
+
+**Key Concepts:**
+- **Gateway Account**: The NEAR account that owns the gateway (e.g., `dev.everything.near`, `efiz.near`)
+- **Gateway Domain**: The domain the gateway serves (e.g., `everything.dev`, `ejlbraem.com`)
+- **Tenant**: A subaccount of the gateway account (e.g., `efiz.dev.everything.near`)
+
+## Request Resolution
+
+### Examples
+
+| Request | Gateway Domain | Gateway Account | Subdomain | Tenant Account | Config Path |
+|---------|---------------|-----------------|-----------|----------------|-------------|
+| `everything.dev` | everything.dev | dev.everything.near | _(none)_ | dev.everything.near | `dev.everything.near/bos/gateways/everything.dev/bos.config.json` |
+| `efiz.everything.dev` | everything.dev | dev.everything.near | efiz | efiz.dev.everything.near | `efiz.dev.everything.near/bos/gateways/everything.dev/bos.config.json` |
+| `ejlbraem.com` | ejlbraem.com | efiz.near | _(none)_ | efiz.near | `efiz.near/bos/gateways/ejlbraem.com/bos.config.json` |
+| `music.ejlbraem.com` | ejlbraem.com | efiz.near | music | music.efiz.near | `music.efiz.near/bos/gateways/ejlbraem.com/bos.config.json` |
+
+### Resolution Formula
+
+```
+Config Path: {subdomain?}.{GATEWAY_ACCOUNT}/bos/gateways/{GATEWAY_DOMAIN}/bos.config.json
+```
+
+Where:
+- `GATEWAY_ACCOUNT` and `GATEWAY_DOMAIN` are configured in `wrangler.toml`
+- Subdomain is extracted from the request hostname
 
 ## Flow Diagram
 
@@ -15,9 +39,9 @@ The Everything Gateway enables multi-tenant hosting where any NEAR account holde
 │                                                                             │
 │  $ bos register efiz                                                        │
 │           ↓                                                                 │
-│  Creates subaccount: efiz.everything.near                                   │
+│  Creates subaccount: efiz.<gateway-account>                                 │
 │           ↓                                                                 │
-│  Creates NOVA group: efiz.everything.near-secrets                           │
+│  Creates NOVA group: efiz.<gateway-account>-secrets                         │
 │           ↓                                                                 │
 │  Adds gateway as NOVA group member (authorized to read secrets)             │
 │                                                                             │
@@ -35,15 +59,10 @@ The Everything Gateway enables multi-tenant hosting where any NEAR account holde
 │           ↓                                                                 │
 │  Stores CID reference                                                       │
 │                                                                             │
-│  $ bos publish --with-secrets                                               │
+│  $ bos publish                                                              │
 │           ↓                                                                 │
-│  Publishes bos.config.json to FastFS:                                       │
-│    https://efiz.everything.near.fastfs.io/fastfs.near/                      │
-│    everything.dev/bos.config.json                                           │
-│           ↓                                                                 │
-│  Publishes secrets CID to FastFS:                                           │
-│    https://efiz.everything.near.fastfs.io/fastfs.near/                      │
-│    everything.dev/secrets.json                                              │
+│  Publishes bos.config.json to social.near:                                  │
+│    <account>/bos/gateways/<gateway-domain>/bos.config.json                  │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 
@@ -51,14 +70,14 @@ The Everything Gateway enables multi-tenant hosting where any NEAR account holde
 │  REQUEST ROUTING                                                            │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  Request: efiz.everything.dev OR efiz.everything.near                       │
+│  Request: efiz.everything.dev OR music.ejlbraem.com                         │
 │                      ↓                                                      │
 │  ┌──────────────────────────────────────────────────────────────────┐       │
 │  │  Cloudflare Worker (Edge Router)                                 │       │
 │  │    1. Extract hostname from request                              │       │
-│  │    2. Parse account: efiz.everything.dev → efiz                  │       │
-│  │    3. Resolve to: efiz.everything.near                           │       │
-│  │    4. Fetch config from FastFS                                   │       │
+│  │    2. Extract subdomain using GATEWAY_DOMAIN                     │       │
+│  │    3. Construct NEAR account: {subdomain}.{GATEWAY_ACCOUNT}      │       │
+│  │    4. Fetch config from social.near                              │       │
 │  │    5. Fetch secrets from NOVA (gateway is member)                │       │
 │  │    6. Route to Container instance for this account               │       │
 │  └──────────────────────────────────────────────────────────────────┘       │
@@ -87,35 +106,26 @@ Key features:
 - Per-instance SQLite storage if needed
 - Global edge deployment
 
-### FastFS (NEAR Protocol)
-> Fast, decentralized file storage on NEAR blockchain.
-> - Contract: `fastfs.near`
-> - URL pattern: `https://<account>.fastfs.io/fastfs.near/<path>`
+### NEAR Social (social.near)
+> Decentralized social graph database on NEAR Protocol.
+> - Contract: `social.near`
+> - SDK: `near-social-js`
+> - API: `https://api.near.social`
 
 Used for:
 - Storing `bos.config.json` (tenant configuration)
-- Storing `secrets.json` (NOVA CID references)
+- Hierarchical data storage per account
+- Pattern: `<account>/bos/gateways/<domain>/bos.config.json`
 
 ### NEAR DNS
 > Decentralized DNS resolving blockchain-based domain names by querying smart contracts on NEAR.
 > - Public server: `185.149.40.161:53`
 > - Docs: https://github.com/frol/near-dns
 
-Setup for `everything.near`:
-```bash
-# Deploy DNS contract
-near contract deploy dns.everything.near \
-  use-file target/near/dns_contract.wasm \
-  with-init-call new json-args '{}' \
-  prepaid-gas '30 Tgas' attached-deposit '0 NEAR' \
-  network-config mainnet sign-with-keychain send
-
-# Add wildcard A record
-near contract call-function as-transaction dns.everything.near dns_add \
-  json-args '{"name": "*", "record": {"record_type": "A", "value": "<GATEWAY_IP>", "ttl": 300, "priority": null}}' \
-  prepaid-gas '30 Tgas' attached-deposit '0 NEAR' \
-  sign-as everything.near network-config mainnet sign-with-keychain send
-```
+Each gateway parent can set up DNS for their `.near` domains:
+- Deploy `dns.<account>.near` contract
+- Add wildcard A record for `*.<account>.near`
+- See [NEAR_DNS_SETUP.md](./docs/NEAR_DNS_SETUP.md) for details
 
 ### NOVA SDK
 > Zero-knowledge encrypted file sharing with TEE-secured keys.
@@ -132,15 +142,54 @@ Used for:
 - Encrypting tenant secrets
 - Gateway authorized via group membership
 
+## Gateway Configuration
+
+### wrangler.toml
+
+Each gateway deployment requires its own configuration:
+
+```toml
+name = "my-gateway"
+main = "src/worker.ts"
+compatibility_date = "2026-01-20"
+
+[vars]
+GATEWAY_DOMAIN = "mygateway.com"
+GATEWAY_ACCOUNT = "myaccount.near"
+
+[[containers]]
+class_name = "TenantContainer"
+image = "./Dockerfile"
+max_instances = 100
+```
+
+### bos.config.json
+
+The gateway's own bos.config.json must include the gateway field:
+
+```json
+{
+  "account": "dev.everything.near",
+  "gateway": {
+    "development": "http://localhost:8787",
+    "production": "https://everything.dev"
+  },
+  "app": { ... }
+}
+```
+
 ## bos.config.json Schema
 
 ```json
 {
-  "account": "efiz.everything.near",
-  "gateway": "everything.dev",
+  "account": "efiz.dev.everything.near",
+  "gateway": {
+    "development": "http://localhost:8787",
+    "production": "https://everything.dev"
+  },
   "app": {
     "host": {
-      "title": "efiz app",
+      "title": "My App",
       "description": "My BOS application",
       "development": "http://localhost:3000",
       "production": "https://<zephyr-url>",
@@ -170,7 +219,7 @@ Used for:
 
 Fields:
 - `account`: NEAR account that owns this config
-- `gateway`: Domain this config is published for (used as FastFS path)
+- `gateway`: The gateway domain this config is published for
 - `app.*.secrets`: List of env var names needed (values stored in NOVA)
 
 ## CLI Commands
@@ -178,8 +227,15 @@ Fields:
 ### Registration
 ```bash
 bos register <name>
-# Creates <name>.everything.near subaccount
+# Creates <name>.<gateway-account> subaccount
 # Creates NOVA secrets group with gateway as member
+```
+
+### Publishing
+```bash
+bos publish
+# Publishes bos.config.json to social.near at:
+# <account>/bos/gateways/<gateway-domain>/bos.config.json
 ```
 
 ### Secrets Management
@@ -197,15 +253,6 @@ bos secrets delete KEY
 # Removes a secret
 ```
 
-### Publishing
-```bash
-bos publish
-# Publishes bos.config.json to FastFS
-
-bos publish --with-secrets
-# Also publishes secrets CID reference
-```
-
 ## Security Model
 
 | Layer | Protection |
@@ -213,27 +260,38 @@ bos publish --with-secrets
 | Container isolation | Each tenant runs in own Cloudflare Container |
 | Secrets encryption | Client-side AES-256-GCM, keys in TEE |
 | Access control | NEAR account ownership + NOVA groups |
-| Config isolation | FastFS enforces account-based writes |
+| Config isolation | social.near enforces account-based writes |
 | Gateway trust | Explicit group membership (tenant adds gateway) |
 
 ## File Structure
 
 ```
-apps/gateway/
-├── wrangler.toml          # Cloudflare Worker config
+demo/gateway/
+├── wrangler.toml          # Cloudflare Worker config (GATEWAY_DOMAIN, GATEWAY_ACCOUNT)
 ├── Dockerfile             # Host container image
 ├── package.json
 ├── tsconfig.json
 ├── ARCHITECTURE.md        # This file
+├── docs/
+│   └── NEAR_DNS_SETUP.md  # DNS setup guide
 └── src/
     ├── worker.ts          # Edge router (Cloudflare Worker)
     ├── container.ts       # Container class definition
-    ├── config.ts          # Config fetching from FastFS
+    ├── config.ts          # Config fetching from social.near
     ├── secrets.ts         # NOVA secrets retrieval
     └── utils.ts           # Account extraction helpers
 
 demo/cli/src/
-├── plugin.ts              # Updated with register + secrets commands
+├── plugin.ts              # CLI with register, publish, secrets commands
 └── lib/
     └── nova.ts            # NOVA SDK integration
 ```
+
+## Deploying Your Own Gateway
+
+1. **Configure wrangler.toml** with your domain and account
+2. **Set up DNS** (Cloudflare for custom domains, NEAR DNS for `.near`)
+3. **Deploy**: `bos gateway:deploy`
+4. **Publish your config**: `bos publish`
+
+Tenants can then register and publish their apps to your gateway.

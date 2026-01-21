@@ -4,7 +4,7 @@ compatibility_date = "2026-01-20"
 
 [vars]
 GATEWAY_DOMAIN = "everything.dev"
-GATEWAY_ACCOUNT = "gateway.everything.near"
+GATEWAY_ACCOUNT = "dev.everything.near"
 
 [[containers]]
 class_name = "TenantContainer"
@@ -20,7 +20,4 @@ new_sqlite_classes = ["TenantContainer"]
 tag = "v1"
 
 [env.production]
-vars = { GATEWAY_DOMAIN = "everything.dev", GATEWAY_ACCOUNT = "gateway.everything.near" }
-
-[env.staging]
-vars = { GATEWAY_DOMAIN = "staging.everything.dev", GATEWAY_ACCOUNT = "gateway-staging.everything.near" }
+vars = { GATEWAY_DOMAIN = "everything.dev", GATEWAY_ACCOUNT = "dev.everything.near" }

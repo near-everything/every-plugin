@@ -1,7 +1,7 @@
-import { serialize as borshSerialize } from "borsh";
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
+import { Graph } from "near-social-js";
 
 import {
   type BosConfig as BosConfigType,
@@ -42,44 +42,31 @@ interface BosDeps {
   nearPrivateKey?: string;
 }
 
-function serializeConfigForFastFS(config: BosConfigType, relativePath: string): Uint8Array {
-  const jsonContent = JSON.stringify(config, null, 2);
-  const contentBytes = new TextEncoder().encode(jsonContent);
+function getGatewayDomain(config: BosConfigType): string {
+  const gateway = config.gateway as string | { production: string } | undefined;
+  if (typeof gateway === "string") {
+    return gateway.replace(/^https?:\/\//, "");
+  }
+  if (gateway && typeof gateway === "object" && "production" in gateway) {
+    return gateway.production.replace(/^https?:\/\//, "");
+  }
+  throw new Error("bos.config.json must have a 'gateway' field with production URL");
+}
 
-  const fastfsData = {
-    simple: {
-      relativePath,
-      content: {
-        mimeType: "application/json",
-        content: contentBytes,
+function buildSocialSetArgs(account: string, gatewayDomain: string, config: BosConfigType): object {
+  return {
+    data: {
+      [account]: {
+        bos: {
+          gateways: {
+            [gatewayDomain]: {
+              "bos.config.json": JSON.stringify(config),
+            },
+          },
+        },
       },
     },
   };
-
-  const fastfsSchema = {
-    enum: [
-      {
-        struct: {
-          simple: {
-            struct: {
-              relativePath: "string",
-              content: {
-                option: {
-                  struct: {
-                    mimeType: "string",
-                    content: { array: { type: "u8" } }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    ]
-  };
-
-  const serialized = borshSerialize(fastfsSchema, fastfsData);
-  return new Uint8Array(serialized);
 }
 
 function parseSourceMode(value: string | undefined, defaultValue: SourceMode): SourceMode {
@@ -225,35 +212,73 @@ export default createPlugin({
     }),
 
     start: builder.start.handler(async ({ input }) => {
-      const remoteUrl = getHostRemoteUrl();
-      if (!remoteUrl) {
-        return {
-          status: "error" as const,
-          url: "",
-        };
+      let remoteConfig: BosConfigType | null = null;
+
+      if (input.account && input.domain) {
+        const graph = new Graph();
+        const configPath = `${input.account}/bos/gateways/${input.domain}/bos.config.json`;
+        
+        try {
+          const data = await graph.get({ keys: [configPath] });
+          if (data) {
+            const parts = configPath.split("/");
+            let current: unknown = data;
+            for (const part of parts) {
+              if (current && typeof current === "object" && part in current) {
+                current = (current as Record<string, unknown>)[part];
+              } else {
+                current = null;
+                break;
+              }
+            }
+            if (typeof current === "string") {
+              remoteConfig = JSON.parse(current) as BosConfigType;
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to fetch config from social.near:`, error);
+          return {
+            status: "error" as const,
+            url: "",
+          };
+        }
+
+        if (!remoteConfig) {
+          console.error(`No config found at ${configPath}`);
+          return {
+            status: "error" as const,
+            url: "",
+          };
+        }
       }
 
-      const ports = getPortsFromConfig();
-      const port = input.port ?? ports.host;
-
-      const startConfig: AppConfig = {
-        host: "remote",
-        ui: "remote",
-        api: "remote",
-      };
+      const config = remoteConfig || deps.bosConfig;
+      const port = input.port ?? 3000;
 
       const env: Record<string, string> = {
+        NODE_ENV: "production",
         HOST_SOURCE: "remote",
         UI_SOURCE: "remote",
         API_SOURCE: "remote",
-        HOST_REMOTE_URL: remoteUrl,
+        BOS_ACCOUNT: config.account,
+        UI_REMOTE_URL: config.app.ui.production,
+        API_REMOTE_URL: config.app.api.production,
       };
+
+      const uiConfig = config.app.ui as { ssr?: string };
+      if (uiConfig.ssr) {
+        env.UI_SSR_URL = uiConfig.ssr;
+      }
 
       const orchestrator: AppOrchestrator = {
         packages: ["host"],
         env,
-        description: "Production Mode (all remotes)",
-        appConfig: startConfig,
+        description: `Production Mode (${config.account})`,
+        appConfig: {
+          host: "remote",
+          ui: "remote",
+          api: "remote",
+        },
         port,
         interactive: input.interactive,
         noLogs: true,
@@ -335,8 +360,8 @@ export default createPlugin({
     publish: builder.publish.handler(async ({ input: publishInput }) => {
       const { bosConfig, nearPrivateKey } = deps;
 
-      const relativePath = publishInput.path;
-      const contractId = "fastfs.near";
+      const gatewayDomain = getGatewayDomain(bosConfig);
+      const socialPath = `${bosConfig.account}/bos/gateways/${gatewayDomain}/bos.config.json`;
 
       const publishEffect = Effect.gen(function* () {
         yield* ensureNearCli;
@@ -344,32 +369,32 @@ export default createPlugin({
         const bosEnv = yield* loadBosEnv;
         const privateKey = nearPrivateKey || bosEnv.NEAR_PRIVATE_KEY;
 
-        const serializedData = serializeConfigForFastFS(bosConfig, relativePath);
-        const argsBase64 = Buffer.from(serializedData).toString("base64");
+        const socialArgs = buildSocialSetArgs(bosConfig.account, gatewayDomain, bosConfig);
+        const argsBase64 = Buffer.from(JSON.stringify(socialArgs)).toString("base64");
 
         if (publishInput.dryRun) {
           return {
             status: "dry-run" as const,
             txHash: "",
-            registryUrl: `https://${bosConfig.account}.fastfs.io/${contractId}/${relativePath}`,
+            registryUrl: `https://near.social/${socialPath}`,
           };
         }
 
         const result = yield* executeTransaction({
           account: bosConfig.account,
-          contract: contractId,
-          method: "__fastdata_fastfs",
+          contract: "social.near",
+          method: "set",
           argsBase64,
           network: publishInput.network,
           privateKey,
           gas: "300Tgas",
-          deposit: "0NEAR",
+          deposit: "0.05NEAR",
         });
 
         return {
           status: "published" as const,
           txHash: result.txHash || "unknown",
-          registryUrl: `https://${bosConfig.account}.fastfs.io/${contractId}/${relativePath}`,
+          registryUrl: `https://near.social/${socialPath}`,
         };
       });
 
@@ -826,7 +851,7 @@ export default createPlugin({
     }),
 
     gatewayDeploy: builder.gatewayDeploy.handler(async ({ input }) => {
-      const { configDir } = deps;
+      const { configDir, bosConfig } = deps;
       const gatewayDir = `${configDir}/gateway`;
 
       const deployEffect = Effect.gen(function* () {
@@ -848,7 +873,8 @@ export default createPlugin({
           catch: (e) => new Error(`Deploy failed: ${e}`),
         });
 
-        const domain = input.env === "staging" ? "staging.everything.dev" : "everything.dev";
+        const gatewayDomain = getGatewayDomain(bosConfig);
+        const domain = input.env === "staging" ? `staging.${gatewayDomain}` : gatewayDomain;
 
         return {
           status: "deployed" as const,
@@ -862,6 +888,40 @@ export default createPlugin({
         return {
           status: "error" as const,
           url: "",
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    gatewaySync: builder.gatewaySync.handler(async () => {
+      const { configDir, bosConfig } = deps;
+      const wranglerPath = `${configDir}/gateway/wrangler.toml`;
+
+      try {
+        const gatewayDomain = getGatewayDomain(bosConfig);
+        const gatewayAccount = bosConfig.account;
+
+        const wranglerContent = await Bun.file(wranglerPath).text();
+
+        let updatedContent = wranglerContent.replace(
+          /GATEWAY_DOMAIN\s*=\s*"[^"]*"/g,
+          `GATEWAY_DOMAIN = "${gatewayDomain}"`
+        );
+        updatedContent = updatedContent.replace(
+          /GATEWAY_ACCOUNT\s*=\s*"[^"]*"/g,
+          `GATEWAY_ACCOUNT = "${gatewayAccount}"`
+        );
+
+        await Bun.write(wranglerPath, updatedContent);
+
+        return {
+          status: "synced" as const,
+          gatewayDomain,
+          gatewayAccount,
+        };
+      } catch (error) {
+        return {
+          status: "error" as const,
           error: error instanceof Error ? error.message : "Unknown error",
         };
       }

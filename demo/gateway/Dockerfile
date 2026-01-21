@@ -2,16 +2,11 @@ FROM oven/bun:latest
 
 WORKDIR /app
 
-COPY demo/host/package.json ./
-COPY demo/host/bun.lock ./
-
-RUN bun install --frozen-lockfile
-
-COPY demo/host/ ./
+RUN bun install -g everything-dev
 
 ENV NODE_ENV=production
 ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["bun", "run", "server.ts"]
+CMD bos start --account=${BOS_ACCOUNT} --domain=${GATEWAY_DOMAIN} --no-interactive

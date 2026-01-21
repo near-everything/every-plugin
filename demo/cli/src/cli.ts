@@ -182,11 +182,15 @@ async function main() {
   program
     .command("start")
     .description("Start with production modules (all remotes from production URLs)")
-    .option("-p, --port <port>", "Host port (default: from config)")
+    .option("-p, --port <port>", "Host port (default: 3000)")
+    .option("--account <account>", "NEAR account to fetch config from social.near")
+    .option("--domain <domain>", "Gateway domain for config lookup")
     .option("--no-interactive", "Disable interactive UI (streaming logs)")
     .action(async (options) => {
       const result = await client.start({
         port: options.port ? parseInt(options.port, 10) : undefined,
+        account: options.account,
+        domain: options.domain,
         interactive: options.interactive,
       });
 
@@ -455,6 +459,27 @@ Zephyr Configuration:
       console.log();
       console.log(colors.green(`${icons.ok} Deployed!`));
       console.log(`  ${colors.dim("URL:")} ${result.url}`);
+      console.log();
+    });
+
+  gateway
+    .command("sync")
+    .description("Sync wrangler.toml vars from bos.config.json")
+    .action(async () => {
+      console.log();
+      console.log(`  ${icons.pkg} Syncing gateway config...`);
+
+      const result = await client.gatewaySync({});
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} ${result.error || "Sync failed"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Synced!`));
+      console.log(`  ${colors.dim("GATEWAY_DOMAIN:")} ${result.gatewayDomain}`);
+      console.log(`  ${colors.dim("GATEWAY_ACCOUNT:")} ${result.gatewayAccount}`);
       console.log();
     });
 

@@ -1,31 +1,48 @@
 export interface AccountResolution {
-  account: string;
+  subdomain: string | null;
   nearAccount: string;
 }
 
 export function extractAccount(
   hostname: string,
-  gatewayDomain: string
+  gatewayDomain: string,
+  gatewayAccount: string
 ): AccountResolution | null {
   const gatewayBase = gatewayDomain.replace(/^\./, "");
-  const gatewayPrefix = `.${gatewayBase}`;
 
+  if (hostname === gatewayBase) {
+    return {
+      subdomain: null,
+      nearAccount: gatewayAccount,
+    };
+  }
+
+  const gatewayPrefix = `.${gatewayBase}`;
   if (hostname.endsWith(gatewayPrefix)) {
-    const account = hostname.slice(0, -gatewayPrefix.length);
-    if (account && !account.includes(".")) {
+    const subdomain = hostname.slice(0, -gatewayPrefix.length);
+    if (subdomain && !subdomain.includes(".")) {
       return {
-        account,
-        nearAccount: `${account}.everything.near`,
+        subdomain,
+        nearAccount: `${subdomain}.${gatewayAccount}`,
       };
     }
   }
 
   if (hostname.endsWith(".near")) {
-    const parts = hostname.slice(0, -5).split(".");
-    if (parts.length >= 2 && parts[parts.length - 1] === "everything") {
-      const account = parts.slice(0, -1).join(".");
+    const accountParts = hostname.slice(0, -5).split(".");
+    const gatewayParts = gatewayAccount.slice(0, -5).split(".");
+
+    if (accountParts.length > gatewayParts.length) {
+      const subdomain = accountParts.slice(0, accountParts.length - gatewayParts.length).join(".");
       return {
-        account,
+        subdomain,
+        nearAccount: hostname,
+      };
+    }
+
+    if (accountParts.join(".") === gatewayParts.join(".")) {
+      return {
+        subdomain: null,
         nearAccount: hostname,
       };
     }
@@ -34,14 +51,14 @@ export function extractAccount(
   return null;
 }
 
-export function buildFastFSUrl(nearAccount: string, gatewayDomain: string, path: string): string {
-  return `https://${nearAccount}.fastfs.io/fastfs.near/${gatewayDomain}/${path}`;
+export function buildSocialPath(nearAccount: string, gatewayDomain: string, filename: string): string {
+  return `${nearAccount}/bos/gateways/${gatewayDomain}/${filename}`;
 }
 
-export function buildConfigUrl(nearAccount: string, gatewayDomain: string): string {
-  return buildFastFSUrl(nearAccount, gatewayDomain, "bos.config.json");
+export function buildConfigPath(nearAccount: string, gatewayDomain: string): string {
+  return buildSocialPath(nearAccount, gatewayDomain, "bos.config.json");
 }
 
-export function buildSecretsUrl(nearAccount: string, gatewayDomain: string): string {
-  return buildFastFSUrl(nearAccount, gatewayDomain, "secrets.json");
+export function buildSecretsPath(nearAccount: string, gatewayDomain: string): string {
+  return buildSocialPath(nearAccount, gatewayDomain, "secrets.json");
 }
