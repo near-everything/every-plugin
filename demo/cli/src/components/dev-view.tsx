@@ -1,5 +1,6 @@
 import { Box, render, Text, useApp, useInput } from "ink";
 import { useEffect, useState } from "react";
+import { linkify } from "../utils/linkify";
 import { colors, divider, gradients, icons, frames } from "../utils/theme";
 
 export type ProcessStatus = "pending" | "starting" | "ready" | "error";
@@ -81,7 +82,7 @@ function LogLine({ entry }: { entry: LogEntry }) {
   return (
     <Box>
       <Text color={color}>[{entry.source}]</Text>
-      <Text color={entry.isError ? "#ff3366" : undefined}> {entry.line}</Text>
+      <Text color={entry.isError ? "#ff3366" : undefined}> {linkify(entry.line)}</Text>
     </Box>
   );
 }

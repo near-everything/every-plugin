@@ -1,42 +1,72 @@
 #!/usr/bin/env bun
 import { program } from "commander";
 import { createPluginRuntime } from "every-plugin";
-import { getConfigDir, getConfigPath, getPackages, getTitle, loadConfig } from "./config";
+import { getConfigDir, getConfigPath, getPackages, getTitle, loadConfig, type BosConfig } from "./config";
 import BosPlugin from "./plugin";
 import { printBanner } from "./utils/banner";
 import { colors, frames, gradients, icons } from "./utils/theme";
 
-async function main() {
-  let config: ReturnType<typeof loadConfig>;
+function getHelpHeader(config: BosConfig | null, configPath: string): string {
+  const host = config?.app.host;
+  const lines: string[] = [];
 
-  try {
-    config = loadConfig();
-  } catch {
+  lines.push("");
+  lines.push(colors.cyan(frames.top(52)));
+  lines.push(`  ${icons.config} ${gradients.cyber("BOS CLI")} ${colors.dim("v1.0.0")}`);
+  lines.push(colors.cyan(frames.bottom(52)));
+  lines.push("");
+  
+  if (config) {
+    lines.push(`  ${colors.dim("Account")} ${colors.cyan(config.account)}`);
+    lines.push(`  ${colors.dim("Gateway")} ${colors.white(config.gateway?.production ?? "not configured")}`);
+    lines.push(`  ${colors.dim("Config ")} ${colors.dim(configPath)}`);
+    if (host?.description) {
+      lines.push(`  ${colors.dim("About  ")} ${colors.white(host.description)}`);
+    }
+  } else {
+    lines.push(`  ${colors.dim("No project config found")}`);
+    lines.push(`  ${colors.dim("Run")} ${colors.cyan("bos create project <name>")} ${colors.dim("to get started")}`);
+  }
+  
+  lines.push("");
+  lines.push(colors.cyan(frames.top(52)));
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+function requireConfig(config: BosConfig | null): asserts config is BosConfig {
+  if (!config) {
     console.error(colors.error(`${icons.err} Could not find bos.config.json`));
     console.log(colors.dim("  Run 'bos create project <name>' to create a new project"));
     process.exit(1);
   }
+}
 
-  const envPath = `${getConfigDir()}/.env.bos`;
-  const envFile = Bun.file(envPath);
-  if (await envFile.exists()) {
-    const content = await envFile.text();
-    for (const line of content.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eqIndex = trimmed.indexOf("=");
-      if (eqIndex === -1) continue;
-      const key = trimmed.slice(0, eqIndex).trim();
-      const value = trimmed.slice(eqIndex + 1).trim();
-      if (key && !process.env[key]) {
-        process.env[key] = value;
+async function main() {
+  const config = loadConfig();
+  const configPath = config ? getConfigPath() : process.cwd();
+  const packages = config ? getPackages() : [];
+  const title = config ? getTitle() : "BOS CLI";
+
+  if (config) {
+    const envPath = `${getConfigDir()}/.env.bos`;
+    const envFile = Bun.file(envPath);
+    if (await envFile.exists()) {
+      const content = await envFile.text();
+      for (const line of content.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const eqIndex = trimmed.indexOf("=");
+        if (eqIndex === -1) continue;
+        const key = trimmed.slice(0, eqIndex).trim();
+        const value = trimmed.slice(eqIndex + 1).trim();
+        if (key && !process.env[key]) {
+          process.env[key] = value;
+        }
       }
     }
   }
-
-  const packages = getPackages();
-  const title = getTitle();
-  const configPath = getConfigPath();
 
   printBanner(title);
 
@@ -59,32 +89,10 @@ async function main() {
 
   const client = result.createClient();
 
-  function getHelpHeader(): string {
-    const host = config?.app.host;
-    const lines: string[] = [];
-
-    lines.push("");
-    lines.push(colors.cyan(frames.top(52)));
-    lines.push(`  ${icons.config} ${gradients.cyber("BOS CLI")} ${colors.dim("v1.0.0")}`);
-    lines.push(colors.cyan(frames.bottom(52)));
-    lines.push("");
-    lines.push(`  ${colors.dim("Account")} ${colors.cyan(config?.account)}`);
-    lines.push(`  ${colors.dim("Gateway")} ${colors.white(config?.gateway.production)}`);
-    lines.push(`  ${colors.dim("Config ")} ${colors.dim(configPath)}`);
-    if (host?.description) {
-      lines.push(`  ${colors.dim("About  ")} ${colors.white(host?.description)}`);
-    }
-    lines.push("");
-    lines.push(colors.cyan(frames.top(52)));
-    lines.push("");
-
-    return lines.join("\n");
-  }
-
   program
     .name("bos")
     .version("1.0.0")
-    .addHelpText("before", getHelpHeader());
+    .addHelpText("before", getHelpHeader(config, configPath));
 
   program
     .command("info")

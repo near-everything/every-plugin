@@ -454,6 +454,10 @@ export default createPlugin({
         if (input.type === "project" && input.name) {
           const newConfig = {
             account: `${input.name}.near`,
+            gateway: {
+              development: "http://localhost:8787",
+              production: `https://gateway.${input.name}.example.com`,
+            },
             create: DEFAULT_TEMPLATES,
             app: {
               host: {

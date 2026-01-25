@@ -1,3 +1,4 @@
+import { linkify } from "../utils/linkify";
 import { colors, icons } from "../utils/theme";
 import type { ProcessState, ProcessStatus } from "./dev-view";
 
@@ -93,7 +94,7 @@ export function renderStreamingView(
   const addLog = (source: string, line: string, isError = false) => {
     const color = getServiceColor(source);
     const logColor = isError ? colors.error : colors.dim;
-    write(`${colors.dim(`[${getTimestamp()}]`)} ${color(`[${source.toUpperCase()}]`)}  ${colors.dim("│")} ${logColor(line)}`);
+    write(`${colors.dim(`[${getTimestamp()}]`)} ${color(`[${source.toUpperCase()}]`)}  ${colors.dim("│")} ${logColor(linkify(line))}`);
   };
 
   const unmount = () => {
