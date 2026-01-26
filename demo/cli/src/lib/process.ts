@@ -264,6 +264,12 @@ export const spawnRemoteHost = (
       return yield* Effect.fail(new Error("HOST_REMOTE_URL not provided for remote host"));
     }
 
+    if (config.env) {
+      for (const [key, value] of Object.entries(config.env)) {
+        process.env[key] = value;
+      }
+    }
+
     callbacks.onStatus(config.name, "starting");
 
     const configDir = getConfigDir();

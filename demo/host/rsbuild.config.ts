@@ -3,6 +3,7 @@ import path from "node:path";
 import { ModuleFederationPlugin } from "@module-federation/enhanced/rspack";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
+import DrizzleORMMigrations from "@proj-airi/unplugin-drizzle-orm-migrations/rspack";
 import { withZephyr } from "zephyr-rsbuild-plugin";
 
 const __dirname = import.meta.dirname;
@@ -11,12 +12,12 @@ const isProduction = process.env.NODE_ENV === "production";
 const configPath =
   process.env.BOS_CONFIG_PATH ?? path.resolve(__dirname, "../bos.config.json");
 
-function updateBosConfig(field: "production" | "remote", url: string) {
+function updateBosConfig(url: string) {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    config.app.host[field] = url;
+    config.app.host.production = url;
     fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-    console.log(`   ✅ Updated bos.config.json: app.host.${field}`);
+    console.log(`   ✅ Updated bos.config.json: app.host.production`);
   } catch (err) {
     console.error(
       "   ❌ Failed to update bos.config.json:",
@@ -33,7 +34,7 @@ if (isProduction) {
       hooks: {
         onDeployComplete: (info: { url: string }) => {
           console.log("🚀 Host Deployed:", info.url);
-          updateBosConfig("remote", info.url);
+          updateBosConfig(info.url);
         },
       },
     })
@@ -75,6 +76,7 @@ export default defineConfig({
       },
       stats: "errors-warnings",
       plugins: [
+        DrizzleORMMigrations(),
         new ModuleFederationPlugin({
           name: "host",
           filename: "remoteEntry.js",

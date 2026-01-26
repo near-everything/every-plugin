@@ -1,6 +1,8 @@
 import { type Client, createClient } from "@libsql/client";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
+import { migrate as drizzleMigrate } from "drizzle-orm/libsql/migrator";
 import { Effect } from "every-plugin/effect";
+import { migrate } from "../db/migrator";
 import * as authSchema from "../db/schema/auth";
 import { DatabaseError } from "./errors";
 
@@ -13,8 +15,8 @@ export interface DatabaseClient {
 
 let activeClient: Client | null = null;
 
-const acquireDatabase = Effect.try({
-  try: (): LibSQLDatabase<Schema> => {
+const acquireDatabase = Effect.tryPromise({
+  try: async (): Promise<LibSQLDatabase<Schema>> => {
     const client = createClient({
       url: process.env.HOST_DATABASE_URL || "file:./database.db",
       authToken: process.env.HOST_DATABASE_AUTH_TOKEN,
@@ -27,6 +29,21 @@ const acquireDatabase = Effect.try({
         ...authSchema,
       },
     });
+
+    const isRemote = process.env.HOST_SOURCE === "remote";
+    console.log("[Database] Migration mode:", isRemote ? "bundled" : "file-based");
+    console.log("[Database] HOST_SOURCE:", process.env.HOST_SOURCE);
+
+    if (isRemote) {
+      console.log("[Database] Loading bundled migrations...");
+      const migrations = await import("virtual:drizzle-migrations.sql");
+      console.log("[Database] Migrations loaded:", migrations.default?.length ?? 0, "migrations");
+      await migrate(client, migrations.default);
+      console.log("[Database] Migrations applied successfully");
+    } else {
+      console.log("[Database] Using file-based migrations");
+      await drizzleMigrate(db, { migrationsFolder: "./migrations" });
+    }
 
     return db;
   },
