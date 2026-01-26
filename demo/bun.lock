@@ -55,6 +55,7 @@
         "degit": "^2.8.4",
         "effect": "^3.19.14",
         "every-plugin": "0.8.8",
+        "everything-dev": "^0.0.4",
         "execa": "^9.6.1",
         "gradient-string": "^3.0.0",
         "ink": "^5.2.1",
@@ -2396,6 +2397,8 @@
     "compression/debug": ["debug@2.6.9", "", { "dependencies": { "ms": "2.0.0" } }, "sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA=="],
 
     "esrecurse/estraverse": ["estraverse@5.3.0", "", {}, "sha512-MMdARuVEQziNTeJD8DgMqmhwR11BRQ/cBP+pLtYdSTnf3MIO8fFeiINEbX36ZdNlfU/7A9f3gUw49B3oQsvwBA=="],
+
+    "everything-dev/everything-dev": ["everything-dev@0.0.4", "", { "dependencies": { "@clack/prompts": "^0.10.1", "@effect/platform": "^0.82.8", "@effect/platform-bun": "^0.58.1", "@inquirer/prompts": "^8.2.0", "@libsql/client": "^0.17.0", "borsh": "^2.0.0", "boxen": "^8.0.1", "chalk": "^5.6.2", "commander": "^14.0.2", "degit": "^2.8.4", "effect": "^3.19.14", "every-plugin": "0.8.8", "execa": "^9.6.1", "gradient-string": "^3.0.0", "ink": "^5.2.1", "near-kit": "^0.7.0", "near-social-js": "^2.0.3", "nova-sdk-js": "^1.0.1", "open": "^11.0.0", "react": "^18.3.1" }, "bin": { "bos": "src/cli.ts" } }, "sha512-nMCOlOY1pIUef/BveLAF8EiY45iCKwUJ04o9BG29PG2Y6i3rTvn3qYIOm8hDZYSHRm7eKzeemAMaA/NCwVcG2Q=="],
 
     "express/cookie": ["cookie@0.7.2", "", {}, "sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w=="],
 
