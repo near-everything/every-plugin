@@ -14,6 +14,7 @@ import {
   getPortsFromConfig,
   getRemotes,
   loadConfig,
+  type RemoteConfig,
   setConfig,
   type SourceMode
 } from "./config";
@@ -133,7 +134,9 @@ function buildEnvVars(config: AppConfig): Record<string, string> {
   }
 
   if (config.proxy) {
-    env.API_PROXY = "true";
+    const bosConfig = loadConfig();
+    const apiConfig = bosConfig?.app.api as RemoteConfig | undefined;
+    env.API_PROXY = apiConfig?.proxy || apiConfig?.production || "true";
   }
 
   return env;

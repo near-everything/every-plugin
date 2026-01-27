@@ -39,12 +39,24 @@ function nodeHeadersToHeaders(nodeHeaders: IncomingHttpHeaders): Headers {
   return headers;
 }
 
-async function proxyRequest(req: Request, targetBase: string): Promise<Response> {
+async function proxyRequest(req: Request, targetBase: string, rewriteCookies = false): Promise<Response> {
   const url = new URL(req.url);
   const targetUrl = `${targetBase}${url.pathname}${url.search}`;
 
   const headers = new Headers(req.headers);
   headers.delete("host");
+  headers.set("accept-encoding", "identity");
+
+  if (rewriteCookies) {
+    const cookieHeader = headers.get("cookie");
+    if (cookieHeader) {
+      const rewrittenCookies = cookieHeader.replace(
+        /\bbetter-auth\./g,
+        "__Secure-better-auth."
+      );
+      headers.set("cookie", rewrittenCookies);
+    }
+  }
 
   const proxyReq = new Request(targetUrl, {
     method: req.method,
@@ -53,7 +65,32 @@ async function proxyRequest(req: Request, targetBase: string): Promise<Response>
     duplex: "half",
   } as RequestInit);
 
-  return fetch(proxyReq);
+  const response = await fetch(proxyReq);
+
+  const responseHeaders = new Headers(response.headers);
+  responseHeaders.delete("content-encoding");
+  responseHeaders.delete("content-length");
+
+  if (rewriteCookies) {
+    const setCookieHeader = response.headers.get("set-cookie");
+    if (setCookieHeader) {
+      responseHeaders.delete("set-cookie");
+      const cookies = setCookieHeader.split(/,(?=\s*(?:__Secure-|__Host-)?\w+=)/);
+      for (const cookie of cookies) {
+        const rewritten = cookie
+          .replace(/^(__Secure-|__Host-)/i, "")
+          .replace(/;\s*Domain=[^;]*/gi, "")
+          .replace(/;\s*Secure/gi, "");
+        responseHeaders.append("set-cookie", rewritten);
+      }
+    }
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeaders,
+  });
 }
 
 function setupApiRoutes(
@@ -70,7 +107,7 @@ function setupApiRoutes(
     logger.info(`[API] Proxy mode enabled → ${proxyTarget}`);
 
     app.all("/api/*", async (c: Context) => {
-      const response = await proxyRequest(c.req.raw, proxyTarget);
+      const response = await proxyRequest(c.req.raw, proxyTarget, true);
       return response;
     });
 
@@ -163,6 +200,7 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
 
   setupApiRoutes(app, config, plugins, auth, db);
 
+  logger.info(`[Config] Host URL: ${config.hostUrl}`);
   logger.info(`[Config] UI source: ${config.ui.source} → ${config.ui.url}`);
   logger.info(`[Config] API source: ${config.api.source} → ${config.api.url}`);
   if (config.api.proxy) {

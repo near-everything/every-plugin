@@ -28,6 +28,7 @@ export interface RemoteConfig {
   development: string;
   production: string;
   ssr?: string;
+  proxy?: string;
   exposes?: Record<string, string>;
   variables?: Record<string, string>;
   secrets?: string[];

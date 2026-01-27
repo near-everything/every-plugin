@@ -1,6 +1,6 @@
 {
   "name": "everything-dev",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "bin": {
     "bos": "./src/cli.ts"

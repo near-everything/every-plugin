@@ -94,6 +94,19 @@ function resolveSource(
   return env === "production" ? "remote" : "local";
 }
 
+function detectHostUrl(env: "development" | "production", bootstrapUrl?: string, port?: number): string {
+  if (bootstrapUrl) return bootstrapUrl;
+  
+  if (process.env.HOST_URL) return process.env.HOST_URL;
+  
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+  }
+  
+  const effectivePort = (port ?? Number(process.env.PORT)) || 3000;
+  return `http://localhost:${effectivePort}`;
+}
+
 function loadConfigFromGateway(
   gatewayConfig: BosConfig,
   gatewaySecrets: Record<string, string> | undefined,
@@ -109,7 +122,7 @@ function loadConfigFromGateway(
     env,
     account: gatewayConfig.account,
     title: gatewayConfig.app.host.title,
-    hostUrl: gatewayConfig.app.host.production,
+    hostUrl: detectHostUrl(env),
     ui: {
       name: gatewayConfig.app.ui.name,
       url: gatewayConfig.app.ui.production,
@@ -158,7 +171,10 @@ export const loadConfig = Effect.gen(function* () {
   const apiSource = resolveSource(bootstrap?.api?.source, process.env.API_SOURCE, env);
 
   const apiProxyEnv = bootstrap?.api?.proxy ?? process.env.API_PROXY;
-  const apiProxy = apiProxyEnv === "true" ? config.app.host.production : apiProxyEnv || undefined;
+  const apiConfig = config.app.api as { proxy?: string };
+  const apiProxy = apiProxyEnv === "true" 
+    ? apiConfig.proxy || config.app.api.production 
+    : apiProxyEnv || undefined;
 
   const uiUrl = uiSource === "remote" ? config.app.ui.production : config.app.ui.development;
   const apiUrl = apiSource === "remote" ? config.app.api.production : config.app.api.development;
@@ -168,7 +184,7 @@ export const loadConfig = Effect.gen(function* () {
     env,
     account: config.account,
     title: config.app.host.title,
-    hostUrl: bootstrap?.host?.url ?? config.app.host[env],
+    hostUrl: detectHostUrl(env, bootstrap?.host?.url),
     ui: {
       name: config.app.ui.name,
       url: uiUrl,

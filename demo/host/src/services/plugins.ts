@@ -41,6 +41,16 @@ export const initializePlugins = Effect.gen(function* () {
   const pluginName = pluginConfig.name;
   const pluginUrl = pluginConfig.url;
 
+  if (pluginConfig.proxy) {
+    console.log(`[Plugins] Proxy mode enabled, skipping plugin initialization`);
+    console.log(`[Plugins] API requests will be proxied to: ${pluginConfig.proxy}`);
+    return {
+      runtime: null,
+      api: null,
+      status: { available: false, pluginName, error: null, errorDetails: null },
+    } satisfies PluginResult;
+  }
+
   console.log(`[Plugins] Registering remote: ${pluginName} from ${pluginUrl}`);
 
   const result = yield* Effect.tryPromise({
