@@ -12,6 +12,9 @@ const shouldDeploy = process.env.DEPLOY === "true";
 const configPath =
   process.env.BOS_CONFIG_PATH ?? path.resolve(__dirname, "../bos.config.json");
 
+const bosConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+const sharedUi = bosConfig.shared?.ui ?? {};
+
 function updateBosConfig(url: string) {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -86,6 +89,7 @@ export default defineConfig({
           exposes: {
             "./Server": "./src/program.ts",
           },
+          shared: sharedUi,
         }),
       ],
     },

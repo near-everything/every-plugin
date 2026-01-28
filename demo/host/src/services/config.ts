@@ -6,6 +6,14 @@ import { ConfigError } from "./errors";
 
 export type { BosConfig, SourceMode };
 
+export interface SharedConfig {
+  requiredVersion?: string;
+  singleton?: boolean;
+  eager?: boolean;
+  strictVersion?: boolean;
+  shareScope?: string;
+}
+
 export interface BootstrapConfig {
   configPath?: string;
   secrets?: Record<string, string>;
@@ -28,6 +36,9 @@ export interface RuntimeConfig {
   account: string;
   title: string;
   hostUrl: string;
+  shared?: {
+    ui?: Record<string, SharedConfig>;
+  };
   ui: {
     name: string;
     url: string;
@@ -95,6 +106,7 @@ function loadConfigFromGateway(
     account: gatewayConfig.account,
     title: gatewayConfig.app.host.title,
     hostUrl: detectHostUrl(env),
+    shared: (gatewayConfig as any).shared,
     ui: {
       name: uiConfig.name,
       url: uiConfig.production,
@@ -113,7 +125,7 @@ function loadConfigFromGateway(
   };
 }
 
-export const loadConfig = Effect.gen(function* () {
+export const loadConfig: Effect.Effect<RuntimeConfig, ConfigError> = Effect.gen(function* () {
   const bootstrap = globalBootstrap;
   const env = (process.env.NODE_ENV as "development" | "production") || "development";
 
@@ -159,6 +171,7 @@ export const loadConfig = Effect.gen(function* () {
     account: config.account,
     title: config.app.host.title,
     hostUrl: detectHostUrl(env, bootstrap?.host?.url),
+    shared: (config as any).shared,
     ui: {
       name: uiConfig.name,
       url: uiUrl,

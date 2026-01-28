@@ -68,17 +68,17 @@ const LayoutAuthenticatedAdminDashboardRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof LayoutAuthenticatedIndexRoute
   '/login': typeof LayoutLoginRoute
   '/p/$key': typeof LayoutPKeyRoute
-  '/': typeof LayoutAuthenticatedIndexRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
-  '/keys': typeof LayoutAuthenticatedKeysIndexRoute
+  '/keys/': typeof LayoutAuthenticatedKeysIndexRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof LayoutAuthenticatedIndexRoute
   '/login': typeof LayoutLoginRoute
   '/p/$key': typeof LayoutPKeyRoute
-  '/': typeof LayoutAuthenticatedIndexRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/keys': typeof LayoutAuthenticatedKeysIndexRoute
@@ -97,9 +97,9 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/login' | '/p/$key' | '/' | '/dashboard' | '/keys/$key' | '/keys'
+  fullPaths: '/' | '/login' | '/p/$key' | '/dashboard' | '/keys/$key' | '/keys/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/p/$key' | '/' | '/dashboard' | '/keys/$key' | '/keys'
+  to: '/' | '/login' | '/p/$key' | '/dashboard' | '/keys/$key' | '/keys'
   id:
     | '__root__'
     | '/_layout'
@@ -122,7 +122,7 @@ declare module '@tanstack/react-router' {
     '/_layout': {
       id: '/_layout'
       path: ''
-      fullPath: ''
+      fullPath: '/'
       preLoaderRoute: typeof LayoutRouteImport
       parentRoute: typeof rootRouteImport
     }
@@ -136,7 +136,7 @@ declare module '@tanstack/react-router' {
     '/_layout/_authenticated': {
       id: '/_layout/_authenticated'
       path: ''
-      fullPath: ''
+      fullPath: '/'
       preLoaderRoute: typeof LayoutAuthenticatedRouteImport
       parentRoute: typeof LayoutRoute
     }
@@ -157,14 +157,14 @@ declare module '@tanstack/react-router' {
     '/_layout/_authenticated/_admin': {
       id: '/_layout/_authenticated/_admin'
       path: ''
-      fullPath: ''
+      fullPath: '/'
       preLoaderRoute: typeof LayoutAuthenticatedAdminRouteImport
       parentRoute: typeof LayoutAuthenticatedRoute
     }
     '/_layout/_authenticated/keys/': {
       id: '/_layout/_authenticated/keys/'
       path: '/keys'
-      fullPath: '/keys'
+      fullPath: '/keys/'
       preLoaderRoute: typeof LayoutAuthenticatedKeysIndexRouteImport
       parentRoute: typeof LayoutAuthenticatedRoute
     }

@@ -701,6 +701,88 @@ Zephyr Configuration:
       console.log();
     });
 
+  const depsCmd = program
+    .command("deps")
+    .description("Manage shared dependencies");
+
+  depsCmd
+    .command("update")
+    .description("Interactive update of shared dependencies (bun update -i style)")
+    .argument("[category]", "Dependency category (ui | api)", "ui")
+    .action(async (category: string) => {
+      console.log();
+      console.log(`  ${icons.pkg} Updating shared.${category} dependencies...`);
+
+      const result = await client.depsUpdate({
+        category: category as "ui" | "api",
+      });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} ${result.error || "Update failed"}`));
+        process.exit(1);
+      }
+
+      if (result.status === "cancelled") {
+        console.log();
+        console.log(colors.dim("  No updates selected"));
+        console.log();
+        return;
+      }
+
+      console.log();
+      console.log(colors.cyan(frames.top(52)));
+      console.log(`  ${icons.ok} ${gradients.cyber("DEPENDENCIES UPDATED")}`);
+      console.log(colors.cyan(frames.bottom(52)));
+      console.log();
+
+      for (const { name, from, to } of result.updated) {
+        console.log(`  ${colors.dim("•")} ${colors.white(name)}`);
+        console.log(`    ${colors.dim(from)} → ${colors.green(to)}`);
+      }
+
+      if (result.syncStatus === "synced") {
+        console.log();
+        console.log(colors.green(`  ${icons.ok} Catalog synced & bun install complete`));
+      }
+      console.log();
+    });
+
+  depsCmd
+    .command("sync")
+    .description("Sync bos.config.json shared deps to package.json catalog")
+    .argument("[category]", "Dependency category (ui | api)", "ui")
+    .option("--no-install", "Skip running bun install")
+    .action(async (category: string, options: { install: boolean }) => {
+      console.log();
+      console.log(`  ${icons.pkg} Syncing shared.${category} to catalog...`);
+
+      const result = await client.depsSync({
+        category: category as "ui" | "api",
+        install: options.install,
+      });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} ${result.error || "Sync failed"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Synced ${result.synced.length} dependencies to catalog`));
+      
+      if (result.synced.length > 0) {
+        for (const name of result.synced) {
+          console.log(`  ${colors.dim("•")} ${name}`);
+        }
+      }
+
+      if (options.install) {
+        console.log(colors.dim("  bun install complete"));
+      } else {
+        console.log(colors.dim("  Run 'bun install' to update lockfile"));
+      }
+      console.log();
+    });
+
   program
     .command("login")
     .description("Login to NOVA for encrypted secrets management")

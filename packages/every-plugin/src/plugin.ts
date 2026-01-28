@@ -126,19 +126,17 @@ export function createPlugin<
 		}
 
 		createRouter(deps: TDeps): Router<TContract, any> {
-			const base = os
-				.$context<ContextOutput<TRequestContext>>()
-				.use(onError((error) => {
-					const unwrapped = extractFromFiberFailure(error);
-					
-					if (unwrapped !== error && unwrapped instanceof ORPCError) {
-						throw unwrapped;
-					}
-					
-					formatORPCError(error);
-				}));
-			const builder = implement(config.contract, base);
-			const router = config.createRouter(deps, builder);
+			const base = implement(config.contract).$context<ContextOutput<TRequestContext>>();
+			const builder = (base as any).use(onError((error: unknown) => {
+				const unwrapped = extractFromFiberFailure(error);
+				
+				if (unwrapped !== error && unwrapped instanceof ORPCError) {
+					throw unwrapped;
+				}
+				
+				formatORPCError(error);
+			}));
+			const router = config.createRouter(deps, builder as any);
 			return router as Router<TContract, any>;
 		}
 	}

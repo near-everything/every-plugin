@@ -36,21 +36,21 @@ const createModuleFederationInstance = Effect.cached(
 							},
 						},
 						effect: {
-							version: pkg.dependencies.effect,
+							version: pkg.peerDependencies.effect,
 							get: () => import("effect").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
-								requiredVersion: getMajorMinorVersion(pkg.dependencies.effect),
+								requiredVersion: getMajorMinorVersion(pkg.peerDependencies.effect),
 								eager: false,
 								strictVersion: false,
 							},
 						},
 						zod: {
-							version: pkg.dependencies.zod,
+							version: pkg.peerDependencies.zod,
 							get: () => import("zod").then(mod => () => mod),
 							shareConfig: {
 								singleton: true,
-								requiredVersion: getMajorMinorVersion(pkg.dependencies.zod),
+								requiredVersion: getMajorMinorVersion(pkg.peerDependencies.zod),
 								eager: false,
 								strictVersion: false,
 							},

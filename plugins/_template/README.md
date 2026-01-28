@@ -112,7 +112,7 @@ console.log(ping.status); // "ok"
 
 ## Related Examples
 
-- **[test-plugin](../../packages/core/__tests__/test-plugin/)** - Testing patterns
+- **[test-plugin](../../packages/every-plugin/__tests__/test-plugin/)** - Testing patterns
 
 ## License
 

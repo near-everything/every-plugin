@@ -6,7 +6,6 @@ import { pluginModuleFederation } from "@module-federation/rsbuild-plugin";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
 import { TanStackRouterRspack } from "@tanstack/router-plugin/rspack";
-import { getUISharedDependencies } from "every-plugin/build/rspack";
 import { withZephyr } from "zephyr-rsbuild-plugin";
 import pkg from "./package.json";
 
@@ -16,6 +15,10 @@ const normalizedName = pkg.name;
 const shouldDeploy = process.env.DEPLOY === "true";
 const buildTarget = process.env.BUILD_TARGET as "client" | "server" | undefined;
 const isServerBuild = buildTarget === "server";
+
+const bosConfigPath = path.resolve(__dirname, "../bos.config.json");
+const bosConfig = JSON.parse(fs.readFileSync(bosConfigPath, "utf8"));
+const uiSharedDeps = bosConfig.shared?.ui ?? {};
 
 function updateBosConfig(field: "production" | "ssr", url: string) {
   try {
@@ -37,8 +40,6 @@ function updateBosConfig(field: "production" | "ssr", url: string) {
     );
   }
 }
-
-const uiSharedDeps = getUISharedDependencies();
 
 function createClientConfig() {
   const plugins = [

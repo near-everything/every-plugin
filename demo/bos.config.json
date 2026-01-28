@@ -3,6 +3,46 @@
   "cli": {
     "version": "0.0.10"
   },
+  "shared": {
+    "ui": {
+      "react": {
+        "requiredVersion": "19.2.4",
+        "singleton": true,
+        "eager": true
+      },
+      "react-dom": {
+        "requiredVersion": "19.2.4",
+        "singleton": true,
+        "eager": true
+      },
+      "@tanstack/react-query": {
+        "requiredVersion": "5.90.20",
+        "singleton": true,
+        "eager": true
+      },
+      "@tanstack/react-router": {
+        "requiredVersion": "1.157.16",
+        "singleton": true,
+        "eager": true
+      },
+      "@hot-labs/near-connect": {
+        "requiredVersion": "0.8.2",
+        "singleton": true
+      },
+      "near-kit": {
+        "requiredVersion": "0.10.0",
+        "singleton": true
+      },
+      "better-auth": {
+        "requiredVersion": "1.4.17",
+        "singleton": true
+      },
+      "better-near-auth": {
+        "requiredVersion": "0.3.4",
+        "singleton": true
+      }
+    }
+  },
   "gateway": {
     "development": "http://localhost:8787",
     "production": "https://ejlbraem.com"
@@ -46,7 +86,10 @@
       "production": "https://elliot-braem-1811-api-every-plugin-near-everythin-2defcb105-ze.zephyrcloud.app",
       "proxy": "https://elliot-braem-1811-api-every-plugin-near-everythin-2defcb105-ze.zephyrcloud.app",
       "variables": {},
-      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN"]
+      "secrets": [
+        "API_DATABASE_URL",
+        "API_DATABASE_AUTH_TOKEN"
+      ]
     }
   }
 }

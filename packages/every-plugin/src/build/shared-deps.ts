@@ -9,8 +9,6 @@ export interface SharedDependencyConfig {
 
 export type SharedDependencies = Record<string, SharedDependencyConfig>;
 
-const uiDeps = (pkg as any).sharedDependencies?.ui as Record<string, string> | undefined;
-
 export function getPluginSharedDependencies(): SharedDependencies {
   return {
     "every-plugin": {
@@ -20,13 +18,13 @@ export function getPluginSharedDependencies(): SharedDependencies {
       eager: false,
     },
     effect: {
-      version: pkg.dependencies.effect,
+      version: pkg.peerDependencies.effect,
       singleton: true,
       strictVersion: false,
       eager: false,
     },
     zod: {
-      version: pkg.dependencies.zod,
+      version: pkg.peerDependencies.zod,
       singleton: true,
       strictVersion: false,
       eager: false,
@@ -43,32 +41,6 @@ export function getPluginSharedDependencies(): SharedDependencies {
       strictVersion: false,
       eager: false,
     },
-  };
-}
-
-function cleanVersion(version: string): string {
-  return version.replace(/^[\^~>=<]+/, "");
-}
-
-export function getUISharedDependencies(): SharedDependencies {
-  if (!uiDeps) return {};
-  
-  const result: SharedDependencies = {};
-  for (const [name, version] of Object.entries(uiDeps)) {
-    result[name] = {
-      version: cleanVersion(version),
-      singleton: true,
-      strictVersion: false,
-      eager: name === "react" || name === "react-dom",
-    };
-  }
-  return result;
-}
-
-export function getHostSharedDependencies(): SharedDependencies {
-  return {
-    ...getPluginSharedDependencies(),
-    ...getUISharedDependencies(),
   };
 }
 

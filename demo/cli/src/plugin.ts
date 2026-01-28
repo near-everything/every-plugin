@@ -1036,6 +1036,197 @@ export default createPlugin({
       }
     }),
 
+    depsUpdate: builder.depsUpdate.handler(async ({ input }) => {
+      const { configDir, bosConfig } = deps;
+
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          updated: [],
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
+
+      const category = input.category;
+      const sharedDeps = bosConfig.shared?.[category];
+
+      if (!sharedDeps || Object.keys(sharedDeps).length === 0) {
+        return {
+          status: "error" as const,
+          updated: [],
+          error: `No shared.${category} dependencies found in bos.config.json`,
+        };
+      }
+
+      const { mkdtemp, rm } = await import("fs/promises");
+      const { tmpdir } = await import("os");
+      const { join } = await import("path");
+      const { execa } = await import("execa");
+
+      const tempDir = await mkdtemp(join(tmpdir(), "bos-deps-"));
+
+      try {
+        const tempDeps: Record<string, string> = {};
+        for (const [name, config] of Object.entries(sharedDeps)) {
+          const version = (config as { requiredVersion?: string }).requiredVersion || "*";
+          tempDeps[name] = version.replace(/^[\^~]/, "");
+        }
+
+        const tempPkg = {
+          name: "bos-deps-update",
+          private: true,
+          dependencies: tempDeps,
+        };
+
+        await Bun.write(join(tempDir, "package.json"), JSON.stringify(tempPkg, null, 2));
+
+        await execa("bun", ["install"], {
+          cwd: tempDir,
+          stdio: "inherit",
+        });
+
+        await execa("bun", ["update", "-i"], {
+          cwd: tempDir,
+          stdio: "inherit",
+        });
+
+        const updatedPkg = await Bun.file(join(tempDir, "package.json")).json() as {
+          dependencies: Record<string, string>;
+        };
+
+        const updated: { name: string; from: string; to: string }[] = [];
+        const updatedConfig = { ...bosConfig };
+
+        if (!updatedConfig.shared) {
+          updatedConfig.shared = {};
+        }
+        if (!updatedConfig.shared[category]) {
+          updatedConfig.shared[category] = {};
+        }
+
+        for (const [name, newVersion] of Object.entries(updatedPkg.dependencies)) {
+          const oldVersion = (sharedDeps[name] as { requiredVersion?: string })?.requiredVersion || "";
+          if (newVersion !== oldVersion) {
+            updated.push({ name, from: oldVersion, to: newVersion });
+            updatedConfig.shared[category][name] = {
+              ...(sharedDeps[name] as object),
+              requiredVersion: newVersion,
+            };
+          }
+        }
+
+        if (updated.length > 0) {
+          const bosConfigPath = `${configDir}/bos.config.json`;
+          await Bun.write(bosConfigPath, JSON.stringify(updatedConfig, null, 2));
+
+          const rootPkgPath = `${configDir}/package.json`;
+          const rootPkg = await Bun.file(rootPkgPath).json() as {
+            workspaces?: { catalog?: Record<string, string> };
+          };
+
+          if (rootPkg.workspaces?.catalog) {
+            for (const { name, to } of updated) {
+              rootPkg.workspaces.catalog[name] = to;
+            }
+            await Bun.write(rootPkgPath, JSON.stringify(rootPkg, null, 2));
+          }
+
+          await execa("bun", ["install"], {
+            cwd: configDir,
+            stdio: "inherit",
+          });
+
+          return {
+            status: "updated" as const,
+            updated,
+            syncStatus: "synced" as const,
+          };
+        }
+
+        return {
+          status: "cancelled" as const,
+          updated: [],
+        };
+      } catch (error) {
+        return {
+          status: "error" as const,
+          updated: [],
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    }),
+
+    depsSync: builder.depsSync.handler(async ({ input }) => {
+      const { configDir, bosConfig } = deps;
+
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          synced: [],
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
+
+      const category = input.category;
+      const sharedDeps = bosConfig.shared?.[category];
+
+      if (!sharedDeps || Object.keys(sharedDeps).length === 0) {
+        return {
+          status: "error" as const,
+          synced: [],
+          error: `No shared.${category} dependencies found in bos.config.json`,
+        };
+      }
+
+      try {
+        const rootPkgPath = `${configDir}/package.json`;
+        const rootPkg = await Bun.file(rootPkgPath).json() as {
+          workspaces?: { packages?: string[]; catalog?: Record<string, string> };
+        };
+
+        if (!rootPkg.workspaces) {
+          rootPkg.workspaces = {};
+        }
+        if (!rootPkg.workspaces.catalog) {
+          rootPkg.workspaces.catalog = {};
+        }
+
+        const synced: string[] = [];
+
+        for (const [name, config] of Object.entries(sharedDeps)) {
+          const version = (config as { requiredVersion?: string }).requiredVersion;
+          if (version) {
+            const cleanVersion = version.replace(/^[\^~]/, "");
+            rootPkg.workspaces.catalog[name] = cleanVersion;
+            synced.push(name);
+          }
+        }
+
+        await Bun.write(rootPkgPath, JSON.stringify(rootPkg, null, 2));
+
+        if (input.install) {
+          const { execa } = await import("execa");
+          await execa("bun", ["install"], {
+            cwd: configDir,
+            stdio: "inherit",
+          });
+        }
+
+        return {
+          status: "synced" as const,
+          synced,
+        };
+      } catch (error) {
+        return {
+          status: "error" as const,
+          synced: [],
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
     sync: builder.sync.handler(async ({ input }) => {
       const { configDir, bosConfig } = deps;
 

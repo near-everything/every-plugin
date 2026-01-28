@@ -822,5 +822,5 @@ Once deployed, share the `remote` URL so others can add to their registries.
 
 - **[telegram](../telegram/)** - Webhook + polling modes, background processing
 - **[gopher-ai](../gopher-ai/)** - LLM API integration  
-- **[test-plugin](../../packages/core/__tests__/test-plugin/)** - Testing patterns
+- **[test-plugin](../../packages/every-plugin/__tests__/test-plugin/)** - Testing patterns
 - **[patterns.mdx](../../apps/docs/content/docs/plugins/patterns.mdx)** - More patterns and examples

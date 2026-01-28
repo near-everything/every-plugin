@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "rsbuild dev",
-    "build": "bun run build:client && bun run build:server",
+    "build": "bun run build:client && bun run build:ssr",
     "deploy": "DEPLOY=true bun run build",
     "build:client": "BUILD_TARGET=client rsbuild build",
-    "build:server": "BUILD_TARGET=server rsbuild build",
+    "build:ssr": "BUILD_TARGET=server rsbuild build",
     "preview": "rsbuild preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

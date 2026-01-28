@@ -1,6 +1,6 @@
 import { appendFile } from "node:fs/promises";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { Effect } from "effect";
+import { Effect } from "every-plugin/effect";
 import path from "path";
 import type { AppConfig } from "../config";
 import {

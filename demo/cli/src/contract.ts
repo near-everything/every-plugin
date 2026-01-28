@@ -229,6 +229,33 @@ const SyncResultSchema = z.object({
   error: z.string().optional(),
 });
 
+const DepsUpdateOptionsSchema = z.object({
+  category: z.enum(["ui", "api"]).default("ui"),
+  packages: z.array(z.string()).optional(),
+});
+
+const DepsUpdateResultSchema = z.object({
+  status: z.enum(["updated", "cancelled", "error"]),
+  updated: z.array(z.object({
+    name: z.string(),
+    from: z.string(),
+    to: z.string(),
+  })),
+  syncStatus: z.enum(["synced", "skipped", "error"]).optional(),
+  error: z.string().optional(),
+});
+
+const DepsSyncOptionsSchema = z.object({
+  category: z.enum(["ui", "api"]).default("ui"),
+  install: z.boolean().default(true),
+});
+
+const DepsSyncResultSchema = z.object({
+  status: z.enum(["synced", "error"]),
+  synced: z.array(z.string()),
+  error: z.string().optional(),
+});
+
 export const bosContract = oc.router({
   dev: oc
     .route({ method: "POST", path: "/dev" })
@@ -325,6 +352,16 @@ export const bosContract = oc.router({
     .route({ method: "POST", path: "/sync" })
     .input(SyncOptionsSchema)
     .output(SyncResultSchema),
+
+  depsUpdate: oc
+    .route({ method: "POST", path: "/deps/update" })
+    .input(DepsUpdateOptionsSchema)
+    .output(DepsUpdateResultSchema),
+
+  depsSync: oc
+    .route({ method: "POST", path: "/deps/sync" })
+    .input(DepsSyncOptionsSchema)
+    .output(DepsSyncResultSchema),
 });
 
 export type BosContract = typeof bosContract;
@@ -359,3 +396,7 @@ export type LoginResult = z.infer<typeof LoginResultSchema>;
 export type LogoutResult = z.infer<typeof LogoutResultSchema>;
 export type SyncOptions = z.infer<typeof SyncOptionsSchema>;
 export type SyncResult = z.infer<typeof SyncResultSchema>;
+export type DepsUpdateOptions = z.infer<typeof DepsUpdateOptionsSchema>;
+export type DepsUpdateResult = z.infer<typeof DepsUpdateResultSchema>;
+export type DepsSyncOptions = z.infer<typeof DepsSyncOptionsSchema>;
+export type DepsSyncResult = z.infer<typeof DepsSyncResultSchema>;

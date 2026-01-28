@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { Command } from "@effect/platform";
-import { Deferred, Effect, Fiber, Ref, Stream } from "effect";
+import { Deferred, Effect, Fiber, Ref, Stream } from "every-plugin/effect";
 import { getConfigDir, getPortsFromConfig, type SourceMode } from "../config";
 import type { ProcessStatus } from "../components/dev-view";
 import { loadSecretsFor } from "./secrets";

@@ -30,6 +30,14 @@ export const GatewayConfigSchema = z.object({
 });
 export type GatewayConfig = z.infer<typeof GatewayConfigSchema>;
 
+export const SharedDepConfigSchema = z.object({
+  requiredVersion: z.string().optional(),
+  singleton: z.boolean().optional(),
+  eager: z.boolean().optional(),
+  strictVersion: z.boolean().optional(),
+});
+export type SharedDepConfig = z.infer<typeof SharedDepConfigSchema>;
+
 export const BosConfigSchema = z.object({
   account: z.string(),
   gateway: GatewayConfigSchema,
@@ -38,6 +46,7 @@ export const BosConfigSchema = z.object({
   cli: z.object({
     version: z.string().optional(),
   }).optional(),
+  shared: z.record(z.string(), z.record(z.string(), SharedDepConfigSchema)).optional(),
   app: z.object({
     host: HostConfigSchema,
   }).catchall(z.union([HostConfigSchema, RemoteConfigSchema])),

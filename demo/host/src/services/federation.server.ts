@@ -2,13 +2,32 @@ import { createInstance, getInstance } from "@module-federation/enhanced/runtime
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
 import { Context, Effect, Layer, Schedule } from "every-plugin/effect";
 import type { RouterModule } from "../types";
-import type { RuntimeConfig } from "./config";
+import type { RuntimeConfig, SharedConfig } from "./config";
 import { ConfigService } from "./config";
 import { FederationError } from "./errors";
 
 export type { RouterModule };
 
 let federationInstance: ReturnType<typeof createInstance> | null = null;
+
+function transformSharedConfig(sharedUi: Record<string, SharedConfig> | undefined) {
+  if (!sharedUi) return undefined;
+
+  return Object.fromEntries(
+    Object.entries(sharedUi).map(([name, cfg]) => [
+      name,
+      {
+        version: cfg.requiredVersion?.replace(/^[\^~>=<]+/, "") ?? "0.0.0",
+        shareConfig: {
+          singleton: cfg.singleton ?? true,
+          requiredVersion: cfg.requiredVersion || false as const,
+          eager: cfg.eager ?? false,
+          strictVersion: cfg.strictVersion ?? false,
+        },
+      },
+    ])
+  );
+}
 
 function getOrCreateFederationInstance(config: RuntimeConfig) {
   if (federationInstance) return federationInstance;
@@ -25,6 +44,8 @@ function getOrCreateFederationInstance(config: RuntimeConfig) {
       cause: new Error("SSR URL not configured. Set app.ui.ssr in bos.config.json to enable SSR."),
     });
   }
+
+  const shared = transformSharedConfig(config.shared?.ui);
 
   if (existingInstance) {
     existingInstance.registerRemotes([{
@@ -45,6 +66,7 @@ function getOrCreateFederationInstance(config: RuntimeConfig) {
         alias: config.ui.name,
       },
     ],
+    shared,
   });
 
   setGlobalFederationInstance(federationInstance);
