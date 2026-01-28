@@ -1,7 +1,11 @@
 import { oc } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
-
-const SourceModeSchema = z.enum(["local", "remote"]);
+import {
+  BosConfigSchema,
+  HostConfigSchema,
+  RemoteConfigSchema,
+  SourceModeSchema,
+} from "./types";
 
 const DevOptionsSchema = z.object({
   host: SourceModeSchema.default("local"),
@@ -86,36 +90,6 @@ const CreateOptionsSchema = z.object({
 const CreateResultSchema = z.object({
   status: z.enum(["created", "error"]),
   path: z.string(),
-});
-
-const RemoteConfigSchema = z.object({
-  name: z.string(),
-  development: z.string(),
-  production: z.string(),
-  ssr: z.string().optional(),
-  exposes: z.record(z.string(), z.string()).optional(),
-  variables: z.record(z.string(), z.string()).optional(),
-  secrets: z.array(z.string()).optional(),
-});
-
-const HostConfigSchema = z.object({
-  title: z.string(),
-  description: z.string().optional(),
-  development: z.string(),
-  production: z.string(),
-  secrets: z.array(z.string()).optional(),
-});
-
-const BosConfigSchema = z.object({
-  account: z.string(),
-  cli: z.object({
-    remote: z.string().optional(),
-    local: z.string().optional(),
-  }).optional(),
-  create: z.record(z.string(), z.string()).optional(),
-  app: z.object({
-    host: HostConfigSchema,
-  }).catchall(z.union([HostConfigSchema, RemoteConfigSchema])),
 });
 
 const InfoResultSchema = z.object({
@@ -367,7 +341,6 @@ export type PublishOptions = z.infer<typeof PublishOptionsSchema>;
 export type PublishResult = z.infer<typeof PublishResultSchema>;
 export type CreateOptions = z.infer<typeof CreateOptionsSchema>;
 export type CreateResult = z.infer<typeof CreateResultSchema>;
-export type BosConfig = z.infer<typeof BosConfigSchema>;
 export type InfoResult = z.infer<typeof InfoResultSchema>;
 export type StatusOptions = z.infer<typeof StatusOptionsSchema>;
 export type StatusResult = z.infer<typeof StatusResultSchema>;

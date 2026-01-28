@@ -43,6 +43,7 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "everything-dev": "catalog:",
     "@module-federation/rsbuild-plugin": "^0.22.1",
     "@rsbuild/core": "^1.7.2",
     "@rsbuild/plugin-react": "^1.4.3",

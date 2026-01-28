@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260120.0",
+    "everything-dev": "catalog:",
     "typescript": "^5.9.3",
     "wrangler": "^4.59.3"
   }

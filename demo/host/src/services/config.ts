@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Effect } from "every-plugin/effect";
+import type { BosConfig, RemoteConfig, SourceMode } from "everything-dev";
 import { ConfigError } from "./errors";
+
+export type { BosConfig, SourceMode };
 
 export interface BootstrapConfig {
   configPath?: string;
@@ -20,36 +23,6 @@ export function setBootstrapConfig(config: BootstrapConfig): void {
   globalBootstrap = config;
 }
 
-export interface BosConfig {
-  account: string;
-  gateway?: string;
-  app: {
-    host: {
-      title: string;
-      description?: string;
-      development: string;
-      production: string;
-      secrets?: string[];
-    };
-    ui: {
-      name: string;
-      development: string;
-      production: string;
-      ssr?: string;
-      exposes: Record<string, string>;
-    };
-    api: {
-      name: string;
-      development: string;
-      production: string;
-      variables?: Record<string, unknown>;
-      secrets?: string[];
-    };
-  };
-}
-
-export type SourceMode = "local" | "remote";
-
 export interface RuntimeConfig {
   env: "development" | "production";
   account: string;
@@ -67,7 +40,7 @@ export interface RuntimeConfig {
     url: string;
     source: SourceMode;
     proxy?: string;
-    variables?: Record<string, unknown>;
+    variables?: Record<string, string>;
     secrets?: string[];
   };
 }
@@ -114,25 +87,28 @@ function loadConfigFromGateway(
     }
   }
 
+  const uiConfig = gatewayConfig.app.ui as RemoteConfig;
+  const apiConfig = gatewayConfig.app.api as RemoteConfig;
+
   return {
     env,
     account: gatewayConfig.account,
     title: gatewayConfig.app.host.title,
     hostUrl: detectHostUrl(env),
     ui: {
-      name: gatewayConfig.app.ui.name,
-      url: gatewayConfig.app.ui.production,
-      ssrUrl: gatewayConfig.app.ui.ssr || undefined,
+      name: uiConfig.name,
+      url: uiConfig.production,
+      ssrUrl: uiConfig.ssr || undefined,
       source: "remote",
-      exposes: gatewayConfig.app.ui.exposes,
+      exposes: uiConfig.exposes || {},
     },
     api: {
-      name: gatewayConfig.app.api.name,
-      url: gatewayConfig.app.api.production,
+      name: apiConfig.name,
+      url: apiConfig.production,
       source: "remote",
       proxy: undefined,
-      variables: gatewayConfig.app.api.variables,
-      secrets: gatewayConfig.app.api.secrets,
+      variables: apiConfig.variables,
+      secrets: apiConfig.secrets,
     },
   };
 }
@@ -163,18 +139,20 @@ export const loadConfig = Effect.gen(function* () {
     catch: (e) => new ConfigError({ path, cause: e }),
   });
 
+  const uiConfig = config.app.ui as RemoteConfig;
+  const apiConfig = config.app.api as RemoteConfig;
+
   const uiSource = resolveSource(bootstrap?.ui?.source, process.env.UI_SOURCE, env);
   const apiSource = resolveSource(bootstrap?.api?.source, process.env.API_SOURCE, env);
 
   const apiProxyEnv = bootstrap?.api?.proxy ?? process.env.API_PROXY;
-  const apiConfig = config.app.api as { proxy?: string };
   const apiProxy = apiProxyEnv === "true" 
-    ? apiConfig.proxy || config.app.api.production 
+    ? apiConfig.proxy || apiConfig.production 
     : apiProxyEnv || undefined;
 
-  const uiUrl = uiSource === "remote" ? config.app.ui.production : config.app.ui.development;
-  const apiUrl = apiSource === "remote" ? config.app.api.production : config.app.api.development;
-  const ssrUrl = uiSource === "remote" ? config.app.ui.ssr : undefined;
+  const uiUrl = uiSource === "remote" ? uiConfig.production : uiConfig.development;
+  const apiUrl = apiSource === "remote" ? apiConfig.production : apiConfig.development;
+  const ssrUrl = uiSource === "remote" ? uiConfig.ssr : undefined;
 
   return {
     env,
@@ -182,19 +160,19 @@ export const loadConfig = Effect.gen(function* () {
     title: config.app.host.title,
     hostUrl: detectHostUrl(env, bootstrap?.host?.url),
     ui: {
-      name: config.app.ui.name,
+      name: uiConfig.name,
       url: uiUrl,
       ssrUrl,
       source: uiSource,
-      exposes: config.app.ui.exposes,
+      exposes: uiConfig.exposes || {},
     },
     api: {
-      name: config.app.api.name,
+      name: apiConfig.name,
       url: apiUrl,
       source: apiSource,
       proxy: apiProxy,
-      variables: config.app.api.variables,
-      secrets: config.app.api.secrets,
+      variables: apiConfig.variables,
+      secrets: apiConfig.secrets,
     },
   } satisfies RuntimeConfig;
 });

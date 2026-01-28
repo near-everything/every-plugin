@@ -1,57 +1,21 @@
 import { dirname, join } from "path";
+import type {
+  AppConfig,
+  BosConfig,
+  GatewayConfig,
+  HostConfig,
+  PortConfig,
+  RemoteConfig,
+  SourceMode,
+} from "./types";
 
-export type SourceMode = "local" | "remote";
-
-export interface AppConfig {
-  host: SourceMode;
-  ui: SourceMode;
-  api: SourceMode;
-  proxy?: boolean;
-}
+export type { AppConfig, BosConfig, GatewayConfig, HostConfig, PortConfig, RemoteConfig, SourceMode };
 
 export const DEFAULT_DEV_CONFIG: AppConfig = {
   host: "local",
   ui: "local",
   api: "local",
 };
-
-export interface HostConfig {
-  title: string;
-  description?: string;
-  development: string;
-  production: string;
-  secrets?: string[];
-}
-
-export interface RemoteConfig {
-  name: string;
-  development: string;
-  production: string;
-  ssr?: string;
-  proxy?: string;
-  exposes?: Record<string, string>;
-  variables?: Record<string, string>;
-  secrets?: string[];
-}
-
-export interface GatewayConfig {
-  development: string;
-  production: string;
-}
-
-export interface BosConfig {
-  account: string;
-  gateway: GatewayConfig;
-  templates?: Record<string, string>;
-  create?: Record<string, string>;
-  cli?: {
-    version?: string;
-  };
-  app: {
-    host: HostConfig;
-    [remoteName: string]: HostConfig | RemoteConfig;
-  };
-}
 
 let cachedConfig: BosConfig | null = null;
 let configDir: string | null = null;
@@ -204,12 +168,6 @@ export function parsePort(url: string): number {
   } catch {
     return 3000;
   }
-}
-
-export interface PortConfig {
-  host: number;
-  ui: number;
-  api: number;
 }
 
 export function getPortsFromConfig(): PortConfig {

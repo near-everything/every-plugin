@@ -1,35 +1,10 @@
 import { Context, Effect, Layer } from "effect";
+import type { BosConfig } from "everything-dev";
 import { Graph } from "near-social-js";
 import { ConfigNotFoundError, ConfigParseError } from "../errors";
 import { buildConfigPath, buildSecretsPath } from "../utils";
 
-export interface BosConfig {
-  account: string;
-  gateway?: string;
-  app: {
-    host: {
-      title: string;
-      description?: string;
-      development: string;
-      production: string;
-      secrets?: string[];
-    };
-    ui: {
-      name: string;
-      development: string;
-      production: string;
-      ssr?: string;
-      exposes: Record<string, string>;
-    };
-    api: {
-      name: string;
-      development: string;
-      production: string;
-      variables?: Record<string, unknown>;
-      secrets?: string[];
-    };
-  };
-}
+export type { BosConfig };
 
 export interface SecretsReference {
   cid: string;
@@ -153,8 +128,9 @@ export const ConfigServiceLive = Layer.succeed(
         secrets.push(...config.app.host.secrets);
       }
 
-      if (config.app.api.secrets) {
-        secrets.push(...config.app.api.secrets);
+      const apiConfig = config.app.api;
+      if (apiConfig && "secrets" in apiConfig && apiConfig.secrets) {
+        secrets.push(...apiConfig.secrets);
       }
 
       return [...new Set(secrets)];

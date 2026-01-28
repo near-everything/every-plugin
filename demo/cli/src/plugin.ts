@@ -4,9 +4,9 @@ import { z } from "every-plugin/zod";
 import { Graph } from "near-social-js";
 
 import {
+  type AppConfig,
   type BosConfig as BosConfigType,
   DEFAULT_DEV_CONFIG,
-  type AppConfig,
   getConfigDir,
   getHost,
   getHostRemoteUrl,
@@ -25,14 +25,13 @@ import {
   createNovaClient,
   getNovaConfig,
   getSecretsGroupId,
-  hasNovaCredentials,
   parseEnvFile,
   registerSecretsGroup,
   removeNovaCredentials,
   retrieveSecrets,
   saveNovaCredentials,
   uploadSecrets,
-  verifyNovaCredentials,
+  verifyNovaCredentials
 } from "./lib/nova";
 import { type AppOrchestrator, startApp } from "./lib/orchestrator";
 import { run } from "./utils/run";
@@ -221,7 +220,7 @@ export default createPlugin({
       if (input.account && input.domain) {
         const graph = new Graph();
         const configPath = `${input.account}/bos/gateways/${input.domain}/bos.config.json`;
-        
+
         try {
           const data = await graph.get({ keys: [configPath] });
           if (data) {
@@ -258,7 +257,7 @@ export default createPlugin({
       }
 
       const config = remoteConfig || deps.bosConfig;
-      
+
       if (!config) {
         console.error("No configuration available. Provide --account and --domain, or run from a BOS project directory.");
         return {
@@ -542,7 +541,7 @@ export default createPlugin({
 
     status: builder.status.handler(async ({ input }) => {
       const config = deps.bosConfig;
-      
+
       if (!config) {
         return { endpoints: [] };
       }
@@ -924,7 +923,7 @@ export default createPlugin({
           stdio: "inherit",
         });
 
-        subprocess.catch(() => {});
+        subprocess.catch(() => { });
 
         return {
           status: "started" as const,
@@ -1060,19 +1059,11 @@ export default createPlugin({
       }
 
       try {
-        const cliPkgPath = `${configDir}/cli/package.json`;
-        const cliPkg = await Bun.file(cliPkgPath).json() as {
-          version: string;
-          catalog: Record<string, string>;
-        };
-
-        const cliCatalog = cliPkg.catalog;
-
         const graph = new Graph();
         const configPath = `${account}/bos/gateways/${gateway}/bos.config.json`;
-        
+
         let remoteConfig: { cli?: { version?: string }; app?: { host?: { production?: string } } } | null = null;
-        
+
         const data = await graph.get({ keys: [configPath] });
         if (data) {
           const parts = configPath.split("/");
@@ -1131,6 +1122,24 @@ export default createPlugin({
           };
         }
 
+        const npmUrl = `https://registry.npmjs.org/everything-dev/${cliVersion}`;
+        const npmResponse = await fetch(npmUrl);
+        if (!npmResponse.ok) {
+          return {
+            status: "error" as const,
+            account,
+            gateway,
+            cliVersion,
+            hostUrl,
+            catalogUpdated: false,
+            packagesUpdated: [],
+            error: `Failed to fetch everything-dev@${cliVersion} from NPM (${npmResponse.status}). Ensure the version is published.`,
+          };
+        }
+
+        const npmPkg = await npmResponse.json() as { catalog?: Record<string, string> };
+        const cliCatalog = npmPkg.catalog ?? {};
+
         const bosConfigPath = `${configDir}/bos.config.json`;
         const updatedBosConfig = {
           ...bosConfig,
@@ -1145,8 +1154,11 @@ export default createPlugin({
           workspaces: { packages: string[]; catalog: Record<string, string> };
           [key: string]: unknown;
         };
-        
-        rootPkg.workspaces.catalog = { ...cliCatalog };
+
+        rootPkg.workspaces.catalog = {
+          ...cliCatalog,
+          "everything-dev": cliVersion,
+        };
         await Bun.write(rootPkgPath, JSON.stringify(rootPkg, null, 2));
 
         const packages = ["host", "ui", "api"];
@@ -1155,7 +1167,7 @@ export default createPlugin({
         for (const pkg of packages) {
           const pkgPath = `${configDir}/${pkg}/package.json`;
           const pkgFile = Bun.file(pkgPath);
-          
+
           if (!(await pkgFile.exists())) continue;
 
           const pkgJson = await pkgFile.json() as {
@@ -1163,7 +1175,7 @@ export default createPlugin({
             devDependencies?: Record<string, string>;
             peerDependencies?: Record<string, string>;
           };
-          
+
           let updated = false;
 
           for (const depType of ["dependencies", "devDependencies", "peerDependencies"] as const) {

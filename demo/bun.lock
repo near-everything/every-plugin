@@ -85,6 +85,7 @@
       },
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260120.0",
+        "everything-dev": "workspace:*",
         "typescript": "^5.9.3",
         "wrangler": "^4.59.3",
       },
@@ -124,6 +125,7 @@
         "@types/node": "catalog:",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
+        "everything-dev": "workspace:*",
         "tsx": "^4.21.0",
         "typescript": "catalog:",
         "vite-tsconfig-paths": "^6.0.4",

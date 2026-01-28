@@ -31,10 +31,12 @@
       "development": "http://localhost:3002",
       "production": "https://elliot-braem-1809-ui-every-plugin-near-everything-a1e00588d-ze.zephyrcloud.app",
       "exposes": {
-        "App": "./App",
-        "components": "./components",
-        "providers": "./providers",
-        "types": "./types"
+        "./Router": "./src/router.tsx",
+        "./Hydrate": "./src/hydrate.tsx",
+        "./components": "./src/components/index.ts",
+        "./providers": "./src/providers/index.tsx",
+        "./hooks": "./src/hooks/index.ts",
+        "./types": "./src/types/index.ts"
       },
       "ssr": "https://elliot-braem-1894-ui-every-plugin-near-everything-af6ea5ac1-ze.zephyrcloud.app"
     },
@@ -44,10 +46,7 @@
       "production": "https://elliot-braem-1811-api-every-plugin-near-everythin-2defcb105-ze.zephyrcloud.app",
       "proxy": "https://elliot-braem-1811-api-every-plugin-near-everythin-2defcb105-ze.zephyrcloud.app",
       "variables": {},
-      "secrets": [
-        "API_DATABASE_URL",
-        "API_DATABASE_AUTH_TOKEN"
-      ]
+      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN"]
     }
   }
 }
