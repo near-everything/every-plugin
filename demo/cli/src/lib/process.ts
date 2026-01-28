@@ -29,7 +29,7 @@ const processConfigBases: Record<string, ProcessConfigBase> = {
   host: {
     name: "host",
     command: "bun",
-    args: ["run", "tsx", "server.ts"],
+    args: ["run", "dev"],
     cwd: "host",
     readyPatterns: [/listening on/i, /server started/i, /ready/i, /running at/i],
     errorPatterns: [/error:/i, /failed/i, /exception/i],
@@ -37,7 +37,7 @@ const processConfigBases: Record<string, ProcessConfigBase> = {
   "ui-ssr": {
     name: "ui-ssr",
     command: "bun",
-    args: ["run", "rsbuild", "build", "--watch"],
+    args: ["run", "build:ssr", "--watch"],
     cwd: "ui",
     readyPatterns: [/built in/i, /compiled.*successfully/i],
     errorPatterns: [/error/i, /failed/i],
@@ -45,7 +45,7 @@ const processConfigBases: Record<string, ProcessConfigBase> = {
   ui: {
     name: "ui",
     command: "bun",
-    args: ["run", "rsbuild", "dev"],
+    args: ["run", "dev"],
     cwd: "ui",
     readyPatterns: [/ready in/i, /compiled.*successfully/i, /➜.*local:/i],
     errorPatterns: [/error/i, /failed to compile/i],
@@ -53,7 +53,7 @@ const processConfigBases: Record<string, ProcessConfigBase> = {
   api: {
     name: "api",
     command: "bun",
-    args: ["run", "rspack", "serve"],
+    args: ["run", "dev"],
     cwd: "api",
     readyPatterns: [/compiled.*successfully/i, /listening/i, /started/i],
     errorPatterns: [/error/i, /failed/i],
@@ -274,7 +274,11 @@ export const spawnRemoteHost = (
 
     const configDir = getConfigDir();
     const configPath = resolve(configDir, "bos.config.json");
-    const localUrl = `http://localhost:${config.port}`;
+
+    let hostUrl = `http://localhost:${config.port}`;
+    if (process.env.HOST_URL) {
+      hostUrl = process.env.HOST_URL;
+    }
 
     const hostSecrets = loadSecretsFor("host");
     const apiSecrets = loadSecretsFor("api");
@@ -287,7 +291,7 @@ export const spawnRemoteHost = (
     const bootstrap: BootstrapConfig = {
       configPath,
       secrets: allSecrets,
-      host: { url: localUrl },
+      host: { url: hostUrl },
       ui: { source: uiSource },
       api: { source: apiSource, proxy: apiProxy },
     };

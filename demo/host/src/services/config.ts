@@ -99,10 +99,6 @@ function detectHostUrl(env: "development" | "production", bootstrapUrl?: string,
   
   if (process.env.HOST_URL) return process.env.HOST_URL;
   
-  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
-  }
-  
   const effectivePort = (port ?? Number(process.env.PORT)) || 3000;
   return `http://localhost:${effectivePort}`;
 }
@@ -178,7 +174,7 @@ export const loadConfig = Effect.gen(function* () {
 
   const uiUrl = uiSource === "remote" ? config.app.ui.production : config.app.ui.development;
   const apiUrl = apiSource === "remote" ? config.app.api.production : config.app.api.development;
-  const ssrUrl = config.app.ui.ssr || undefined;
+  const ssrUrl = uiSource === "remote" ? config.app.ui.ssr : undefined;
 
   return {
     env,

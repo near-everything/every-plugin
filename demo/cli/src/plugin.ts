@@ -280,6 +280,10 @@ export default createPlugin({
         API_REMOTE_URL: config.app.api.production,
       };
 
+      if (process.env.HOST_URL) {
+        env.HOST_URL = process.env.HOST_URL;
+      }
+
       const uiConfig = config.app.ui as { ssr?: string };
       if (uiConfig.ssr) {
         env.UI_SSR_URL = uiConfig.ssr;
@@ -320,17 +324,21 @@ export default createPlugin({
     }),
 
     build: builder.build.handler(async ({ input: buildInput }) => {
-      const packages = getPackages();
+      const allPackages = getPackages();
       const { configDir } = deps;
 
-      if (buildInput.package !== "all" && !packages.includes(buildInput.package)) {
+      const targets = buildInput.packages === "all"
+        ? allPackages
+        : buildInput.packages.split(",").map((p) => p.trim()).filter((p) => allPackages.includes(p));
+
+      if (targets.length === 0) {
+        console.log(colors.dim(`  No valid packages to build`));
         return {
           status: "error" as const,
           built: [],
         };
       }
 
-      const targets = buildInput.package === "all" ? packages : [buildInput.package];
       const built: string[] = [];
 
       const buildEffect = Effect.gen(function* () {
@@ -341,6 +349,7 @@ export default createPlugin({
           env.NODE_ENV = "development";
         } else {
           env.NODE_ENV = "production";
+          env.DEPLOY = "true";
           if (!hasZephyrConfig(bosEnv)) {
             console.log(colors.dim(`  ${icons.config} Zephyr tokens not configured - you may be prompted to login`));
             console.log(colors.dim(`  Setup: ${ZEPHYR_DOCS_URL}`));

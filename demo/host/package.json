@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "BOS_CONFIG_PATH=../bos.config.json tsx server.ts",
-    "build": "NODE_ENV=production rsbuild build",
+    "build": "rsbuild build",
+    "deploy": "DEPLOY=true rsbuild build",
     "bootstrap": "tsx bootstrap.ts",
     "preview": "NODE_ENV=production BOS_CONFIG_PATH=../bos.config.json tsx server.ts",
     "test": "NODE_ENV=production BOS_CONFIG_PATH=../bos.config.json vitest run",

@@ -44,9 +44,9 @@ const ServeResultSchema = z.object({
 });
 
 const BuildOptionsSchema = z.object({
-  package: z.string().default("all"),
+  packages: z.string().default("all"),
   force: z.boolean().default(false),
-  deploy: z.boolean().default(true),
+  deploy: z.boolean().default(false),
 });
 
 const BuildResultSchema = z.object({

@@ -13,7 +13,7 @@ import pkg from "./package.json";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const normalizedName = pkg.name;
-const isProduction = process.env.NODE_ENV === "production";
+const shouldDeploy = process.env.DEPLOY === "true";
 const buildTarget = process.env.BUILD_TARGET as "client" | "server" | undefined;
 const isServerBuild = buildTarget === "server";
 
@@ -59,7 +59,7 @@ function createClientConfig() {
     }),
   ];
 
-  if (isProduction) {
+  if (shouldDeploy) {
     plugins.push(
       withZephyr({
         hooks: {
@@ -132,7 +132,7 @@ function createClientConfig() {
 function createServerConfig() {
   const plugins = [pluginReact()];
 
-  if (isProduction) {
+  if (shouldDeploy) {
     plugins.push(
       withZephyr({
         hooks: {

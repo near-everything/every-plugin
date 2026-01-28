@@ -15,7 +15,7 @@
       "title": "demo | everything",
       "description": "This is a demo application orchestrated by a bos.config.json in the project root.",
       "development": "http://localhost:3000",
-      "production": "https://elliot-braem-1877-host-every-plugin-near-everythi-fc51c686d-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1901-host-every-plugin-near-everythi-bc0248b21-ze.zephyrcloud.app",
       "secrets": [
         "HOST_DATABASE_URL",
         "HOST_DATABASE_AUTH_TOKEN",
@@ -33,7 +33,7 @@
         "providers": "./providers",
         "types": "./types"
       },
-      "ssr": "https://elliot-braem-1819-ui-every-plugin-near-everything-ec1fe6299-ze.zephyrcloud.app"
+      "ssr": "https://elliot-braem-1894-ui-every-plugin-near-everything-af6ea5ac1-ze.zephyrcloud.app"
     },
     "api": {
       "name": "api",

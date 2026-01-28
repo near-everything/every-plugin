@@ -7,7 +7,7 @@ import DrizzleORMMigrations from "@proj-airi/unplugin-drizzle-orm-migrations/rsp
 import { withZephyr } from "zephyr-rsbuild-plugin";
 
 const __dirname = import.meta.dirname;
-const isProduction = process.env.NODE_ENV === "production";
+const shouldDeploy = process.env.DEPLOY === "true";
 
 const configPath =
   process.env.BOS_CONFIG_PATH ?? path.resolve(__dirname, "../bos.config.json");
@@ -28,7 +28,7 @@ function updateBosConfig(url: string) {
 
 const plugins = [pluginReact()];
 
-if (isProduction) {
+if (shouldDeploy) {
   plugins.push(
     withZephyr({
       hooks: {

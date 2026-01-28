@@ -230,23 +230,17 @@ async function main() {
 
   program
     .command("build")
-    .description(`Build packages (${packages.join(", ")}). Deploys to Zephyr Cloud by default.`)
-    .argument("[package]", "Package to build", "all")
+    .description(`Build packages locally (${packages.join(", ")})`)
+    .argument("[packages]", "Packages to build (comma-separated: host,ui,api)", "all")
     .option("--force", "Force rebuild")
-    .option("--no-deploy", "Build locally without Zephyr deploy")
-    .addHelpText("after", `
-Zephyr Configuration:
-  Set ZE_SERVER_TOKEN and ZE_USER_EMAIL in .env.bos for CI/CD deployment.
-  Docs: https://docs.zephyr-cloud.io/features/ci-cd-server-token
-`)
-    .action(async (pkg: string, options) => {
+    .action(async (pkgs: string, options) => {
       console.log();
-      console.log(`  ${icons.pkg} Building${options.deploy ? " & deploying" : ""}...`);
+      console.log(`  ${icons.pkg} Building...`);
 
       const result = await client.build({
-        package: pkg,
+        packages: pkgs,
         force: options.force || false,
-        deploy: options.deploy !== false,
+        deploy: false,
       });
 
       if (result.status === "error") {
@@ -256,9 +250,37 @@ Zephyr Configuration:
 
       console.log();
       console.log(colors.green(`${icons.ok} Built: ${result.built.join(", ")}`));
-      if (result.deployed) {
-        console.log(colors.dim(`  Deployed to Zephyr Cloud`));
+      console.log();
+    });
+
+  program
+    .command("deploy")
+    .description(`Build and deploy to Zephyr Cloud (${packages.join(", ")})`)
+    .argument("[packages]", "Packages to deploy (comma-separated: host,ui,api)", "all")
+    .option("--force", "Force rebuild")
+    .addHelpText("after", `
+Zephyr Configuration:
+  Set ZE_SERVER_TOKEN and ZE_USER_EMAIL in .env.bos for CI/CD deployment.
+  Docs: https://docs.zephyr-cloud.io/features/ci-cd-server-token
+`)
+    .action(async (pkgs: string, options) => {
+      console.log();
+      console.log(`  ${icons.pkg} Building & deploying...`);
+
+      const result = await client.build({
+        packages: pkgs,
+        force: options.force || false,
+        deploy: true,
+      });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} Deploy failed`));
+        process.exit(1);
       }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Deployed: ${result.built.join(", ")}`));
+      console.log(colors.dim(`  Deployed to Zephyr Cloud`));
       console.log();
     });
 

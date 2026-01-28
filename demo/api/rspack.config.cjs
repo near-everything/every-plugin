@@ -4,7 +4,7 @@ const { EveryPluginDevServer } = require("every-plugin/build/rspack");
 const { withZephyr } = require("zephyr-rspack-plugin");
 const pkg = require("./package.json");
 
-const isProduction = process.env.NODE_ENV === 'production';
+const shouldDeploy = process.env.DEPLOY === 'true';
 
 function updateHostConfig(name, url) {
   try {
@@ -35,7 +35,7 @@ const baseConfig = {
   stats: 'errors-warnings',
 };
 
-module.exports = isProduction
+module.exports = shouldDeploy
   ? withZephyr({
       hooks: {
         onDeployComplete: (info) => {

@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@libsql/client": "catalog:",
+    "@orpc/contract": "^1.13.4",
+    "@orpc/server": "^1.13.4",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "near-kit": "^0.7.0"
@@ -24,13 +26,14 @@
     "@rspack/core": "^1.6.8",
     "@types/node": "catalog:",
     "dotenv": "^17.2.3",
-    "every-plugin": "0.8.6",
+    "every-plugin": "catalog:",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "catalog:",
     "zephyr-rspack-plugin": "^0.1.2"
   },
   "scripts": {
     "build": "rspack build",
+    "deploy": "DEPLOY=true rspack build",
     "dev": "rspack serve",
     "test": "vitest run",
     "test:watch": "vitest",

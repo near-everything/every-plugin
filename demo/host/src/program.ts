@@ -6,11 +6,10 @@ import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { RPCHandler } from "@orpc/server/fetch";
 import { BatchHandlerPlugin } from "@orpc/server/plugins";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { Effect, ManagedRuntime } from "every-plugin/effect";
+import { Cause, Effect, ManagedRuntime } from "every-plugin/effect";
 import { formatORPCError } from "every-plugin/errors";
 import { onError } from "every-plugin/orpc";
 import { type Context, Hono } from "hono";
-import { compress } from "hono/compress";
 import { cors } from "hono/cors";
 import { FullServerLive } from "./layers";
 import { type Auth, AuthService } from "./services/auth";
@@ -22,6 +21,57 @@ import { loadRouterModule, type RouterModule } from "./services/federation.serve
 import { type PluginResult, PluginsService } from "./services/plugins";
 import { createRouter } from "./services/router";
 import { logger } from "./utils/logger";
+
+function extractErrorDetails(error: unknown): { message: string; stack?: string; cause?: string } {
+  if (!error) return { message: "Unknown error (null/undefined)" };
+
+  if (error instanceof Error) {
+    const details: { message: string; stack?: string; cause?: string } = {
+      message: error.message || error.name || "Error",
+      stack: error.stack,
+    };
+
+    if (error.cause) {
+      if (error.cause instanceof Error) {
+        details.cause = `${error.cause.name}: ${error.cause.message}`;
+      } else if (typeof error.cause === "object" && "_tag" in (error.cause as object)) {
+        try {
+          const squashed = Cause.squash(error.cause as Cause.Cause<unknown>);
+          if (squashed instanceof Error) {
+            details.cause = `[Effect] ${squashed.name}: ${squashed.message}`;
+          } else {
+            details.cause = `[Effect] ${String(squashed)}`;
+          }
+        } catch {
+          details.cause = `[Effect Cause] ${JSON.stringify(error.cause)}`;
+        }
+      } else {
+        details.cause = String(error.cause);
+      }
+    }
+
+    return details;
+  }
+
+  if (typeof error === "object" && error !== null) {
+    if ("_tag" in error) {
+      try {
+        const squashed = Cause.squash(error as Cause.Cause<unknown>);
+        return extractErrorDetails(squashed);
+      } catch {
+        return { message: `[Effect] ${JSON.stringify(error)}` };
+      }
+    }
+
+    if ("message" in error) {
+      return { message: String((error as { message: unknown }).message) };
+    }
+
+    return { message: JSON.stringify(error) };
+  }
+
+  return { message: String(error) };
+}
 
 function nodeHeadersToHeaders(nodeHeaders: IncomingHttpHeaders): Headers {
   const headers = new Headers();
@@ -98,7 +148,8 @@ function setupApiRoutes(
   config: RuntimeConfig,
   plugins: PluginResult,
   auth: Auth,
-  db: Database
+  db: Database,
+  router: ReturnType<typeof createRouter>
 ) {
   const isProxyMode = !!config.api.proxy;
 
@@ -113,8 +164,6 @@ function setupApiRoutes(
 
     return;
   }
-
-  const router = createRouter(plugins);
 
   const rpcHandler = new RPCHandler(router, {
     plugins: [new BatchHandlerPlugin()],
@@ -175,6 +224,19 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
 
   const app = new Hono();
 
+  app.onError((err, c) => {
+    const details = extractErrorDetails(err);
+    logger.error(`[Hono Error] ${c.req.method} ${c.req.path}`);
+    logger.error(`[Hono Error] Message: ${details.message}`);
+    if (details.cause) {
+      logger.error(`[Hono Error] Cause: ${details.cause}`);
+    }
+    if (details.stack) {
+      logger.error(`[Hono Error] Stack:\n${details.stack}`);
+    }
+    return c.json({ error: details.message, cause: details.cause }, 500);
+  });
+
   app.use(
     "/*",
     cors({
@@ -186,19 +248,11 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
     })
   );
 
-  if (!isDev) {
-    app.use("/*", async (c, next) => {
-      const accept = c.req.header("accept") || "";
-      if (accept.includes("text/html")) {
-        return next();
-      }
-      return compress()(c, next);
-    });
-  }
-
   app.get("/health", (c: Context) => c.text("OK"));
 
-  setupApiRoutes(app, config, plugins, auth, db);
+  const apiRouter = createRouter(plugins);
+
+  setupApiRoutes(app, config, plugins, auth, db, apiRouter);
 
   logger.info(`[Config] Host URL: ${config.hostUrl}`);
   logger.info(`[Config] UI source: ${config.ui.source} → ${config.ui.url}`);
@@ -233,10 +287,19 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
     try {
       const { env, account, title, hostUrl } = config;
       const assetsUrl = config.ui.url;
+      
+      const requestContext = await createRequestContext(c.req.raw, auth, db);
+      const pluginApi = plugins.api as { createClient?: (ctx: unknown) => unknown } | null;
+      if (pluginApi?.createClient) {
+        (globalThis as Record<string, unknown>).$apiClient = pluginApi.createClient(requestContext);
+      }
+      
       const result = await ssrRouterModule.renderToStream(c.req.raw, {
         assetsUrl,
         runtimeConfig: { env, account, title, hostUrl, assetsUrl, apiBase: "/api", rpcBase: "/api/rpc" },
       });
+      
+      (globalThis as Record<string, unknown>).$apiClient = undefined;
       return new Response(result.stream, {
         status: result.statusCode,
         headers: result.headers,

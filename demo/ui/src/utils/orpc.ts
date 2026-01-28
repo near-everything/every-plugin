@@ -14,7 +14,7 @@ declare global {
 
 function getApiUrl(): string {
   if (typeof window === 'undefined') {
-    throw new Error('RPCLink is not allowed on the server side. Use server-side client instead.');
+    throw new Error('RPCLink is not allowed on the server side.');
   }
   const base = window.__RUNTIME_CONFIG__?.rpcBase;
   return base ? `${window.location.origin}${base}` : `${window.location.origin}/api/rpc`;

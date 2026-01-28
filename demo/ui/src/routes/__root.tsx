@@ -142,18 +142,20 @@ function RootComponent() {
           <Toaster position="bottom-right" richColors closeButton />
         </ThemeProvider>
         <Scripts />
-        <ClientOnly>
-          <TanStackDevtools
-            config={{ position: "bottom-right" }}
-            plugins={[
-              {
-                name: "Tanstack Router",
-                render: <TanStackRouterDevtoolsPanel />,
-              },
-              TanStackQueryDevtools,
-            ]}
-          />
-        </ClientOnly>
+        {process.env.NODE_ENV === "development" && (
+          <ClientOnly>
+            <TanStackDevtools
+              config={{ position: "bottom-right" }}
+              plugins={[
+                {
+                  name: "Tanstack Router",
+                  render: <TanStackRouterDevtoolsPanel />,
+                },
+                TanStackQueryDevtools,
+              ]}
+            />
+          </ClientOnly>
+        )}
       </body>
     </html>
   );
