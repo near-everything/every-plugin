@@ -655,6 +655,53 @@ Zephyr Configuration:
     });
 
   program
+    .command("sync")
+    .description("Sync dependencies and config from everything-dev CLI")
+    .option("--account <account>", "NEAR account to sync from (default: every.near)")
+    .option("--gateway <gateway>", "Gateway domain to sync from (default: everything.dev)")
+    .option("--force", "Force sync even if versions match")
+    .action(async (options: { account?: string; gateway?: string; force?: boolean }) => {
+      console.log();
+      const source = options.account || options.gateway 
+        ? `${options.account || "every.near"}/${options.gateway || "everything.dev"}`
+        : "every.near/everything.dev";
+      console.log(`  ${icons.pkg} Syncing from ${colors.cyan(source)}...`);
+
+      const result = await client.sync({
+        account: options.account,
+        gateway: options.gateway,
+        force: options.force || false,
+      });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} Sync failed: ${result.error || "Unknown error"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.cyan(frames.top(52)));
+      console.log(`  ${icons.ok} ${gradients.cyber("SYNCED")}`);
+      console.log(colors.cyan(frames.bottom(52)));
+      console.log();
+      console.log(`  ${colors.dim("Source:")}      ${colors.cyan(`${result.account}/${result.gateway}`)}`);
+      console.log(`  ${colors.dim("CLI Version:")} ${colors.cyan(result.cliVersion)}`);
+      console.log(`  ${colors.dim("Host URL:")}    ${colors.cyan(result.hostUrl)}`);
+      console.log();
+      
+      if (result.catalogUpdated) {
+        console.log(colors.green(`  ${icons.ok} Updated root package.json catalog`));
+      }
+      
+      if (result.packagesUpdated.length > 0) {
+        console.log(colors.green(`  ${icons.ok} Updated packages: ${result.packagesUpdated.join(", ")}`));
+      }
+      
+      console.log();
+      console.log(colors.dim("  Run 'bun install' to update lockfile"));
+      console.log();
+    });
+
+  program
     .command("login")
     .description("Login to NOVA for encrypted secrets management")
     .action(async () => {

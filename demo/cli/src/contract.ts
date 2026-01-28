@@ -238,6 +238,23 @@ const GatewaySyncResultSchema = z.object({
   error: z.string().optional(),
 });
 
+const SyncOptionsSchema = z.object({
+  account: z.string().optional(),
+  gateway: z.string().optional(),
+  force: z.boolean().optional(),
+});
+
+const SyncResultSchema = z.object({
+  status: z.enum(["synced", "error"]),
+  account: z.string(),
+  gateway: z.string(),
+  cliVersion: z.string(),
+  hostUrl: z.string(),
+  catalogUpdated: z.boolean(),
+  packagesUpdated: z.array(z.string()),
+  error: z.string().optional(),
+});
+
 export const bosContract = oc.router({
   dev: oc
     .route({ method: "POST", path: "/dev" })
@@ -329,6 +346,11 @@ export const bosContract = oc.router({
     .route({ method: "POST", path: "/gateway/sync" })
     .input(GatewaySyncOptionsSchema)
     .output(GatewaySyncResultSchema),
+
+  sync: oc
+    .route({ method: "POST", path: "/sync" })
+    .input(SyncOptionsSchema)
+    .output(SyncResultSchema),
 });
 
 export type BosContract = typeof bosContract;
@@ -362,3 +384,5 @@ export type SecretsDeleteResult = z.infer<typeof SecretsDeleteResultSchema>;
 export type LoginOptions = z.infer<typeof LoginOptionsSchema>;
 export type LoginResult = z.infer<typeof LoginResultSchema>;
 export type LogoutResult = z.infer<typeof LogoutResultSchema>;
+export type SyncOptions = z.infer<typeof SyncOptionsSchema>;
+export type SyncResult = z.infer<typeof SyncResultSchema>;

@@ -382,7 +382,7 @@ export default createPlugin({
     }),
 
     publish: builder.publish.handler(async ({ input: publishInput }) => {
-      const { bosConfig, nearPrivateKey } = deps;
+      const { configDir, bosConfig, nearPrivateKey } = deps;
 
       if (!bosConfig) {
         return {
@@ -402,7 +402,20 @@ export default createPlugin({
         const bosEnv = yield* loadBosEnv;
         const privateKey = nearPrivateKey || bosEnv.NEAR_PRIVATE_KEY;
 
-        const socialArgs = buildSocialSetArgs(bosConfig.account, gatewayDomain, bosConfig);
+        const rootPkgPath = `${configDir}/package.json`;
+        const rootPkg = yield* Effect.tryPromise({
+          try: () => Bun.file(rootPkgPath).json() as Promise<{ version: string }>,
+          catch: (e) => new Error(`Failed to read root package.json: ${e}`),
+        });
+
+        const configToPublish = {
+          ...bosConfig,
+          cli: {
+            version: rootPkg.version,
+          },
+        };
+
+        const socialArgs = buildSocialSetArgs(bosConfig.account, gatewayDomain, configToPublish);
         const argsBase64 = Buffer.from(JSON.stringify(socialArgs)).toString("base64");
 
         if (publishInput.dryRun) {
@@ -1019,6 +1032,176 @@ export default createPlugin({
       } catch (error) {
         return {
           status: "error" as const,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    sync: builder.sync.handler(async ({ input }) => {
+      const { configDir, bosConfig } = deps;
+
+      const DEFAULT_SYNC_ACCOUNT = "every.near";
+      const DEFAULT_SYNC_GATEWAY = "everything.dev";
+
+      const account = input.account || DEFAULT_SYNC_ACCOUNT;
+      const gateway = input.gateway || DEFAULT_SYNC_GATEWAY;
+
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          account,
+          gateway,
+          cliVersion: "",
+          hostUrl: "",
+          catalogUpdated: false,
+          packagesUpdated: [],
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
+
+      try {
+        const cliPkgPath = `${configDir}/cli/package.json`;
+        const cliPkg = await Bun.file(cliPkgPath).json() as {
+          version: string;
+          catalog: Record<string, string>;
+        };
+
+        const cliCatalog = cliPkg.catalog;
+
+        const graph = new Graph();
+        const configPath = `${account}/bos/gateways/${gateway}/bos.config.json`;
+        
+        let remoteConfig: { cli?: { version?: string }; app?: { host?: { production?: string } } } | null = null;
+        
+        const data = await graph.get({ keys: [configPath] });
+        if (data) {
+          const parts = configPath.split("/");
+          let current: unknown = data;
+          for (const part of parts) {
+            if (current && typeof current === "object" && part in current) {
+              current = (current as Record<string, unknown>)[part];
+            } else {
+              current = null;
+              break;
+            }
+          }
+          if (typeof current === "string") {
+            remoteConfig = JSON.parse(current);
+          }
+        }
+
+        if (!remoteConfig) {
+          return {
+            status: "error" as const,
+            account,
+            gateway,
+            cliVersion: "",
+            hostUrl: "",
+            catalogUpdated: false,
+            packagesUpdated: [],
+            error: `No config found at ${configPath} on Near Social. Run 'bos publish' first.`,
+          };
+        }
+
+        const cliVersion = remoteConfig.cli?.version;
+        if (!cliVersion) {
+          return {
+            status: "error" as const,
+            account,
+            gateway,
+            cliVersion: "",
+            hostUrl: "",
+            catalogUpdated: false,
+            packagesUpdated: [],
+            error: `Published config is missing 'cli.version'. Republish with updated bos.config.json.`,
+          };
+        }
+
+        const hostUrl = remoteConfig.app?.host?.production;
+        if (!hostUrl) {
+          return {
+            status: "error" as const,
+            account,
+            gateway,
+            cliVersion,
+            hostUrl: "",
+            catalogUpdated: false,
+            packagesUpdated: [],
+            error: `Published config is missing 'app.host.production'. Republish with updated bos.config.json.`,
+          };
+        }
+
+        const bosConfigPath = `${configDir}/bos.config.json`;
+        const updatedBosConfig = {
+          ...bosConfig,
+          cli: {
+            version: cliVersion,
+          },
+        };
+        await Bun.write(bosConfigPath, JSON.stringify(updatedBosConfig, null, 2));
+
+        const rootPkgPath = `${configDir}/package.json`;
+        const rootPkg = await Bun.file(rootPkgPath).json() as {
+          workspaces: { packages: string[]; catalog: Record<string, string> };
+          [key: string]: unknown;
+        };
+        
+        rootPkg.workspaces.catalog = { ...cliCatalog };
+        await Bun.write(rootPkgPath, JSON.stringify(rootPkg, null, 2));
+
+        const packages = ["host", "ui", "api"];
+        const packagesUpdated: string[] = [];
+
+        for (const pkg of packages) {
+          const pkgPath = `${configDir}/${pkg}/package.json`;
+          const pkgFile = Bun.file(pkgPath);
+          
+          if (!(await pkgFile.exists())) continue;
+
+          const pkgJson = await pkgFile.json() as {
+            dependencies?: Record<string, string>;
+            devDependencies?: Record<string, string>;
+            peerDependencies?: Record<string, string>;
+          };
+          
+          let updated = false;
+
+          for (const depType of ["dependencies", "devDependencies", "peerDependencies"] as const) {
+            const deps = pkgJson[depType];
+            if (!deps) continue;
+
+            for (const [name, version] of Object.entries(deps)) {
+              if (name in cliCatalog && version !== "catalog:") {
+                deps[name] = "catalog:";
+                updated = true;
+              }
+            }
+          }
+
+          if (updated || input.force) {
+            await Bun.write(pkgPath, JSON.stringify(pkgJson, null, 2));
+            packagesUpdated.push(pkg);
+          }
+        }
+
+        return {
+          status: "synced" as const,
+          account,
+          gateway,
+          cliVersion,
+          hostUrl,
+          catalogUpdated: true,
+          packagesUpdated,
+        };
+      } catch (error) {
+        return {
+          status: "error" as const,
+          account,
+          gateway,
+          cliVersion: "",
+          hostUrl: "",
+          catalogUpdated: false,
+          packagesUpdated: [],
           error: error instanceof Error ? error.message : "Unknown error",
         };
       }

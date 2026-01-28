@@ -45,8 +45,7 @@ export interface BosConfig {
   templates?: Record<string, string>;
   create?: Record<string, string>;
   cli?: {
-    remote?: string;
-    local?: string;
+    version?: string;
   };
   app: {
     host: HostConfig;

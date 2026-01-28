@@ -1,5 +1,8 @@
 {
   "account": "efiz.near",
+  "cli": {
+    "version": "0.0.10"
+  },
   "gateway": {
     "development": "http://localhost:8787",
     "production": "https://ejlbraem.com"
