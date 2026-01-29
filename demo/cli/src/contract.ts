@@ -2,8 +2,6 @@ import { oc } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 import {
   BosConfigSchema,
-  HostConfigSchema,
-  RemoteConfigSchema,
   SourceModeSchema,
 } from "./types";
 
@@ -216,16 +214,36 @@ const SyncOptionsSchema = z.object({
   account: z.string().optional(),
   gateway: z.string().optional(),
   force: z.boolean().optional(),
+  files: z.boolean().optional(),
 });
 
 const SyncResultSchema = z.object({
   status: z.enum(["synced", "error"]),
   account: z.string(),
   gateway: z.string(),
-  cliVersion: z.string(),
   hostUrl: z.string(),
   catalogUpdated: z.boolean(),
   packagesUpdated: z.array(z.string()),
+  filesSynced: z.array(z.object({
+    package: z.string(),
+    files: z.array(z.string()),
+  })).optional(),
+  error: z.string().optional(),
+});
+
+const FilesSyncOptionsSchema = z.object({
+  packages: z.array(z.string()).optional(),
+  force: z.boolean().optional(),
+});
+
+const FilesSyncResultSchema = z.object({
+  status: z.enum(["synced", "error"]),
+  synced: z.array(z.object({
+    package: z.string(),
+    files: z.array(z.string()),
+    depsAdded: z.array(z.string()).optional(),
+    depsUpdated: z.array(z.string()).optional(),
+  })),
   error: z.string().optional(),
 });
 
@@ -362,6 +380,11 @@ export const bosContract = oc.router({
     .route({ method: "POST", path: "/deps/sync" })
     .input(DepsSyncOptionsSchema)
     .output(DepsSyncResultSchema),
+
+  filesSync: oc
+    .route({ method: "POST", path: "/files/sync" })
+    .input(FilesSyncOptionsSchema)
+    .output(FilesSyncResultSchema),
 });
 
 export type BosContract = typeof bosContract;
@@ -400,3 +423,5 @@ export type DepsUpdateOptions = z.infer<typeof DepsUpdateOptionsSchema>;
 export type DepsUpdateResult = z.infer<typeof DepsUpdateResultSchema>;
 export type DepsSyncOptions = z.infer<typeof DepsSyncOptionsSchema>;
 export type DepsSyncResult = z.infer<typeof DepsSyncResultSchema>;
+export type FilesSyncOptions = z.infer<typeof FilesSyncOptionsSchema>;
+export type FilesSyncResult = z.infer<typeof FilesSyncResultSchema>;

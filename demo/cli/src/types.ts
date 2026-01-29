@@ -9,6 +9,9 @@ export const HostConfigSchema = z.object({
   development: z.string(),
   production: z.string(),
   secrets: z.array(z.string()).optional(),
+  template: z.string().optional(),
+  files: z.array(z.string()).optional(),
+  sync: z.lazy(() => SyncConfigSchema).optional(),
 });
 export type HostConfig = z.infer<typeof HostConfigSchema>;
 
@@ -21,6 +24,9 @@ export const RemoteConfigSchema = z.object({
   exposes: z.record(z.string(), z.string()).optional(),
   variables: z.record(z.string(), z.string()).optional(),
   secrets: z.array(z.string()).optional(),
+  template: z.string().optional(),
+  files: z.array(z.string()).optional(),
+  sync: z.lazy(() => SyncConfigSchema).optional(),
 });
 export type RemoteConfig = z.infer<typeof RemoteConfigSchema>;
 
@@ -38,11 +44,17 @@ export const SharedDepConfigSchema = z.object({
 });
 export type SharedDepConfig = z.infer<typeof SharedDepConfigSchema>;
 
+export const SyncConfigSchema = z.object({
+  scripts: z.union([z.array(z.string()), z.literal(true)]).optional(),
+  dependencies: z.boolean().default(true),
+  devDependencies: z.boolean().default(true),
+});
+export type SyncConfig = z.infer<typeof SyncConfigSchema>;
+
 export const BosConfigSchema = z.object({
   account: z.string(),
   gateway: GatewayConfigSchema,
-  templates: z.record(z.string(), z.string()).optional(),
-  create: z.record(z.string(), z.string()).optional(),
+  template: z.string().optional(),
   cli: z.object({
     version: z.string().optional(),
   }).optional(),

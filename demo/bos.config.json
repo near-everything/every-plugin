@@ -1,8 +1,6 @@
 {
-  "account": "efiz.near",
-  "cli": {
-    "version": "0.0.10"
-  },
+  "account": "every.near",
+  "template": "near-everything/every-plugin/demo",
   "shared": {
     "ui": {
       "react": {
@@ -45,13 +43,7 @@
   },
   "gateway": {
     "development": "http://localhost:8787",
-    "production": "https://ejlbraem.com"
-  },
-  "create": {
-    "project": "near-everything/every-plugin/demo",
-    "ui": "near-everything/every-plugin/demo/ui",
-    "api": "near-everything/every-plugin/demo/api",
-    "host": "near-everything/every-plugin/demo/host"
+    "production": "https://everything.dev"
   },
   "app": {
     "host": {
@@ -64,7 +56,17 @@
         "HOST_DATABASE_AUTH_TOKEN",
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL"
-      ]
+      ],
+      "template": "near-everything/every-plugin/demo/host",
+      "files": [
+        "rsbuild.config.ts",
+        "tsconfig.json",
+        "vitest.config.ts",
+        "drizzle.config.ts"
+      ],
+      "sync": {
+        "scripts": ["dev", "build", "test"]
+      }
     },
     "ui": {
       "name": "ui",
@@ -78,7 +80,17 @@
         "./hooks": "./src/hooks/index.ts",
         "./types": "./src/types/index.ts"
       },
-      "ssr": "https://elliot-braem-1894-ui-every-plugin-near-everything-af6ea5ac1-ze.zephyrcloud.app"
+      "ssr": "https://elliot-braem-1894-ui-every-plugin-near-everything-af6ea5ac1-ze.zephyrcloud.app",
+      "template": "near-everything/every-plugin/demo/ui",
+      "files": [
+        "rsbuild.config.ts",
+        "tsconfig.json",
+        "postcss.config.mjs",
+        "components.json"
+      ],
+      "sync": {
+        "scripts": ["dev", "build", "type-check"]
+      }
     },
     "api": {
       "name": "api",
@@ -89,7 +101,18 @@
       "secrets": [
         "API_DATABASE_URL",
         "API_DATABASE_AUTH_TOKEN"
-      ]
+      ],
+      "template": "near-everything/every-plugin/demo/api",
+      "files": [
+        "rspack.config.cjs",
+        "tsconfig.json",
+        "vitest.config.ts",
+        "drizzle.config.ts",
+        "plugin.dev.ts"
+      ],
+      "sync": {
+        "scripts": ["dev", "build", "test"]
+      }
     }
   }
 }

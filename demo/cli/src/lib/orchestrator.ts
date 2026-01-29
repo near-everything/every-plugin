@@ -12,6 +12,21 @@ import {
 import { renderStreamingView, type StreamingViewHandle } from "../components/streaming-view";
 import { getProcessConfig, makeDevProcess, type ProcessCallbacks, type ProcessHandle } from "./process";
 
+const LOG_NOISE_PATTERNS = [
+  /\[ Federation Runtime \] Version .* from host of shared singleton module/,
+  /Executing an Effect versioned \d+\.\d+\.\d+ with a Runtime of version/,
+  /you may want to dedupe the effect dependencies/,
+];
+
+const isDebugMode = (): boolean => {
+  return process.env.DEBUG === "true" || process.env.DEBUG === "1";
+};
+
+const shouldDisplayLog = (line: string): boolean => {
+  if (isDebugMode()) return true;
+  return !LOG_NOISE_PATTERNS.some(pattern => pattern.test(line));
+};
+
 export interface AppOrchestrator {
   packages: string[];
   env: Record<string, string>;
@@ -153,7 +168,10 @@ export const runDevServers = (orchestrator: AppOrchestrator) =>
           isError,
         };
         allLogs.push(entry);
-        view?.addLog(name, line, isError);
+
+        if (shouldDisplayLog(line)) {
+          view?.addLog(name, line, isError);
+        }
 
         if (logFile) {
           const logLine = formatLogLine(entry) + "\n";

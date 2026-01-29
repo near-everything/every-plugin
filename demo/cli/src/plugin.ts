@@ -15,8 +15,8 @@ import {
   getRemotes,
   loadConfig,
   type RemoteConfig,
-  setConfig,
-  type SourceMode
+  type SourceMode, 
+  setConfig
 } from "./config";
 import { bosContract } from "./contract";
 import { getBuildEnv, hasZephyrConfig, loadBosEnv, ZEPHYR_DOCS_URL } from "./lib/env";
@@ -34,6 +34,7 @@ import {
   verifyNovaCredentials
 } from "./lib/nova";
 import { type AppOrchestrator, startApp } from "./lib/orchestrator";
+import { syncFiles } from "./lib/sync";
 import { run } from "./utils/run";
 import { colors, icons } from "./utils/theme";
 
@@ -401,20 +402,7 @@ export default createPlugin({
         const bosEnv = yield* loadBosEnv;
         const privateKey = nearPrivateKey || bosEnv.NEAR_PRIVATE_KEY;
 
-        const rootPkgPath = `${configDir}/package.json`;
-        const rootPkg = yield* Effect.tryPromise({
-          try: () => Bun.file(rootPkgPath).json() as Promise<{ version: string }>,
-          catch: (e) => new Error(`Failed to read root package.json: ${e}`),
-        });
-
-        const configToPublish = {
-          ...bosConfig,
-          cli: {
-            version: rootPkg.version,
-          },
-        };
-
-        const socialArgs = buildSocialSetArgs(bosConfig.account, gatewayDomain, configToPublish);
+        const socialArgs = buildSocialSetArgs(bosConfig.account, gatewayDomain, bosConfig);
         const argsBase64 = Buffer.from(JSON.stringify(socialArgs)).toString("base64");
 
         if (publishInput.dryRun) {
@@ -469,7 +457,16 @@ export default createPlugin({
         gateway: "near-everything/every-plugin/demo/gateway",
       };
 
-      const template = input.template || deps.bosConfig?.create?.[input.type] || DEFAULT_TEMPLATES[input.type];
+      const getTemplate = (): string => {
+        if (input.template) return input.template;
+        if (input.type === "project") {
+          return deps.bosConfig?.template || DEFAULT_TEMPLATES.project;
+        }
+        const appConfig = deps.bosConfig?.app[input.type] as { template?: string } | undefined;
+        return appConfig?.template || DEFAULT_TEMPLATES[input.type];
+      };
+
+      const template = getTemplate();
       const dest = input.type === "project" ? input.name! : input.type;
 
       try {
@@ -478,11 +475,11 @@ export default createPlugin({
         if (input.type === "project" && input.name) {
           const newConfig = {
             account: `${input.name}.near`,
+            template: DEFAULT_TEMPLATES.project,
             gateway: {
               development: "http://localhost:8787",
               production: `https://gateway.${input.name}.example.com`,
             },
-            create: DEFAULT_TEMPLATES,
             app: {
               host: {
                 title: input.name,
@@ -1227,6 +1224,39 @@ export default createPlugin({
       }
     }),
 
+    filesSync: builder.filesSync.handler(async ({ input }) => {
+      const { configDir, bosConfig } = deps;
+
+      if (!bosConfig) {
+        return {
+          status: "error" as const,
+          synced: [],
+          error: "No bos.config.json found. Run from a BOS project directory.",
+        };
+      }
+
+      const rootPkgPath = `${configDir}/package.json`;
+      const rootPkg = await Bun.file(rootPkgPath).json() as {
+        workspaces?: { catalog?: Record<string, string> };
+      };
+      const catalog = rootPkg.workspaces?.catalog ?? {};
+
+      const packages = input.packages || Object.keys(bosConfig.app);
+
+      const synced = await syncFiles({
+        configDir,
+        packages,
+        bosConfig,
+        catalog,
+        force: input.force,
+      });
+
+      return {
+        status: "synced" as const,
+        synced,
+      };
+    }),
+
     sync: builder.sync.handler(async ({ input }) => {
       const { configDir, bosConfig } = deps;
 
@@ -1241,7 +1271,6 @@ export default createPlugin({
           status: "error" as const,
           account,
           gateway,
-          cliVersion: "",
           hostUrl: "",
           catalogUpdated: false,
           packagesUpdated: [],
@@ -1277,25 +1306,10 @@ export default createPlugin({
             status: "error" as const,
             account,
             gateway,
-            cliVersion: "",
             hostUrl: "",
             catalogUpdated: false,
             packagesUpdated: [],
             error: `No config found at ${configPath} on Near Social. Run 'bos publish' first.`,
-          };
-        }
-
-        const cliVersion = remoteConfig.cli?.version;
-        if (!cliVersion) {
-          return {
-            status: "error" as const,
-            account,
-            gateway,
-            cliVersion: "",
-            hostUrl: "",
-            catalogUpdated: false,
-            packagesUpdated: [],
-            error: `Published config is missing 'cli.version'. Republish with updated bos.config.json.`,
           };
         }
 
@@ -1305,7 +1319,6 @@ export default createPlugin({
             status: "error" as const,
             account,
             gateway,
-            cliVersion,
             hostUrl: "",
             catalogUpdated: false,
             packagesUpdated: [],
@@ -1313,32 +1326,23 @@ export default createPlugin({
           };
         }
 
-        const npmUrl = `https://registry.npmjs.org/everything-dev/${cliVersion}`;
-        const npmResponse = await fetch(npmUrl);
-        if (!npmResponse.ok) {
-          return {
-            status: "error" as const,
-            account,
-            gateway,
-            cliVersion,
-            hostUrl,
-            catalogUpdated: false,
-            packagesUpdated: [],
-            error: `Failed to fetch everything-dev@${cliVersion} from NPM (${npmResponse.status}). Ensure the version is published.`,
-          };
-        }
 
-        const npmPkg = await npmResponse.json() as { catalog?: Record<string, string> };
-        const cliCatalog = npmPkg.catalog ?? {};
 
         const bosConfigPath = `${configDir}/bos.config.json`;
         const updatedBosConfig = {
           ...bosConfig,
-          cli: {
-            version: cliVersion,
-          },
         };
         await Bun.write(bosConfigPath, JSON.stringify(updatedBosConfig, null, 2));
+
+        const sharedUiDeps: Record<string, string> = {};
+        const sharedUi = updatedBosConfig.shared?.ui as Record<string, { requiredVersion?: string }> | undefined;
+        if (sharedUi) {
+          for (const [name, config] of Object.entries(sharedUi)) {
+            if (config.requiredVersion) {
+              sharedUiDeps[name] = config.requiredVersion;
+            }
+          }
+        }
 
         const rootPkgPath = `${configDir}/package.json`;
         const rootPkg = await Bun.file(rootPkgPath).json() as {
@@ -1347,8 +1351,8 @@ export default createPlugin({
         };
 
         rootPkg.workspaces.catalog = {
-          ...cliCatalog,
-          "everything-dev": cliVersion,
+          ...rootPkg.workspaces.catalog,
+          ...sharedUiDeps,
         };
         await Bun.write(rootPkgPath, JSON.stringify(rootPkg, null, 2));
 
@@ -1374,7 +1378,7 @@ export default createPlugin({
             if (!deps) continue;
 
             for (const [name, version] of Object.entries(deps)) {
-              if (name in cliCatalog && version !== "catalog:") {
+              if (name in rootPkg.workspaces.catalog && version !== "catalog:") {
                 deps[name] = "catalog:";
                 updated = true;
               }
@@ -1387,21 +1391,36 @@ export default createPlugin({
           }
         }
 
+        let filesSynced: Array<{ package: string; files: string[] }> | undefined;
+
+        if (input.files) {
+          const results = await syncFiles({
+            configDir,
+            packages: Object.keys(bosConfig.app),
+            bosConfig,
+            catalog: rootPkg.workspaces?.catalog ?? {},
+            force: input.force,
+          });
+
+          if (results.length > 0) {
+            filesSynced = results.map(r => ({ package: r.package, files: r.files }));
+          }
+        }
+
         return {
           status: "synced" as const,
           account,
           gateway,
-          cliVersion,
           hostUrl,
           catalogUpdated: true,
           packagesUpdated,
+          filesSynced,
         };
       } catch (error) {
         return {
           status: "error" as const,
           account,
           gateway,
-          cliVersion: "",
           hostUrl: "",
           catalogUpdated: false,
           packagesUpdated: [],

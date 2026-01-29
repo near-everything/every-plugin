@@ -683,9 +683,8 @@ Zephyr Configuration:
       console.log(`  ${icons.ok} ${gradients.cyber("SYNCED")}`);
       console.log(colors.cyan(frames.bottom(52)));
       console.log();
-      console.log(`  ${colors.dim("Source:")}      ${colors.cyan(`${result.account}/${result.gateway}`)}`);
-      console.log(`  ${colors.dim("CLI Version:")} ${colors.cyan(result.cliVersion)}`);
-      console.log(`  ${colors.dim("Host URL:")}    ${colors.cyan(result.hostUrl)}`);
+      console.log(`  ${colors.dim("Source:")}   ${colors.cyan(`${result.account}/${result.gateway}`)}`);
+      console.log(`  ${colors.dim("Host URL:")} ${colors.cyan(result.hostUrl)}`);
       console.log();
       
       if (result.catalogUpdated) {
