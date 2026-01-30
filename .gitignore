@@ -11,3 +11,4 @@ dist
 .eslintcache
 .cache
 *.tsbuildinfo
+.bos

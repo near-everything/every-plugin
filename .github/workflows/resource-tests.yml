@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Build every-plugin
+        run: bun turbo build --filter=every-plugin
+
       - name: Verify monitor command works
         run: bun run src/cli.ts monitor --json --ports 19990,19991,19992 > baseline-snapshot.json
         working-directory: packages/cli
@@ -77,6 +80,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Build every-plugin
+        run: bun turbo build --filter=every-plugin
 
       - name: Pre-test port check
         run: bun run src/cli.ts monitor --json --ports 3000 > pre-integration-snapshot.json
