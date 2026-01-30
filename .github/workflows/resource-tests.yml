@@ -1,0 +1,93 @@
+name: Resource Lifecycle Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'demo/cli/**'
+      - '.github/workflows/resource-tests.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'demo/cli/**'
+  workflow_dispatch:
+
+jobs:
+  resource-tests:
+    name: Resource Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+        working-directory: demo/cli
+
+      - name: Run resource lifecycle tests
+        run: bun run test
+        working-directory: demo/cli
+
+      - name: Run monitor snapshot test
+        run: |
+          bun run src/cli.ts monitor --json > snapshot.json
+          cat snapshot.json
+        working-directory: demo/cli
+        continue-on-error: true
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: |
+            demo/cli/.bos/test-results.json
+            demo/cli/snapshot.json
+          retention-days: 7
+
+  summary:
+    name: Test Summary
+    needs: resource-tests
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate summary
+        run: |
+          echo "## Resource Lifecycle Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          for dir in artifacts/test-results-*/; do
+            os=$(basename "$dir" | sed 's/test-results-//')
+            echo "### $os" >> $GITHUB_STEP_SUMMARY
+            
+            if [ -f "$dir/test-results.json" ]; then
+              echo "✅ Test results collected" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ No test results found" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            if [ -f "$dir/snapshot.json" ]; then
+              echo "✅ Snapshot captured" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ No snapshot captured" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+          done

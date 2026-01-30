@@ -353,9 +353,189 @@ afterAll(() => server.close());
 | `bos build` | `BuildResult` | Low - requires setup |
 | `bos publish` | `PublishResult` | Low - mainnet interaction |
 
+## Resource Monitor & Lifecycle Tests
+
+The CLI includes a comprehensive resource monitoring system for tracking process and port usage across the dev server lifecycle.
+
+### Resource Monitor
+
+The `bos monitor` command provides real-time visibility into system resources:
+
+```bash
+# Interactive TUI mode
+bos monitor
+
+# JSON output (machine-readable)
+bos monitor --json
+
+# Watch specific ports
+bos monitor --ports 3000,3002,3014
+
+# Continuous watch mode
+bos monitor --watch
+```
+
+### Monitor Features
+
+| Feature | Description |
+|---------|-------------|
+| **Port Tracking** | Shows which ports are bound and by which processes |
+| **Process Tree** | Displays parent-child relationships of running processes |
+| **Memory Usage** | Tracks RSS (Resident Set Size) of monitored processes |
+| **Cross-Platform** | Works on macOS, Linux, and Windows |
+| **Config-Aware** | Automatically reads ports from `bos.config.json` |
+
+### Programmatic API
+
+```typescript
+import { ResourceMonitor } from "./lib/resource-monitor";
+
+// Create monitor (auto-detects ports from config)
+const monitor = await ResourceMonitor.create();
+
+// Or specify ports explicitly
+const monitor = await ResourceMonitor.create({ ports: [3000, 3002, 3014] });
+
+// Take snapshots
+const baseline = await monitor.snapshot();
+
+// ... start dev server ...
+
+const running = await monitor.snapshot();
+
+// ... stop dev server ...
+
+const after = await monitor.snapshot();
+
+// Compare snapshots
+const diff = monitor.diff(running, after);
+
+// Check for leaks
+if (diff.orphanedProcesses.length > 0) {
+  console.error("Orphaned processes found!");
+}
+if (diff.stillBoundPorts.length > 0) {
+  console.error("Ports still bound!");
+}
+
+// Assertions for tests
+await monitor.assertAllPortsFree([3000, 3002, 3014]);
+monitor.assertNoOrphanProcesses(running, after);
+monitor.assertMemoryDelta(baseline, after, { maxDeltaMB: 50 });
+```
+
+### Snapshot Structure
+
+```typescript
+interface Snapshot {
+  timestamp: number;
+  configPath: string | null;
+  ports: Record<number, {
+    port: number;
+    pid: number | null;
+    command: string | null;
+    state: "LISTEN" | "FREE" | "ESTABLISHED" | "TIME_WAIT";
+  }>;
+  processes: Array<{
+    pid: number;
+    ppid: number;
+    command: string;
+    args: string[];
+    rss: number;
+    children: number[];
+  }>;
+  memory: {
+    total: number;
+    used: number;
+    free: number;
+    processRss: number;
+  };
+  platform: "darwin" | "linux" | "win32";
+}
+```
+
+### Lifecycle Test Example
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { ResourceMonitor, assertAllPortsFree, assertNoLeaks } from "../lib/resource-monitor";
+
+describe("bos dev lifecycle", () => {
+  it("cleans up all resources on stop", async () => {
+    const monitor = await ResourceMonitor.create();
+    
+    // Capture baseline
+    const baseline = await monitor.snapshot();
+    
+    // Start dev server
+    const devProcess = spawnDevServer();
+    await devProcess.waitForReady();
+    
+    // Capture running state
+    const running = await monitor.snapshot();
+    expect(Object.values(running.ports).some(p => p.state === "LISTEN")).toBe(true);
+    
+    // Stop dev server
+    await devProcess.stop();
+    await sleep(1000);
+    
+    // Capture after state
+    const after = await monitor.snapshot();
+    
+    // Verify cleanup
+    const diff = monitor.diff(running, after);
+    assertNoLeaks(diff);
+    await assertAllPortsFree([3000, 3002, 3014]);
+  });
+});
+```
+
+### Running Resource Tests
+
+```bash
+# Run all resource lifecycle tests
+cd cli
+bun test tests/integration/resource-lifecycle.test.ts
+
+# Run with verbose output
+bun test tests/integration/resource-lifecycle.test.ts --reporter=verbose
+```
+
+### Cross-Platform CI
+
+Resource tests run automatically on GitHub Actions for macOS, Linux, and Windows:
+
+```yaml
+# .github/workflows/resource-tests.yml
+jobs:
+  resource-tests:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+        working-directory: cli
+      - run: bun test tests/integration/resource-lifecycle.test.ts
+        working-directory: cli
+```
+
+### Platform-Specific Commands
+
+| Task | macOS | Linux | Windows |
+|------|-------|-------|---------|
+| List ports | `lsof -i -P -n` | `ss -tlnp` | `netstat -ano` |
+| Process tree | `pgrep -P` | `/proc/[pid]/children` | `wmic process` |
+| Memory | `vm_stat`, `ps -o rss=` | `/proc/meminfo` | `Get-CimInstance` |
+| Kill tree | `kill -TERM/-KILL` | `kill -TERM/-KILL` | `taskkill /T` |
+
 ## Future Enhancements
 
 1. **Snapshot Testing**: Compare command outputs against known-good snapshots
 2. **Performance Benchmarks**: Track command execution times
 3. **Coverage Reports**: Measure CLI code coverage
 4. **Visual Regression**: Screenshot comparisons for `bos start` output
+5. **Memory Leak Detection**: Track RSS growth across multiple start/stop cycles
+6. **Port Conflict Resolution**: Automatic port reassignment on conflict

@@ -1,9 +1,9 @@
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
-import { Graph, calculateRequiredDeposit } from "near-social-js";
+import { calculateRequiredDeposit, Graph } from "near-social-js";
 
-import { createProcessRegistry } from "./lib/process-registry";
+import { runMonitorCli } from "./components/monitor-view";
 import {
   type AppConfig,
   type BosConfig as BosConfigType,
@@ -37,6 +37,12 @@ import {
   verifyNovaCredentials
 } from "./lib/nova";
 import { type AppOrchestrator, startApp } from "./lib/orchestrator";
+import { createProcessRegistry } from "./lib/process-registry";
+import {
+  createSnapshotWithPlatform,
+  formatSnapshotSummary,
+  runWithInfo
+} from "./lib/resource-monitor";
 import { syncFiles } from "./lib/sync";
 import { run } from "./utils/run";
 import { colors, icons } from "./utils/theme";
@@ -76,8 +82,8 @@ function getSocialContract(network: "mainnet" | "testnet"): string {
 }
 
 function getSocialExplorerUrl(network: "mainnet" | "testnet", path: string): string {
-  const baseUrl = network === "testnet" 
-    ? "https://test.near.social" 
+  const baseUrl = network === "testnet"
+    ? "https://test.near.social"
     : "https://near.social";
   return `${baseUrl}/${path}`;
 }
@@ -359,7 +365,7 @@ export default createPlugin({
 
     serve: builder.serve.handler(async ({ input }) => {
       const port = input.port;
-      
+
       return {
         status: "serving" as const,
         url: `http://localhost:${port}`,
@@ -481,7 +487,7 @@ export default createPlugin({
           };
           const argsBase64 = Buffer.from(JSON.stringify(socialArgs)).toString("base64");
 
-          const graph = new Graph({ 
+          const graph = new Graph({
             network,
             contractId: socialContract,
           });
@@ -1361,11 +1367,11 @@ export default createPlugin({
 
         const mergeAppConfig = (localApp: Record<string, unknown>, remoteApp: Record<string, unknown>): Record<string, unknown> => {
           const merged: Record<string, unknown> = {};
-          
+
           for (const key of Object.keys(remoteApp)) {
             const local = localApp[key] as Record<string, unknown> | undefined;
             const remote = remoteApp[key] as Record<string, unknown>;
-            
+
             if (!local) {
               merged[key] = remote;
               continue;
@@ -1384,7 +1390,7 @@ export default createPlugin({
               },
             };
           }
-          
+
           return merged;
         };
 
@@ -1608,7 +1614,7 @@ export default createPlugin({
         const port = input.port || (input.target === "development" ? 4000 : 3000);
 
         const args = ["run"];
-        
+
         if (input.detach) {
           args.push("-d");
         }
@@ -1630,8 +1636,8 @@ export default createPlugin({
           args.push("-e", `BOS_ACCOUNT=${bosConfig.account}`);
           const gateway = bosConfig.gateway as { production?: string } | string | undefined;
           if (gateway) {
-            const domain = typeof gateway === "string" 
-              ? gateway 
+            const domain = typeof gateway === "string"
+              ? gateway
               : gateway.production?.replace(/^https?:\/\//, "") || "";
             if (domain) {
               args.push("-e", `GATEWAY_DOMAIN=${domain}`);
@@ -1688,14 +1694,14 @@ export default createPlugin({
           stopped.push(input.containerId!);
         } else if (input.all) {
           const imageName = bosConfig?.account?.replace(/\./g, "-") || "bos-app";
-          
+
           const psResult = yield* Effect.tryPromise({
             try: () => execa("docker", ["ps", "-q", "--filter", `ancestor=${imageName}`]),
             catch: () => new Error("Failed to list containers"),
           });
 
           const containerIds = psResult.stdout.trim().split("\n").filter(Boolean);
-          
+
           for (const id of containerIds) {
             yield* Effect.tryPromise({
               try: () => execa("docker", ["stop", id]),
@@ -1717,6 +1723,42 @@ export default createPlugin({
         return {
           status: "error" as const,
           stopped: [],
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    monitor: builder.monitor.handler(async ({ input }) => {
+      try {
+        if (input.json) {
+          const snapshot = await runWithInfo(
+            createSnapshotWithPlatform(input.ports ? { ports: input.ports } : undefined)
+          );
+          return {
+            status: "snapshot" as const,
+            snapshot: snapshot as any,
+          };
+        }
+
+        if (input.watch) {
+          runMonitorCli({ ports: input.ports, json: false });
+          return {
+            status: "watching" as const,
+          };
+        }
+
+        const snapshot = await runWithInfo(
+          createSnapshotWithPlatform(input.ports ? { ports: input.ports } : undefined)
+        );
+        console.log(formatSnapshotSummary(snapshot));
+
+        return {
+          status: "snapshot" as const,
+          snapshot: snapshot as any,
+        };
+      } catch (error) {
+        return {
+          status: "error" as const,
           error: error instanceof Error ? error.message : "Unknown error",
         };
       }

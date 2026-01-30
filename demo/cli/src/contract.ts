@@ -314,6 +314,52 @@ const DockerStopResultSchema = z.object({
   error: z.string().optional(),
 });
 
+const MonitorOptionsSchema = z.object({
+  ports: z.array(z.number()).optional(),
+  json: z.boolean().default(false),
+  watch: z.boolean().default(false),
+});
+
+const PortInfoSchema = z.object({
+  port: z.number(),
+  pid: z.number().nullable(),
+  command: z.string().nullable(),
+  state: z.enum(["LISTEN", "ESTABLISHED", "TIME_WAIT", "FREE"]),
+  name: z.string().optional(),
+});
+
+const ProcessInfoSchema = z.object({
+  pid: z.number(),
+  ppid: z.number(),
+  command: z.string(),
+  args: z.array(z.string()),
+  rss: z.number(),
+  children: z.array(z.number()),
+  startTime: z.number().optional(),
+});
+
+const MemoryInfoSchema = z.object({
+  total: z.number(),
+  used: z.number(),
+  free: z.number(),
+  processRss: z.number(),
+});
+
+const SnapshotSchema = z.object({
+  timestamp: z.number(),
+  configPath: z.string().nullable(),
+  ports: z.record(z.string(), PortInfoSchema),
+  processes: z.array(ProcessInfoSchema),
+  memory: MemoryInfoSchema,
+  platform: z.string(),
+});
+
+const MonitorResultSchema = z.object({
+  status: z.enum(["snapshot", "watching", "error"]),
+  snapshot: SnapshotSchema.optional(),
+  error: z.string().optional(),
+});
+
 const DepsUpdateOptionsSchema = z.object({
   category: z.enum(["ui", "api"]).default("ui"),
   packages: z.array(z.string()).optional(),
@@ -460,6 +506,11 @@ export const bosContract = oc.router({
     .route({ method: "POST", path: "/docker/stop" })
     .input(DockerStopOptionsSchema)
     .output(DockerStopResultSchema),
+
+  monitor: oc
+    .route({ method: "GET", path: "/monitor" })
+    .input(MonitorOptionsSchema)
+    .output(MonitorResultSchema),
 });
 
 export type BosContract = typeof bosContract;
@@ -498,3 +549,6 @@ export type DepsUpdateOptions = z.infer<typeof DepsUpdateOptionsSchema>;
 export type DepsUpdateResult = z.infer<typeof DepsUpdateResultSchema>;
 export type FilesSyncOptions = z.infer<typeof FilesSyncOptionsSchema>;
 export type FilesSyncResult = z.infer<typeof FilesSyncResultSchema>;
+export type MonitorOptions = z.infer<typeof MonitorOptionsSchema>;
+export type MonitorResult = z.infer<typeof MonitorResultSchema>;
+export type MonitorSnapshot = z.infer<typeof SnapshotSchema>;
