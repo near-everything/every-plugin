@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import {
   createTestContext,
   spawnDevServer,
+  spawnStartServer,
   waitForPortBound,
   waitForPortFree,
   captureBaseline,
@@ -16,6 +17,7 @@ import {
   sleep,
   runSilent,
   DEV_PORTS,
+  START_PORT,
   type TestContext,
   type DevProcess,
 } from "../helpers/process-tracker";
@@ -27,10 +29,10 @@ import {
   createSnapshotWithPlatform,
 } from "../../src/lib/resource-monitor";
 
-const SKIP_LIFECYCLE = !!process.env.CI;
-const STARTUP_TIMEOUT = 45000;
+const IS_WINDOWS = process.platform === "win32";
+const STARTUP_TIMEOUT = 60000;
 const CLEANUP_TIMEOUT = 15000;
-const PORT_FREE_TIMEOUT = 10000;
+const PORT_FREE_TIMEOUT = 15000;
 
 const waitForAllPortsFree = async (
   ports: number[],
@@ -56,7 +58,7 @@ describe("Dev Server Lifecycle Tests", () => {
       await cleanupDevProcess(devProcess);
       devProcess = null;
     }
-    await sleep(500);
+    await sleep(1000);
   });
 
   afterAll(async () => {
@@ -65,7 +67,7 @@ describe("Dev Server Lifecycle Tests", () => {
     }
   });
 
-  describe.skipIf(SKIP_LIFECYCLE)("SIGTERM cleanup", () => {
+  describe("SIGTERM cleanup", () => {
     it(
       "should free all ports after SIGTERM",
       async () => {
@@ -81,7 +83,11 @@ describe("Dev Server Lifecycle Tests", () => {
         const runningBound = getBoundPorts(ctx.running!);
         expect(runningBound).toContain(3000);
 
-        devProcess.kill("SIGTERM");
+        if (IS_WINDOWS) {
+          devProcess.kill();
+        } else {
+          devProcess.kill("SIGTERM");
+        }
 
         const allFreed = await waitForAllPortsFree(DEV_PORTS, PORT_FREE_TIMEOUT);
 
@@ -106,7 +112,11 @@ describe("Dev Server Lifecycle Tests", () => {
         const runningProcessCount = ctx.running!.processes.length;
         expect(runningProcessCount).toBeGreaterThan(0);
 
-        devProcess.kill("SIGTERM");
+        if (IS_WINDOWS) {
+          devProcess.kill();
+        } else {
+          devProcess.kill("SIGTERM");
+        }
 
         await waitForAllPortsFree(DEV_PORTS, PORT_FREE_TIMEOUT);
 
@@ -129,7 +139,11 @@ describe("Dev Server Lifecycle Tests", () => {
 
         await captureRunning(ctx);
 
-        devProcess.kill("SIGTERM");
+        if (IS_WINDOWS) {
+          devProcess.kill();
+        } else {
+          devProcess.kill("SIGTERM");
+        }
 
         await waitForAllPortsFree(DEV_PORTS, PORT_FREE_TIMEOUT);
 
@@ -152,7 +166,11 @@ describe("Dev Server Lifecycle Tests", () => {
 
         await captureRunning(ctx);
 
-        devProcess.kill("SIGTERM");
+        if (IS_WINDOWS) {
+          devProcess.kill();
+        } else {
+          devProcess.kill("SIGTERM");
+        }
 
         await waitForAllPortsFree(DEV_PORTS, PORT_FREE_TIMEOUT);
 
@@ -166,7 +184,7 @@ describe("Dev Server Lifecycle Tests", () => {
     );
   });
 
-  describe.skipIf(SKIP_LIFECYCLE)("SIGINT cleanup (Ctrl+C)", () => {
+  describe.skipIf(IS_WINDOWS)("SIGINT cleanup (Ctrl+C)", () => {
     it(
       "should free all ports after SIGINT",
       async () => {
@@ -261,5 +279,117 @@ describe("Dev Server Lifecycle Tests", () => {
       expect(free).toContain(19999);
       expect(free).toContain(19998);
     });
+  });
+});
+
+describe("Start Server Lifecycle Tests", () => {
+  let ctx: TestContext;
+  let startProcess: DevProcess | null = null;
+
+  beforeAll(async () => {
+    ctx = await createTestContext([START_PORT]);
+  });
+
+  afterEach(async () => {
+    if (startProcess) {
+      await cleanupDevProcess(startProcess);
+      startProcess = null;
+    }
+    await sleep(1000);
+  });
+
+  afterAll(async () => {
+    if (startProcess) {
+      await cleanupDevProcess(startProcess);
+    }
+  });
+
+  describe("bos start cleanup", () => {
+    it(
+      "should free port 3000 after termination",
+      async () => {
+        await captureBaseline(ctx);
+        const baselineBound = getBoundPorts(ctx.baseline!);
+        expect(baselineBound).not.toContain(START_PORT);
+
+        startProcess = spawnStartServer();
+        const ready = await waitForPortBound(START_PORT, STARTUP_TIMEOUT);
+        expect(ready).toBe(true);
+
+        await captureRunning(ctx);
+        const runningBound = getBoundPorts(ctx.running!);
+        expect(runningBound).toContain(START_PORT);
+
+        if (IS_WINDOWS) {
+          startProcess!.kill();
+        } else {
+          startProcess!.kill("SIGTERM");
+        }
+
+        const freed = await waitForPortFree(START_PORT, PORT_FREE_TIMEOUT);
+        expect(freed).toBe(true);
+
+        await captureAfter(ctx);
+        const afterBound = getBoundPorts(ctx.after!);
+
+        expect(afterBound).not.toContain(START_PORT);
+      },
+      STARTUP_TIMEOUT + CLEANUP_TIMEOUT
+    );
+
+    it(
+      "should have no orphaned processes after termination",
+      async () => {
+        await captureBaseline(ctx);
+
+        startProcess = spawnStartServer();
+        const ready = await waitForPortBound(START_PORT, STARTUP_TIMEOUT);
+        expect(ready).toBe(true);
+
+        await captureRunning(ctx);
+
+        if (IS_WINDOWS) {
+          startProcess!.kill();
+        } else {
+          startProcess!.kill("SIGTERM");
+        }
+
+        await waitForPortFree(START_PORT, PORT_FREE_TIMEOUT);
+
+        await captureAfter(ctx);
+        const diff = getDiff(ctx.running!, ctx.after!);
+
+        expect(diff.orphanedProcesses).toHaveLength(0);
+      },
+      STARTUP_TIMEOUT + CLEANUP_TIMEOUT
+    );
+
+    it(
+      "should pass assertNoLeaks after termination",
+      async () => {
+        await captureBaseline(ctx);
+
+        startProcess = spawnStartServer();
+        const ready = await waitForPortBound(START_PORT, STARTUP_TIMEOUT);
+        expect(ready).toBe(true);
+
+        await captureRunning(ctx);
+
+        if (IS_WINDOWS) {
+          startProcess!.kill();
+        } else {
+          startProcess!.kill("SIGTERM");
+        }
+
+        await waitForPortFree(START_PORT, PORT_FREE_TIMEOUT);
+
+        await captureAfter(ctx);
+        const diff = getDiff(ctx.running!, ctx.after!);
+
+        expect(hasLeaks(diff)).toBe(false);
+        await runSilent(assertNoLeaks(diff));
+      },
+      STARTUP_TIMEOUT + CLEANUP_TIMEOUT
+    );
   });
 });

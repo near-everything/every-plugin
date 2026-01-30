@@ -2,7 +2,7 @@
 import { spinner } from "@clack/prompts";
 import { program } from "commander";
 import { createPluginRuntime } from "every-plugin";
-import { getConfigDir, getConfigPath, getPackages, getTitle, loadConfig, type BosConfig } from "./config";
+import { type BosConfig, getConfigDir, getConfigPath, getPackages, getTitle, loadConfig } from "./config";
 import BosPlugin from "./plugin";
 import { printBanner } from "./utils/banner";
 import { colors, frames, gradients, icons } from "./utils/theme";
@@ -852,6 +852,29 @@ Zephyr Configuration:
         console.log(colors.green(`  ${icons.ok} Catalog synced & bun install complete`));
       }
       console.log();
+    });
+
+  program
+    .command("monitor")
+    .description("Monitor system resources (ports, processes, memory)")
+    .option("--json", "Output as JSON")
+    .option("-w, --watch", "Watch mode with live updates")
+    .option("-p, --ports <ports>", "Ports to monitor (comma-separated)")
+    .action(async (options) => {
+      const result = await client.monitor({
+        json: options.json || false,
+        watch: options.watch || false,
+        ports: options.ports ? options.ports.split(",").map(Number) : undefined,
+      });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} ${result.error}`));
+        process.exit(1);
+      }
+
+      if (result.status === "snapshot" && options.json) {
+        console.log(JSON.stringify(result.snapshot, null, 2));
+      }
     });
 
   program

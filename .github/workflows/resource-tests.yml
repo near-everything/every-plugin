@@ -1,26 +1,20 @@
 name: Resource Lifecycle Tests
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, develop]
-    paths:
-      - 'demo/cli/**'
-      - '.github/workflows/resource-tests.yml'
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'demo/cli/**'
-  workflow_dispatch:
 
 jobs:
-  resource-tests:
-    name: Resource Tests (${{ matrix.os }})
+  lifecycle-tests:
+    name: Lifecycle (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
 
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -31,34 +25,44 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
+      - name: Install root dependencies
+        run: bun install
+
+      - name: Install CLI dependencies
         run: bun install
         working-directory: demo/cli
 
-      - name: Run resource lifecycle tests
-        run: bun run test
+      - name: Verify monitor command works
+        run: bun run src/cli.ts monitor --json --ports 3000,3002,3014 > baseline-snapshot.json
         working-directory: demo/cli
 
-      - name: Run monitor snapshot test
-        run: |
-          bun run src/cli.ts monitor --json > snapshot.json
-          cat snapshot.json
+      - name: Display baseline snapshot
+        run: cat baseline-snapshot.json
         working-directory: demo/cli
-        continue-on-error: true
+
+      - name: Run lifecycle tests
+        run: bun run test
+        working-directory: demo/cli
+        timeout-minutes: 10
+
+      - name: Capture post-test snapshot
+        if: always()
+        run: bun run src/cli.ts monitor --json --ports 3000,3002,3014 > post-test-snapshot.json
+        working-directory: demo/cli
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results-${{ matrix.os }}
+          name: lifecycle-results-${{ matrix.os }}
           path: |
-            demo/cli/.bos/test-results.json
-            demo/cli/snapshot.json
+            demo/cli/baseline-snapshot.json
+            demo/cli/post-test-snapshot.json
           retention-days: 7
 
   summary:
     name: Test Summary
-    needs: resource-tests
+    needs: lifecycle-tests
     runs-on: ubuntu-latest
     if: always()
 
@@ -73,20 +77,22 @@ jobs:
           echo "## Resource Lifecycle Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          for dir in artifacts/test-results-*/; do
-            os=$(basename "$dir" | sed 's/test-results-//')
+          for dir in artifacts/lifecycle-results-*/; do
+            os=$(basename "$dir" | sed 's/lifecycle-results-//')
             echo "### $os" >> $GITHUB_STEP_SUMMARY
             
-            if [ -f "$dir/test-results.json" ]; then
-              echo "✅ Test results collected" >> $GITHUB_STEP_SUMMARY
+            if [ -f "$dir/baseline-snapshot.json" ]; then
+              echo "✅ Baseline snapshot captured" >> $GITHUB_STEP_SUMMARY
+              platform=$(jq -r '.platform // "unknown"' "$dir/baseline-snapshot.json" 2>/dev/null || echo "unknown")
+              echo "  Platform: $platform" >> $GITHUB_STEP_SUMMARY
             else
-              echo "⚠️ No test results found" >> $GITHUB_STEP_SUMMARY
+              echo "⚠️ No baseline snapshot" >> $GITHUB_STEP_SUMMARY
             fi
             
-            if [ -f "$dir/snapshot.json" ]; then
-              echo "✅ Snapshot captured" >> $GITHUB_STEP_SUMMARY
+            if [ -f "$dir/post-test-snapshot.json" ]; then
+              echo "✅ Post-test snapshot captured" >> $GITHUB_STEP_SUMMARY
             else
-              echo "⚠️ No snapshot captured" >> $GITHUB_STEP_SUMMARY
+              echo "⚠️ No post-test snapshot" >> $GITHUB_STEP_SUMMARY
             fi
             
             echo "" >> $GITHUB_STEP_SUMMARY

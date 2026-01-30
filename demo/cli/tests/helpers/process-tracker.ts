@@ -35,6 +35,7 @@ const CLI_DIR = resolve(__dirname, "../..");
 const DEMO_DIR = resolve(CLI_DIR, "..");
 
 export const DEV_PORTS = [3000, 3002, 3014];
+export const START_PORT = 3000;
 
 export const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -56,6 +57,41 @@ export const createTestContext = async (
 
 export const spawnDevServer = (cwd: string = DEMO_DIR): DevProcess => {
   const proc = spawn("bun", ["bos", "dev"], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: false,
+  });
+
+  let stdout = "";
+  let stderr = "";
+
+  proc.stdout?.on("data", (data) => {
+    stdout += data.toString();
+  });
+
+  proc.stderr?.on("data", (data) => {
+    stderr += data.toString();
+  });
+
+  return {
+    process: proc,
+    pid: proc.pid!,
+    kill: (signal: NodeJS.Signals = "SIGTERM") => {
+      proc.kill(signal);
+    },
+    waitForExit: (timeoutMs = 10000): Promise<number | null> =>
+      new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve(null), timeoutMs);
+        proc.on("exit", (code) => {
+          clearTimeout(timeout);
+          resolve(code);
+        });
+      }),
+  };
+};
+
+export const spawnStartServer = (cwd: string = DEMO_DIR): DevProcess => {
+  const proc = spawn("bun", ["bos", "start"], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     detached: false,
