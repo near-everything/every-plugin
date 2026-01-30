@@ -53,6 +53,7 @@ export type SyncConfig = z.infer<typeof SyncConfigSchema>;
 
 export const BosConfigSchema = z.object({
   account: z.string(),
+  testnet: z.string().optional(),
   gateway: GatewayConfigSchema,
   template: z.string().optional(),
   cli: z.object({

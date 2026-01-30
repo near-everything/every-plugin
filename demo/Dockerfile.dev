@@ -1,0 +1,18 @@
+FROM oven/bun:1.2.20-alpine
+
+WORKDIR /app
+
+COPY package.json bun.lock bunfig.toml ./
+COPY */package.json ./*/
+
+RUN bun install --frozen-lockfile
+
+COPY . .
+
+ENV NODE_ENV=development
+ENV PORT=4000
+ENV HOST=0.0.0.0
+
+EXPOSE 4000
+
+CMD ["sh", "-c", "case \"$MODE\" in serve) bos serve -p ${PORT};; dev) bos dev --no-interactive;; *) bos start --no-interactive;; esac"]

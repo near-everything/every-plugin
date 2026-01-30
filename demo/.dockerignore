@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+
+# Dependencies (installed fresh in container)
+node_modules
+**/node_modules
+
+# Build artifacts
+dist
+**/dist
+.turbo
+**/.turbo
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+
+# Environment files (secrets passed at runtime)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# BOS runtime files
+.bos/logs
+.bos/pids.json
+
+# Editor/IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+coverage
+**/coverage
+
+# Logs
+*.log
+npm-debug.log*

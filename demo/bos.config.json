@@ -1,5 +1,6 @@
 {
   "account": "every.near",
+  "testnet": "allthethings.testnet",
   "template": "near-everything/every-plugin/demo",
   "shared": {
     "ui": {

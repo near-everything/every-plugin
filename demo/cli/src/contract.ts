@@ -25,6 +25,7 @@ const StartOptionsSchema = z.object({
   interactive: z.boolean().optional(),
   account: z.string().optional(),
   domain: z.string().optional(),
+  network: z.enum(["mainnet", "testnet"]).default("mainnet"),
 });
 
 const StartResultSchema = z.object({
@@ -213,6 +214,7 @@ const GatewaySyncResultSchema = z.object({
 const SyncOptionsSchema = z.object({
   account: z.string().optional(),
   gateway: z.string().optional(),
+  network: z.enum(["mainnet", "testnet"]).default("mainnet"),
   force: z.boolean().optional(),
   files: z.boolean().optional(),
 });
@@ -247,6 +249,70 @@ const FilesSyncResultSchema = z.object({
   error: z.string().optional(),
 });
 
+const KillOptionsSchema = z.object({
+  force: z.boolean().default(false),
+});
+
+const KillResultSchema = z.object({
+  status: z.enum(["killed", "error"]),
+  killed: z.array(z.number()),
+  failed: z.array(z.number()),
+  error: z.string().optional(),
+});
+
+const ProcessStatusSchema = z.object({
+  pid: z.number(),
+  name: z.string(),
+  port: z.number(),
+  startedAt: z.number(),
+  command: z.string(),
+});
+
+const PsResultSchema = z.object({
+  status: z.enum(["listed", "error"]),
+  processes: z.array(ProcessStatusSchema),
+  error: z.string().optional(),
+});
+
+const DockerBuildOptionsSchema = z.object({
+  target: z.enum(["production", "development"]).default("production"),
+  tag: z.string().optional(),
+  noCache: z.boolean().default(false),
+});
+
+const DockerBuildResultSchema = z.object({
+  status: z.enum(["built", "error"]),
+  image: z.string(),
+  tag: z.string(),
+  error: z.string().optional(),
+});
+
+const DockerRunOptionsSchema = z.object({
+  target: z.enum(["production", "development"]).default("production"),
+  mode: z.enum(["start", "serve", "dev"]).default("start"),
+  port: z.number().optional(),
+  detach: z.boolean().default(false),
+  env: z.record(z.string()).optional(),
+});
+
+const DockerRunResultSchema = z.object({
+  status: z.enum(["running", "error"]),
+  containerId: z.string(),
+  url: z.string(),
+  error: z.string().optional(),
+});
+
+const DockerStopOptionsSchema = z.object({
+  containerId: z.string().optional(),
+  all: z.boolean().default(false),
+});
+
+const DockerStopResultSchema = z.object({
+  status: z.enum(["stopped", "error"]),
+  stopped: z.array(z.string()),
+  error: z.string().optional(),
+});
+
 const DepsUpdateOptionsSchema = z.object({
   category: z.enum(["ui", "api"]).default("ui"),
   packages: z.array(z.string()).optional(),
@@ -260,17 +326,6 @@ const DepsUpdateResultSchema = z.object({
     to: z.string(),
   })),
   syncStatus: z.enum(["synced", "skipped", "error"]).optional(),
-  error: z.string().optional(),
-});
-
-const DepsSyncOptionsSchema = z.object({
-  category: z.enum(["ui", "api"]).default("ui"),
-  install: z.boolean().default(true),
-});
-
-const DepsSyncResultSchema = z.object({
-  status: z.enum(["synced", "error"]),
-  synced: z.array(z.string()),
   error: z.string().optional(),
 });
 
@@ -376,15 +431,34 @@ export const bosContract = oc.router({
     .input(DepsUpdateOptionsSchema)
     .output(DepsUpdateResultSchema),
 
-  depsSync: oc
-    .route({ method: "POST", path: "/deps/sync" })
-    .input(DepsSyncOptionsSchema)
-    .output(DepsSyncResultSchema),
-
   filesSync: oc
     .route({ method: "POST", path: "/files/sync" })
     .input(FilesSyncOptionsSchema)
     .output(FilesSyncResultSchema),
+
+  kill: oc
+    .route({ method: "POST", path: "/kill" })
+    .input(KillOptionsSchema)
+    .output(KillResultSchema),
+
+  ps: oc
+    .route({ method: "GET", path: "/ps" })
+    .output(PsResultSchema),
+
+  dockerBuild: oc
+    .route({ method: "POST", path: "/docker/build" })
+    .input(DockerBuildOptionsSchema)
+    .output(DockerBuildResultSchema),
+
+  dockerRun: oc
+    .route({ method: "POST", path: "/docker/run" })
+    .input(DockerRunOptionsSchema)
+    .output(DockerRunResultSchema),
+
+  dockerStop: oc
+    .route({ method: "POST", path: "/docker/stop" })
+    .input(DockerStopOptionsSchema)
+    .output(DockerStopResultSchema),
 });
 
 export type BosContract = typeof bosContract;
@@ -421,7 +495,5 @@ export type SyncOptions = z.infer<typeof SyncOptionsSchema>;
 export type SyncResult = z.infer<typeof SyncResultSchema>;
 export type DepsUpdateOptions = z.infer<typeof DepsUpdateOptionsSchema>;
 export type DepsUpdateResult = z.infer<typeof DepsUpdateResultSchema>;
-export type DepsSyncOptions = z.infer<typeof DepsSyncOptionsSchema>;
-export type DepsSyncResult = z.infer<typeof DepsSyncResultSchema>;
 export type FilesSyncOptions = z.infer<typeof FilesSyncOptionsSchema>;
 export type FilesSyncResult = z.infer<typeof FilesSyncResultSchema>;

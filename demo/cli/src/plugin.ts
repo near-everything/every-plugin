@@ -3,6 +3,7 @@ import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
 import { Graph } from "near-social-js";
 
+import { createProcessRegistry } from "./lib/process-registry";
 import {
   type AppConfig,
   type BosConfig as BosConfigType,
@@ -53,6 +54,27 @@ function getGatewayDomain(config: BosConfigType): string {
     return gateway.production.replace(/^https?:\/\//, "");
   }
   throw new Error("bos.config.json must have a 'gateway' field with production URL");
+}
+
+function getAccountForNetwork(config: BosConfigType, network: "mainnet" | "testnet"): string {
+  if (network === "testnet") {
+    if (!config.testnet) {
+      throw new Error("bos.config.json must have a 'testnet' field to use testnet network");
+    }
+    return config.testnet;
+  }
+  return config.account;
+}
+
+function getSocialContract(network: "mainnet" | "testnet"): string {
+  return network === "testnet" ? "v1.social08.testnet" : "social.near";
+}
+
+function getSocialExplorerUrl(network: "mainnet" | "testnet", path: string): string {
+  const baseUrl = network === "testnet" 
+    ? "https://test.near.social" 
+    : "https://near.social";
+  return `${baseUrl}/${path}`;
 }
 
 function buildSocialSetArgs(account: string, gatewayDomain: string, config: BosConfigType): object {
@@ -313,6 +335,7 @@ export default createPlugin({
 
     serve: builder.serve.handler(async ({ input }) => {
       const port = input.port;
+      
       return {
         status: "serving" as const,
         url: `http://localhost:${port}`,
@@ -382,7 +405,7 @@ export default createPlugin({
     }),
 
     publish: builder.publish.handler(async ({ input: publishInput }) => {
-      const { configDir, bosConfig, nearPrivateKey } = deps;
+      const { bosConfig, nearPrivateKey } = deps;
 
       if (!bosConfig) {
         return {
@@ -393,45 +416,49 @@ export default createPlugin({
         };
       }
 
-      const gatewayDomain = getGatewayDomain(bosConfig);
-      const socialPath = `${bosConfig.account}/bos/gateways/${gatewayDomain}/bos.config.json`;
-
-      const publishEffect = Effect.gen(function* () {
-        yield* ensureNearCli;
-
-        const bosEnv = yield* loadBosEnv;
-        const privateKey = nearPrivateKey || bosEnv.NEAR_PRIVATE_KEY;
-
-        const socialArgs = buildSocialSetArgs(bosConfig.account, gatewayDomain, bosConfig);
-        const argsBase64 = Buffer.from(JSON.stringify(socialArgs)).toString("base64");
-
-        if (publishInput.dryRun) {
-          return {
-            status: "dry-run" as const,
-            txHash: "",
-            registryUrl: `https://near.social/${socialPath}`,
-          };
-        }
-
-        const result = yield* executeTransaction({
-          account: bosConfig.account,
-          contract: "social.near",
-          method: "set",
-          argsBase64,
-          network: publishInput.network,
-          privateKey,
-          gas: "300Tgas",
-          deposit: "0.05NEAR",
-        });
-
-        return {
-          status: "published" as const,
-          txHash: result.txHash || "unknown",
-          registryUrl: `https://near.social/${socialPath}`,
-        };
-      });
+      const network = publishInput.network;
 
       try {
+        const account = getAccountForNetwork(bosConfig, network);
+        const gatewayDomain = getGatewayDomain(bosConfig);
+        const socialContract = getSocialContract(network);
+        const socialPath = `${account}/bos/gateways/${gatewayDomain}/bos.config.json`;
+
+        const publishEffect = Effect.gen(function* () {
+          yield* ensureNearCli;
+
+          const bosEnv = yield* loadBosEnv;
+          const privateKey = nearPrivateKey || bosEnv.NEAR_PRIVATE_KEY;
+
+          const socialArgs = buildSocialSetArgs(account, gatewayDomain, bosConfig);
+          const argsBase64 = Buffer.from(JSON.stringify(socialArgs)).toString("base64");
+
+          if (publishInput.dryRun) {
+            return {
+              status: "dry-run" as const,
+              txHash: "",
+              registryUrl: getSocialExplorerUrl(network, socialPath),
+            };
+          }
+
+          const result = yield* executeTransaction({
+            account,
+            contract: socialContract,
+            method: "set",
+            argsBase64,
+            network,
+            privateKey,
+            gas: "300Tgas",
+            deposit: "0.05NEAR",
+          });
+
+          return {
+            status: "published" as const,
+            txHash: result.txHash || "unknown",
+            registryUrl: getSocialExplorerUrl(network, socialPath),
+          };
+        });
+
         return await Effect.runPromise(publishEffect);
       } catch (error) {
         return {
@@ -640,41 +667,44 @@ export default createPlugin({
         };
       }
 
-      const registerEffect = Effect.gen(function* () {
-        yield* ensureNearCli;
-
-        const bosEnv = yield* loadBosEnv;
-        const gatewayPrivateKey = bosEnv.GATEWAY_PRIVATE_KEY;
-
-        const fullAccount = `${input.name}.${bosConfig.account}`;
-        const parentAccount = bosConfig.account;
-
-        yield* createSubaccount({
-          newAccount: fullAccount,
-          parentAccount,
-          initialBalance: "0.1NEAR",
-          network: input.network,
-          privateKey: gatewayPrivateKey,
-        });
-
-        const novaConfig = yield* getNovaConfig;
-        const nova = createNovaClient(novaConfig);
-
-        yield* registerSecretsGroup(nova, fullAccount, parentAccount);
-
-        return {
-          status: "registered" as const,
-          account: fullAccount,
-          novaGroup: getSecretsGroupId(fullAccount),
-        };
-      });
+      const network = input.network;
 
       try {
+        const parentAccount = getAccountForNetwork(bosConfig, network);
+        const fullAccount = `${input.name}.${parentAccount}`;
+
+        const registerEffect = Effect.gen(function* () {
+          yield* ensureNearCli;
+
+          const bosEnv = yield* loadBosEnv;
+          const gatewayPrivateKey = bosEnv.GATEWAY_PRIVATE_KEY;
+
+          yield* createSubaccount({
+            newAccount: fullAccount,
+            parentAccount,
+            initialBalance: "0.1NEAR",
+            network,
+            privateKey: gatewayPrivateKey,
+          });
+
+          const novaConfig = yield* getNovaConfig;
+          const nova = createNovaClient(novaConfig);
+
+          yield* registerSecretsGroup(nova, fullAccount, parentAccount);
+
+          return {
+            status: "registered" as const,
+            account: fullAccount,
+            novaGroup: getSecretsGroupId(fullAccount),
+          };
+        });
+
         return await Effect.runPromise(registerEffect);
       } catch (error) {
+        const parentAccount = network === "testnet" ? bosConfig.testnet : bosConfig.account;
         return {
           status: "error" as const,
-          account: `${input.name}.${bosConfig.account}`,
+          account: `${input.name}.${parentAccount || bosConfig.account}`,
           error: error instanceof Error ? error.message : "Unknown error",
         };
       }
@@ -1155,75 +1185,6 @@ export default createPlugin({
       }
     }),
 
-    depsSync: builder.depsSync.handler(async ({ input }) => {
-      const { configDir, bosConfig } = deps;
-
-      if (!bosConfig) {
-        return {
-          status: "error" as const,
-          synced: [],
-          error: "No bos.config.json found. Run from a BOS project directory.",
-        };
-      }
-
-      const category = input.category;
-      const sharedDeps = bosConfig.shared?.[category];
-
-      if (!sharedDeps || Object.keys(sharedDeps).length === 0) {
-        return {
-          status: "error" as const,
-          synced: [],
-          error: `No shared.${category} dependencies found in bos.config.json`,
-        };
-      }
-
-      try {
-        const rootPkgPath = `${configDir}/package.json`;
-        const rootPkg = await Bun.file(rootPkgPath).json() as {
-          workspaces?: { packages?: string[]; catalog?: Record<string, string> };
-        };
-
-        if (!rootPkg.workspaces) {
-          rootPkg.workspaces = {};
-        }
-        if (!rootPkg.workspaces.catalog) {
-          rootPkg.workspaces.catalog = {};
-        }
-
-        const synced: string[] = [];
-
-        for (const [name, config] of Object.entries(sharedDeps)) {
-          const version = (config as { requiredVersion?: string }).requiredVersion;
-          if (version) {
-            const cleanVersion = version.replace(/^[\^~]/, "");
-            rootPkg.workspaces.catalog[name] = cleanVersion;
-            synced.push(name);
-          }
-        }
-
-        await Bun.write(rootPkgPath, JSON.stringify(rootPkg, null, 2));
-
-        if (input.install) {
-          const { execa } = await import("execa");
-          await execa("bun", ["install"], {
-            cwd: configDir,
-            stdio: "inherit",
-          });
-        }
-
-        return {
-          status: "synced" as const,
-          synced,
-        };
-      } catch (error) {
-        return {
-          status: "error" as const,
-          synced: [],
-          error: error instanceof Error ? error.message : "Unknown error",
-        };
-      }
-    }),
-
     filesSync: builder.filesSync.handler(async ({ input }) => {
       const { configDir, bosConfig } = deps;
 
@@ -1428,5 +1389,284 @@ export default createPlugin({
         };
       }
     }),
+
+    kill: builder.kill.handler(async ({ input }) => {
+      const killEffect = Effect.gen(function* () {
+        const registry = yield* createProcessRegistry();
+        const result = yield* registry.killAll(input.force);
+        return {
+          status: "killed" as const,
+          killed: result.killed,
+          failed: result.failed,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(killEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          killed: [],
+          failed: [],
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    ps: builder.ps.handler(async () => {
+      const psEffect = Effect.gen(function* () {
+        const registry = yield* createProcessRegistry();
+        const processes = yield* registry.getAll();
+        return {
+          status: "listed" as const,
+          processes,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(psEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          processes: [],
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    dockerBuild: builder.dockerBuild.handler(async ({ input }) => {
+      const { configDir, bosConfig } = deps;
+
+      const dockerEffect = Effect.gen(function* () {
+        const { execa } = yield* Effect.tryPromise({
+          try: () => import("execa"),
+          catch: (e) => new Error(`Failed to import execa: ${e}`),
+        });
+
+        const dockerfile = input.target === "development" ? "Dockerfile.dev" : "Dockerfile";
+        const imageName = bosConfig?.account?.replace(/\./g, "-") || "bos-app";
+        const tag = input.tag || (input.target === "development" ? "dev" : "latest");
+        const fullTag = `${imageName}:${tag}`;
+
+        const args = ["build", "-f", dockerfile, "-t", fullTag];
+        if (input.noCache) {
+          args.push("--no-cache");
+        }
+        args.push(".");
+
+        yield* Effect.tryPromise({
+          try: () => execa("docker", args, {
+            cwd: configDir,
+            stdio: "inherit",
+          }),
+          catch: (e) => new Error(`Docker build failed: ${e}`),
+        });
+
+        return {
+          status: "built" as const,
+          image: imageName,
+          tag: fullTag,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(dockerEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          image: "",
+          tag: "",
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    dockerRun: builder.dockerRun.handler(async ({ input }) => {
+      const { bosConfig } = deps;
+
+      const dockerEffect = Effect.gen(function* () {
+        const { execa } = yield* Effect.tryPromise({
+          try: () => import("execa"),
+          catch: (e) => new Error(`Failed to import execa: ${e}`),
+        });
+
+        const imageName = bosConfig?.account?.replace(/\./g, "-") || "bos-app";
+        const tag = input.target === "development" ? "dev" : "latest";
+        const fullTag = `${imageName}:${tag}`;
+        const port = input.port || (input.target === "development" ? 4000 : 3000);
+
+        const args = ["run"];
+        
+        if (input.detach) {
+          args.push("-d");
+        }
+
+        args.push("-p", `${port}:${port}`);
+        args.push("-e", `PORT=${port}`);
+
+        if (input.target === "development") {
+          args.push("-e", `MODE=${input.mode}`);
+        }
+
+        if (input.env) {
+          for (const [key, value] of Object.entries(input.env)) {
+            args.push("-e", `${key}=${value}`);
+          }
+        }
+
+        if (bosConfig) {
+          args.push("-e", `BOS_ACCOUNT=${bosConfig.account}`);
+          const gateway = bosConfig.gateway as { production?: string } | string | undefined;
+          if (gateway) {
+            const domain = typeof gateway === "string" 
+              ? gateway 
+              : gateway.production?.replace(/^https?:\/\//, "") || "";
+            if (domain) {
+              args.push("-e", `GATEWAY_DOMAIN=${domain}`);
+            }
+          }
+        }
+
+        args.push(fullTag);
+
+        const result = yield* Effect.tryPromise({
+          try: () => execa("docker", args, {
+            stdio: input.detach ? "pipe" : "inherit",
+          }),
+          catch: (e) => new Error(`Docker run failed: ${e}`),
+        });
+
+        const containerId = input.detach && result.stdout ? result.stdout.trim().slice(0, 12) : "attached";
+
+        return {
+          status: "running" as const,
+          containerId,
+          url: `http://localhost:${port}`,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(dockerEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          containerId: "",
+          url: "",
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    dockerStop: builder.dockerStop.handler(async ({ input }) => {
+      const { bosConfig } = deps;
+
+      const dockerEffect = Effect.gen(function* () {
+        const { execa } = yield* Effect.tryPromise({
+          try: () => import("execa"),
+          catch: (e) => new Error(`Failed to import execa: ${e}`),
+        });
+
+        const stopped: string[] = [];
+
+        if (input.containerId) {
+          yield* Effect.tryPromise({
+            try: () => execa("docker", ["stop", input.containerId]),
+            catch: (e) => new Error(`Failed to stop container: ${e}`),
+          });
+          stopped.push(input.containerId);
+        } else if (input.all) {
+          const imageName = bosConfig?.account?.replace(/\./g, "-") || "bos-app";
+          
+          const psResult = yield* Effect.tryPromise({
+            try: () => execa("docker", ["ps", "-q", "--filter", `ancestor=${imageName}`]),
+            catch: () => new Error("Failed to list containers"),
+          });
+
+          const containerIds = psResult.stdout.trim().split("\n").filter(Boolean);
+          
+          for (const id of containerIds) {
+            yield* Effect.tryPromise({
+              try: () => execa("docker", ["stop", id]),
+              catch: () => new Error(`Failed to stop container ${id}`),
+            }).pipe(Effect.catchAll(() => Effect.void));
+            stopped.push(id);
+          }
+        }
+
+        return {
+          status: "stopped" as const,
+          stopped,
+        };
+      });
+
+      try {
+        return await Effect.runPromise(dockerEffect);
+      } catch (error) {
+        return {
+          status: "error" as const,
+          stopped: [],
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
   }),
 });
+
+
+
+
+
+
+---
+
+
+Fix these type errors:
+
+➜  cli git:(main) ✗ bun run typecheck
+$ tsc --noEmit
+src/contract.ts:295:10 - error TS2554: Expected 2-3 arguments, but got 1.
+
+295   env: z.record(z.string()).optional(),
+             ~~~~~~
+
+  node_modules/zod/v4/classic/schemas.d.cts:513:107
+    513 export declare function record<Key extends core.$ZodRecordKey, Value extends core.SomeType>(keyType: Key, valueType: Value, params?: string | core.$ZodRecordParams): ZodRecord<Key, Value>;
+                                                                                                                  ~~~~~~~~~~~~~~~~
+    An argument for 'valueType' was not provided.
+
+src/lib/nova.ts:38:5 - error TS2353: Object literal may only specify known properties, and 'sessionToken' does not exist in type 'NovaSdkConfig'.
+
+38     sessionToken: config.sessionToken,
+       ~~~~~~~~~~~~
+
+src/lib/nova.ts:243:43 - error TS2353: Object literal may only specify known properties, and 'sessionToken' does not exist in type 'NovaSdkConfig'.
+
+243     const nova = new NovaSdk(accountId, { sessionToken });
+                                              ~~~~~~~~~~~~
+
+src/lib/secrets.ts:5:27 - error TS18047: 'config' is possibly 'null'.
+
+5   const componentConfig = config.app[component];
+                            ~~~~~~
+
+src/plugin.ts:1573:24 - error TS2769: No overload matches this call.
+  Overload 1 of 4, '(templateString_0: TemplateStringsArray, ...templateString: TemplateExpression[]): ResultPromise<{}>', gave the following error.
+    Argument of type 'string' is not assignable to parameter of type 'TemplateStringsArray'.
+  Overload 2 of 4, '(file: string | URL, arguments?: readonly string[] | undefined, options?: {} | undefined): ResultPromise<{}>', gave the following error.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+  Overload 3 of 4, '(file: string | URL, options?: Options | undefined): ResultPromise<Options>', gave the following error.
+    Type '(string | undefined)[]' has no properties in common with type 'Options'.
+
+1573             try: () => execa("docker", ["stop", input.containerId]),
+                            ~~~~~
+
+
+
+Found 5 errors in 4 files.
+
+Errors  Files
+     1  src/contract.ts:295
+     2  src/lib/nova.ts:38
+     1  src/lib/secrets.ts:5
+     1  src/plugin.ts:1573

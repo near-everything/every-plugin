@@ -1,30 +1,66 @@
-# Module Federation Monorepo
+# everything-dev
 
-A production-ready Module Federation monorepo demonstrating every-plugin architecture, runtime-loaded configuration, and NEAR Protocol integration.
+Module Federation monorepo with runtime-loaded configuration, demonstrating every-plugin architecture and NEAR Protocol integration.
 
 Built with React, Hono.js, oRPC, Better-Auth, and Module Federation.
 
 ## Quick Start
 
 ```bash
-bun install        # Install dependencies
-bun demo db migrate   # Run database migrations
-bun demo dev       # Start all services (API, UI, Host)
+bun install             # Install dependencies
+bos dev --host remote   # Start development (typical workflow)
 ```
 
-Visit http://localhost:3000 to see the application.
+Visit http://localhost:3002 (UI) and http://localhost:3014 (API).
+
+## CLI Commands
+
+The `bos` CLI manages all workflows. See [.claude/skills/bos/SKILL.md](.claude/skills/bos/SKILL.md) for the full skill reference.
+
+### Development
+
+```bash
+bos dev --host remote   # Remote host, local UI + API (typical)
+bos dev --ui remote     # Isolate API work
+bos dev --api remote    # Isolate UI work
+bos dev                 # Full local (initial setup)
+```
+
+### Production
+
+```bash
+bos start --no-interactive   # All remotes, production URLs
+```
+
+### Build & Publish
+
+```bash
+bos build               # Build all packages (updates bos.config.json)
+bos publish             # Publish config to Near Social
+bos sync                # Sync from every.near/everything.dev
+```
+
+### Project Management
+
+```bash
+bos create project <name>   # Scaffold new project
+bos info                    # Show configuration
+bos status                  # Check remote health
+bos clean                   # Clean build artifacts
+```
 
 ## Documentation
 
-- **[LLM.txt](./LLM.txt)** - Technical guide for LLMs and developers (architecture, patterns, examples)
-- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - Contribution guidelines and development workflow
+- **[.claude/skills/bos/SKILL.md](.claude/skills/bos/SKILL.md)** - BOS CLI skill (commands, workflows)
+- **[LLM.txt](./LLM.txt)** - Technical guide for LLMs and developers
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - Contribution guidelines
 - **[API README](./api/README.md)** - API plugin documentation
 - **[UI README](./ui/README.md)** - Frontend documentation
 - **[Host README](./host/README.md)** - Server host documentation
 
 ## Architecture
 
-**Module Federation Monorepo** with runtime-loaded configuration:
+**Module Federation monorepo** with runtime-loaded configuration:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -46,12 +82,57 @@ Visit http://localhost:3000 to see the application.
 ```
 
 **Key Features:**
-- ✅ **Runtime Configuration** - All URLs loaded from `bos.config.json` (no rebuild needed!)
+- ✅ **Runtime Configuration** - All URLs from `bos.config.json` (no rebuild needed)
 - ✅ **Independent Deployment** - UI, API, and Host deploy separately
 - ✅ **Type Safety** - End-to-end with oRPC contracts
-- ✅ **CDN-Ready** - Module Federation with automatic CDN deployment
+- ✅ **CDN-Ready** - Module Federation with Zephyr Cloud
 
-See [LLM.txt](./LLM.txt) for complete architecture details.
+## Configuration
+
+All runtime configuration lives in `bos.config.json`:
+
+```json
+{
+  "account": "every.near",
+  "testnet": "althe.testnet",
+  "template": "near-everything/every-plugin/demo",
+  "gateway": {
+    "development": "http://localhost:8787",
+    "production": "https://everything.dev"
+  },
+  "shared": {
+    "ui": {
+      "react": { "requiredVersion": "19.2.4", "singleton": true }
+    }
+  },
+  "app": {
+    "host": {
+      "title": "App Title",
+      "development": "http://localhost:3000",
+      "production": "https://example.zephyrcloud.app",
+      "template": "near-everything/every-plugin/demo/host",
+      "sync": { "scripts": ["dev", "build", "test"] }
+    },
+    "ui": {
+      "name": "ui",
+      "development": "http://localhost:3002",
+      "production": "https://example-ui.zephyrcloud.app",
+      "exposes": {
+        "./Router": "./src/router.tsx",
+        "./components": "./src/components/index.ts"
+      }
+    },
+    "api": {
+      "name": "api",
+      "development": "http://localhost:3014",
+      "production": "https://example-api.zephyrcloud.app",
+      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN"]
+    }
+  }
+}
+```
+
+See [.claude/skills/bos/docs/types.md](.claude/skills/bos/docs/types.md) for the complete schema.
 
 ## Tech Stack
 
@@ -68,116 +149,6 @@ See [LLM.txt](./LLM.txt) for complete architecture details.
 **Database & Auth:**
 - SQLite (libsql) + Drizzle ORM
 - Better-Auth with NEAR Protocol support
-
-## CLI Commands
-
-The demo monorepo includes a CLI for common workflows. Run commands with `bun demo <command>`.
-
-### Development
-
-```bash
-bun demo dev           # Full local development (API + UI + Host)
-bun demo dev --ui      # UI development (remote API, local UI)
-bun demo dev --api     # API development (remote UI, local API)
-bun demo dev --host    # Host only (all remote)
-bun demo dev --proxy   # Proxy mode (proxy API requests to remote)
-```
-
-### Build
-
-```bash
-bun demo build         # Build all packages
-bun demo build ui      # Build UI only
-bun demo build api     # Build API only
-bun demo build host    # Build host only
-bun demo build --force # Force rebuild (ignore turbo cache)
-```
-
-### Testing
-
-```bash
-bun demo test              # Run all tests (host + api)
-bun demo test -f host      # Run host tests only
-bun demo test -f api       # Run API tests only
-bun demo test:ssr          # Run SSR integration tests (uses existing UI bundle)
-bun demo test:ssr --watch  # Watch mode - rebuild UI on changes
-```
-
-### Database
-
-```bash
-bun demo db migrate        # Run migrations
-bun demo db push           # Push schema changes
-bun demo db generate       # Generate migrations
-bun demo db studio         # Open Drizzle Studio
-bun demo db sync           # Sync database schema
-bun demo db migrate -f api # Run API database migrations
-```
-
-### Utilities
-
-```bash
-bun demo clean             # Clean build artifacts and caches
-```
-
-## Configuration
-
-All runtime configuration lives in `bos.config.json`:
-
-```json
-{
-  "account": "example.near",
-  "app": {
-    "host": {
-      "title": "App Title",
-      "development": "http://localhost:3000",
-      "production": "https://example.com"
-    },
-    "ui": {
-      "name": "ui",
-      "development": "http://localhost:3002",
-      "production": "https://cdn.example.com/ui/remoteEntry.js"
-    },
-    "api": {
-      "name": "api",
-      "development": "http://localhost:3014",
-      "production": "https://cdn.example.com/api/remoteEntry.js",
-      "variables": {},
-      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN"]
-    }
-  }
-}
-```
-
-**Benefits:**
-- Switch environments via `NODE_ENV` (no rebuild)
-- Update CDN URLs without code changes
-- Template injection for secrets
-
-## Development Workflow
-
-1. **Make changes** to any workspace (ui/, api/, host/)
-2. **Hot reload** works automatically during development
-3. **Build & deploy** independently:
-   - `bun demo build ui` → uploads to CDN → updates `bos.config.json`
-   - `bun demo build api` → uploads to CDN → updates `bos.config.json`
-   - Host automatically loads new versions!
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed development workflow.
-
-## SSR (Server-Side Rendering)
-
-The host uses **TanStack Router SSR streaming** to render UI on the server:
-
-- Routes can configure SSR behavior: `ssr: true`, `ssr: 'data-only'`, or `ssr: false`
-- Authenticated routes use `ssr: false` to skip server rendering (avoids auth on server)
-- The UI bundle is loaded via Module Federation at runtime
-
-**Testing SSR:**
-```bash
-bun demo build ui      # Build UI bundle first
-bun demo test:ssr      # Run SSR integration tests
-```
 
 ## Related Projects
 

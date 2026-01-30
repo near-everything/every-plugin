@@ -1,12 +1,12 @@
 # api
 
-[every-plugin](https://github.com/near-everything/every-plugin) based API.
+[every-plugin](https://github.com/near-everything/every-plugin) based API with oRPC and Effect-TS.
 
 ## Plugin Architecture
 
 Built with **every-plugin** framework (Rspack + Module Federation):
 
-```bash
+```
 ┌─────────────────────────────────────────────────────────┐
 │                    createPlugin()                       │
 ├─────────────────────────────────────────────────────────┤
@@ -33,19 +33,12 @@ Built with **every-plugin** framework (Rspack + Module Federation):
 - `services/` - Business logic with Effect-TS
 - `db/` - Database schema and migrations
 
-## Tech Stack
+## Development
 
-- **Framework**: every-plugin + oRPC
-- **Effects**: Effect-TS for service composition
-- **Database**: SQLite (libsql) + Drizzle ORM
-
-## Available Scripts
-
-- `bun dev` - Start dev server
-- `bun build` - Build plugin
-- `bun test` - Run tests
-- `bun db:push` - Push schema to database
-- `bun db:studio` - Open Drizzle Studio
+```bash
+bos dev --host remote   # Remote host, local UI + API (typical)
+bos dev --ui remote     # Isolate API work
+```
 
 ## Configuration
 
@@ -57,13 +50,40 @@ Built with **every-plugin** framework (Rspack + Module Federation):
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://cdn.example.com/api",
+      "production": "https://example-api.zephyrcloud.app",
+      "proxy": "https://example-api.zephyrcloud.app",
       "variables": {},
       "secrets": [
         "API_DATABASE_URL",
         "API_DATABASE_AUTH_TOKEN"
-      ]
+      ],
+      "template": "near-everything/every-plugin/demo/api",
+      "files": [
+        "rspack.config.cjs",
+        "tsconfig.json",
+        "vitest.config.ts",
+        "drizzle.config.ts",
+        "plugin.dev.ts"
+      ],
+      "sync": {
+        "scripts": ["dev", "build", "test"]
+      }
     }
   }
 }
 ```
+
+## Tech Stack
+
+- **Framework**: every-plugin + oRPC
+- **Effects**: Effect-TS for service composition
+- **Database**: SQLite (libsql) + Drizzle ORM
+- **Build**: Rspack + Module Federation
+
+## Scripts
+
+- `bun dev` - Start dev server (port 3014)
+- `bun build` - Build plugin
+- `bun test` - Run tests
+- `bun db:push` - Push schema to database
+- `bun db:studio` - Open Drizzle Studio

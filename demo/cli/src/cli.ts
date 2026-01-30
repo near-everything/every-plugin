@@ -213,8 +213,77 @@ async function main() {
     .description("Run CLI as HTTP server (exposes /api)")
     .option("-p, --port <port>", "Port to run on", "4000")
     .action(async (options) => {
-      const result = await client.serve({
-        port: parseInt(options.port, 10),
+      const port = parseInt(options.port, 10);
+      
+      const { Hono } = await import("hono");
+      const { cors } = await import("hono/cors");
+      const { RPCHandler } = await import("@orpc/server/fetch");
+      const { OpenAPIHandler } = await import("@orpc/openapi/fetch");
+      const { OpenAPIReferencePlugin } = await import("@orpc/openapi/plugins");
+      const { ZodToJsonSchemaConverter } = await import("@orpc/zod/zod4");
+      const { onError } = await import("every-plugin/orpc");
+      const { formatORPCError } = await import("every-plugin/errors");
+
+      const app = new Hono();
+      
+      app.use("/*", cors({ origin: "*", credentials: true }));
+
+      const rpcHandler = new RPCHandler(result.router, {
+        interceptors: [onError((error: unknown) => formatORPCError(error))],
+      });
+
+      const apiHandler = new OpenAPIHandler(result.router, {
+        plugins: [
+          new OpenAPIReferencePlugin({
+            schemaConverters: [new ZodToJsonSchemaConverter()],
+            specGenerateOptions: {
+              info: { title: "BOS CLI API", version: "1.0.0" },
+              servers: [{ url: `http://localhost:${port}/api` }],
+            },
+          }),
+        ],
+        interceptors: [onError((error: unknown) => formatORPCError(error))],
+      });
+
+      app.get("/", (c) => c.json({ 
+        ok: true, 
+        plugin: "bos-cli", 
+        status: "ready",
+        endpoints: {
+          health: "/",
+          docs: "/api",
+          rpc: "/api/rpc"
+        }
+      }));
+
+      app.all("/api/rpc/*", async (c) => {
+        const rpcResult = await rpcHandler.handle(c.req.raw, {
+          prefix: "/api/rpc",
+          context: {},
+        });
+        return rpcResult.response 
+          ? new Response(rpcResult.response.body, rpcResult.response) 
+          : c.text("Not Found", 404);
+      });
+
+      app.all("/api", async (c) => {
+        const apiResult = await apiHandler.handle(c.req.raw, {
+          prefix: "/api",
+          context: {},
+        });
+        return apiResult.response 
+          ? new Response(apiResult.response.body, apiResult.response) 
+          : c.text("Not Found", 404);
+      });
+
+      app.all("/api/*", async (c) => {
+        const apiResult = await apiHandler.handle(c.req.raw, {
+          prefix: "/api",
+          context: {},
+        });
+        return apiResult.response 
+          ? new Response(apiResult.response.body, apiResult.response) 
+          : c.text("Not Found", 404);
       });
 
       console.log();
@@ -222,10 +291,27 @@ async function main() {
       console.log(`  ${icons.run} ${gradients.cyber("CLI SERVER")}`);
       console.log(colors.cyan(frames.bottom(48)));
       console.log();
-      console.log(`  ${colors.dim("URL:")}  ${colors.white(result.url)}`);
-      console.log(`  ${colors.dim("RPC:")}  ${colors.white(result.endpoints.rpc)}`);
-      console.log(`  ${colors.dim("Docs:")} ${colors.white(result.endpoints.docs)}`);
+      console.log(`  ${colors.dim("URL:")}  ${colors.white(`http://localhost:${port}`)}`);
+      console.log(`  ${colors.dim("RPC:")}  ${colors.white(`http://localhost:${port}/api/rpc`)}`);
+      console.log(`  ${colors.dim("Docs:")} ${colors.white(`http://localhost:${port}/api`)}`);
       console.log();
+
+      const server = Bun.serve({
+        port,
+        fetch: app.fetch,
+      });
+
+      const shutdown = () => {
+        console.log();
+        console.log(colors.dim("  Shutting down..."));
+        server.stop();
+        process.exit(0);
+      };
+
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+
+      await new Promise(() => {});
     });
 
   program
@@ -659,8 +745,9 @@ Zephyr Configuration:
     .description("Sync dependencies and config from everything-dev CLI")
     .option("--account <account>", "NEAR account to sync from (default: every.near)")
     .option("--gateway <gateway>", "Gateway domain to sync from (default: everything.dev)")
+    .option("--network <network>", "Network: mainnet | testnet", "mainnet")
     .option("--force", "Force sync even if versions match")
-    .action(async (options: { account?: string; gateway?: string; force?: boolean }) => {
+    .action(async (options: { account?: string; gateway?: string; network?: string; force?: boolean }) => {
       console.log();
       const source = options.account || options.gateway 
         ? `${options.account || "every.near"}/${options.gateway || "everything.dev"}`
@@ -670,6 +757,7 @@ Zephyr Configuration:
       const result = await client.sync({
         account: options.account,
         gateway: options.gateway,
+        network: (options.network as "mainnet" | "testnet") || "mainnet",
         force: options.force || false,
       });
 
@@ -746,38 +834,161 @@ Zephyr Configuration:
       console.log();
     });
 
-  depsCmd
-    .command("sync")
-    .description("Sync bos.config.json shared deps to package.json catalog")
-    .argument("[category]", "Dependency category (ui | api)", "ui")
-    .option("--no-install", "Skip running bun install")
-    .action(async (category: string, options: { install: boolean }) => {
-      console.log();
-      console.log(`  ${icons.pkg} Syncing shared.${category} to catalog...`);
+  program
+    .command("kill")
+    .description("Kill all tracked BOS processes")
+    .option("--force", "Force kill with SIGKILL immediately")
+    .action(async (options: { force?: boolean }) => {
+      const result = await client.kill({ force: options.force ?? false });
 
-      const result = await client.depsSync({
-        category: category as "ui" | "api",
-        install: options.install,
+      console.log();
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} ${result.error || "Failed to kill processes"}`));
+        process.exit(1);
+      }
+
+      if (result.killed.length > 0) {
+        console.log(colors.green(`${icons.ok} Killed ${result.killed.length} processes`));
+        for (const pid of result.killed) {
+          console.log(colors.dim(`  PID ${pid}`));
+        }
+      }
+      if (result.failed.length > 0) {
+        console.log(colors.error(`${icons.err} Failed to kill ${result.failed.length} processes`));
+        for (const pid of result.failed) {
+          console.log(colors.dim(`  PID ${pid}`));
+        }
+      }
+      if (result.killed.length === 0 && result.failed.length === 0) {
+        console.log(colors.dim("  No tracked processes found"));
+      }
+      console.log();
+    });
+
+  program
+    .command("ps")
+    .description("List tracked BOS processes")
+    .action(async () => {
+      const result = await client.ps({});
+
+      console.log();
+      console.log(colors.cyan(frames.top(52)));
+      console.log(`  ${icons.run} ${gradients.cyber("PROCESSES")}`);
+      console.log(colors.cyan(frames.bottom(52)));
+      console.log();
+
+      if (result.processes.length === 0) {
+        console.log(colors.dim("  No tracked processes"));
+      } else {
+        for (const proc of result.processes) {
+          const age = Math.round((Date.now() - proc.startedAt) / 1000);
+          console.log(`  ${colors.white(proc.name)} ${colors.dim(`(PID ${proc.pid})`)}`);
+          console.log(`    ${colors.dim("Port:")} ${colors.cyan(String(proc.port))}`);
+          console.log(`    ${colors.dim("Age:")} ${colors.cyan(`${age}s`)}`);
+        }
+      }
+      console.log();
+    });
+
+  const docker = program
+    .command("docker")
+    .description("Docker container management");
+
+  docker
+    .command("build")
+    .description("Build Docker image")
+    .option("-t, --target <target>", "Build target: production | development", "production")
+    .option("--tag <tag>", "Custom image tag")
+    .option("--no-cache", "Build without cache")
+    .action(async (options: { target: string; tag?: string; noCache?: boolean }) => {
+      console.log();
+      console.log(`  ${icons.pkg} Building Docker image (${options.target})...`);
+
+      const result = await client.dockerBuild({
+        target: options.target as "production" | "development",
+        tag: options.tag,
+        noCache: options.noCache ?? false,
       });
 
       if (result.status === "error") {
-        console.error(colors.error(`${icons.err} ${result.error || "Sync failed"}`));
+        console.error(colors.error(`${icons.err} ${result.error || "Build failed"}`));
         process.exit(1);
       }
 
       console.log();
-      console.log(colors.green(`${icons.ok} Synced ${result.synced.length} dependencies to catalog`));
-      
-      if (result.synced.length > 0) {
-        for (const name of result.synced) {
-          console.log(`  ${colors.dim("•")} ${name}`);
+      console.log(colors.green(`${icons.ok} Built ${result.tag}`));
+      console.log();
+    });
+
+  docker
+    .command("run")
+    .description("Run Docker container")
+    .option("-t, --target <target>", "Image target: production | development", "production")
+    .option("-m, --mode <mode>", "Run mode: start | serve | dev", "start")
+    .option("-p, --port <port>", "Port to expose")
+    .option("-d, --detach", "Run in background")
+    .option("-e, --env <env...>", "Environment variables (KEY=value)")
+    .action(async (options: { target: string; mode: string; port?: string; detach?: boolean; env?: string[] }) => {
+      console.log();
+      console.log(`  ${icons.run} Starting Docker container...`);
+
+      const envVars: Record<string, string> = {};
+      if (options.env) {
+        for (const e of options.env) {
+          const [key, ...rest] = e.split("=");
+          if (key) envVars[key] = rest.join("=");
         }
       }
 
-      if (options.install) {
-        console.log(colors.dim("  bun install complete"));
+      const result = await client.dockerRun({
+        target: options.target as "production" | "development",
+        mode: options.mode as "start" | "serve" | "dev",
+        port: options.port ? parseInt(options.port, 10) : undefined,
+        detach: options.detach ?? false,
+        env: Object.keys(envVars).length > 0 ? envVars : undefined,
+      });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} ${result.error || "Run failed"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      console.log(colors.green(`${icons.ok} Container running`));
+      console.log(`  ${colors.dim("URL:")} ${colors.cyan(result.url)}`);
+      if (result.containerId !== "attached") {
+        console.log(`  ${colors.dim("Container:")} ${colors.cyan(result.containerId)}`);
+      }
+      console.log();
+    });
+
+  docker
+    .command("stop")
+    .description("Stop Docker container(s)")
+    .option("-c, --container <id>", "Container ID to stop")
+    .option("-a, --all", "Stop all containers for this app")
+    .action(async (options: { container?: string; all?: boolean }) => {
+      console.log();
+      console.log(`  ${icons.pkg} Stopping containers...`);
+
+      const result = await client.dockerStop({
+        containerId: options.container,
+        all: options.all ?? false,
+      });
+
+      if (result.status === "error") {
+        console.error(colors.error(`${icons.err} ${result.error || "Stop failed"}`));
+        process.exit(1);
+      }
+
+      console.log();
+      if (result.stopped.length > 0) {
+        console.log(colors.green(`${icons.ok} Stopped ${result.stopped.length} container(s)`));
+        for (const id of result.stopped) {
+          console.log(colors.dim(`  ${id}`));
+        }
       } else {
-        console.log(colors.dim("  Run 'bun install' to update lockfile"));
+        console.log(colors.dim("  No containers stopped"));
       }
       console.log();
     });

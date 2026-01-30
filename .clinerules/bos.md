@@ -1,0 +1,1 @@
+../demo/.claude/skills/bos/SKILL.md

@@ -1,12 +1,12 @@
 # host
 
-Server host with authentication and Module Federation. Can be run locally or loaded from a remote Module Federation bundle.
+Server host with authentication, Module Federation orchestration, and every-plugin runtime.
 
 ## Architecture
 
 The host orchestrates both UI and API federation:
 
-```bash
+```
 ┌─────────────────────────────────────────────────────────┐
 │                        host                             │
 │                                                         │
@@ -29,30 +29,47 @@ The host orchestrates both UI and API federation:
 └─────────────────────────────────────────────────────────┘
 ```
 
+## Development
+
+```bash
+bos dev --host remote   # Remote host, local UI + API (typical)
+bos dev                 # Full local development
+```
+
+## Production
+
+```bash
+bos start --no-interactive   # All remotes, production URLs
+```
+
 ## Configuration
 
-All configuration from `bos.config.json`:
+**bos.config.json**:
 
 ```json
 {
-  "account": "example.near",
   "app": {
     "host": {
       "title": "App Title",
+      "description": "Description of the application",
       "development": "http://localhost:3000",
-      "production": "https://example.com"
-    },
-    "ui": {
-      "name": "ui",
-      "development": "http://localhost:3002",
-      "production": "https://cdn.example.com/ui",
-      "ssr": "https://cdn.example.com/ui-ssr"
-    },
-    "api": {
-      "name": "api",
-      "development": "http://localhost:3014",
-      "production": "https://cdn.example.com/api",
-      "secrets": ["API_DATABASE_URL", "API_DATABASE_AUTH_TOKEN"]
+      "production": "https://example.zephyrcloud.app",
+      "secrets": [
+        "HOST_DATABASE_URL",
+        "HOST_DATABASE_AUTH_TOKEN",
+        "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_URL"
+      ],
+      "template": "near-everything/every-plugin/demo/host",
+      "files": [
+        "rsbuild.config.ts",
+        "tsconfig.json",
+        "vitest.config.ts",
+        "drizzle.config.ts"
+      ],
+      "sync": {
+        "scripts": ["dev", "build", "test"]
+      }
     }
   }
 }
@@ -73,14 +90,10 @@ All configuration from `bos.config.json`:
 
 ### Proxy Mode
 
-Set `API_PROXY=true` or `API_PROXY=<url>` to proxy all `/api/*` requests to another host instead of loading the API plugin locally. Useful for:
-
-- Development against production API
-- Staging environments
-- Testing without running the API server
+Set `API_PROXY=true` or `API_PROXY=<url>` to proxy all `/api/*` requests to another host:
 
 ```bash
-API_PROXY=https://production.example.com bun dev
+API_PROXY=https://production.example.com bos dev
 ```
 
 ## Tech Stack
@@ -92,72 +105,27 @@ API_PROXY=https://production.example.com bun dev
 - **Build**: Rsbuild + Module Federation
 - **Plugins**: every-plugin runtime
 
-## Available Scripts
+## Scripts
 
 - `bun dev` - Start dev server (port 3000)
-- `bun build` - Build MF bundle for production (outputs `remoteEntry.js`)
-- `bun bootstrap` - Run host from remote MF URL (requires `HOST_REMOTE_URL`)
+- `bun build` - Build MF bundle for production
+- `bun bootstrap` - Run host from remote MF URL
 - `bun preview` - Run production server locally
 - `bun db:migrate` - Run migrations
 - `bun db:studio` - Open Drizzle Studio
 
 ## Remote Host Mode
 
-The host can be deployed as a Module Federation remote and loaded dynamically at runtime:
-
-### Building & Deploying
+The host can be deployed as a Module Federation remote:
 
 ```bash
-# Build the MF bundle (deploys to Zephyr, updates bos.config.json)
-cd demo/host
-bun build
+# Build and deploy
+bos build host
+bos deploy host
+
+# Others can run from the remote URL
+HOST_REMOTE_URL=https://your-zephyr-url.zephyrcloud.app bun bootstrap
 ```
-
-This produces `dist/remoteEntry.js` and deploys to Zephyr. The Zephyr URL is saved to `bos.config.json → app.host.remote`.
-
-### Using Remote Host in Development
-
-```bash
-# From the CLI - no local host code needed!
-bos dev --remote-host
-```
-
-This loads and runs the host from the Zephyr URL configured in `bos.config.json`.
-
-### Production Deployment (Railway/Docker)
-
-Use the bootstrap script to run the host from a remote URL:
-
-```bash
-# Set the remote URL
-export HOST_REMOTE_URL=https://your-zephyr-url.zephyrcloud.app
-
-# Run
-bun bootstrap
-```
-
-**Dockerfile example:**
-```dockerfile
-FROM oven/bun:latest
-WORKDIR /app
-COPY package.json bun.lockb ./
-RUN bun install
-COPY bootstrap.ts ./
-CMD ["bun", "bootstrap"]
-```
-
-**Required Environment Variables:**
-- `HOST_REMOTE_URL` - Zephyr URL of the deployed host bundle
-- `HOST_DATABASE_URL` - Database connection string
-- `BETTER_AUTH_SECRET` - Auth encryption secret
-- `BETTER_AUTH_URL` - Base URL for auth endpoints
-
-### Benefits
-
-1. **No local host code needed** - Just reference the remote URL
-2. **Instant updates** - Deploy new bundle, containers pick it up on restart
-3. **Version flexibility** - Pin to specific Zephyr URLs for stability
-4. **Same binary everywhere** - Bootstrap script is tiny, all logic lives in the bundle
 
 ## API Routes
 

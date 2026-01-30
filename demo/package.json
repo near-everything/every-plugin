@@ -30,20 +30,28 @@
     }
   },
   "scripts": {
-    "bos": "bun run cli/src/cli.ts",
-    "dev": "bun run cli/src/cli.ts dev",
-    "dev:ui": "bun run cli/src/cli.ts dev --ui",
-    "dev:api": "bun run cli/src/cli.ts dev --api",
-    "dev:host": "bun run cli/src/cli.ts dev --host",
-    "dev:proxy": "bun run cli/src/cli.ts dev --proxy",
-    "build": "bun run cli/src/cli.ts build",
+    "bos": "bos",
+    "dev": "bos dev",
+    "dev:ui": "bos dev --ui",
+    "dev:api": "bos dev --api",
+    "dev:host": "bos dev --host",
+    "dev:proxy": "bos dev --proxy",
+    "build": "bos build",
     "build:api": "bun run --cwd api rsbuild build",
     "build:host": "bun run --cwd host rsbuild build",
     "build:ui": "bun run --cwd ui rsbuild build",
-    "deploy": "NODE_ENV=production bun run build:ui && bun run build:api",
-    "test": "bun run cli/src/cli.ts test",
+    "deploy": "bos deploy",
+    "test": "bos test",
     "typecheck": "bun run --cwd host tsc --noEmit && bun run --cwd ui tsc --noEmit && bun run --cwd api tsc --noEmit",
-    "start": "NODE_ENV=production bun run --cwd host tsx server.ts",
+    "start": "bos start --no-interactive",
+    "serve": "bos serve",
+    "kill": "bos kill",
+    "ps": "bos ps",
+    "docker:build": "bos docker build",
+    "docker:build:dev": "bos docker build --target development",
+    "docker:run": "bos docker run",
+    "docker:run:dev": "bos docker run --target development --mode serve",
+    "docker:stop": "bos docker stop --all",
     "db:push": "bun run --cwd host drizzle-kit push",
     "db:studio": "bun run --cwd host drizzle-kit studio",
     "db:generate": "bun run --cwd host drizzle-kit generate",
@@ -53,6 +61,7 @@
   },
   "packageManager": "bun@1.2.20",
   "dependencies": {
-    "@types/bun": "^1.3.6"
+    "@types/bun": "^1.3.6",
+    "everything-dev": "catalog:"
   }
 }
