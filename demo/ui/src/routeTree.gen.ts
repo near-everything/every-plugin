@@ -10,9 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LayoutRouteImport } from './routes/_layout'
-import { Route as LayoutRegistryRouteImport } from './routes/_layout/registry'
 import { Route as LayoutLoginRouteImport } from './routes/_layout/login'
 import { Route as LayoutAuthenticatedRouteImport } from './routes/_layout/_authenticated'
+import { Route as LayoutRegistryIndexRouteImport } from './routes/_layout/registry/index'
 import { Route as LayoutAuthenticatedIndexRouteImport } from './routes/_layout/_authenticated/index'
 import { Route as LayoutPKeyRouteImport } from './routes/_layout/p/$key'
 import { Route as LayoutAuthenticatedAdminRouteImport } from './routes/_layout/_authenticated/_admin'
@@ -25,11 +25,6 @@ const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LayoutRegistryRoute = LayoutRegistryRouteImport.update({
-  id: '/registry',
-  path: '/registry',
-  getParentRoute: () => LayoutRoute,
-} as any)
 const LayoutLoginRoute = LayoutLoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -37,6 +32,11 @@ const LayoutLoginRoute = LayoutLoginRouteImport.update({
 } as any)
 const LayoutAuthenticatedRoute = LayoutAuthenticatedRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutRegistryIndexRoute = LayoutRegistryIndexRouteImport.update({
+  id: '/registry/',
+  path: '/registry/',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutAuthenticatedIndexRoute =
@@ -63,9 +63,9 @@ const LayoutAuthenticatedKeysIndexRoute =
   } as any)
 const LayoutRegistryAccountDomainRoute =
   LayoutRegistryAccountDomainRouteImport.update({
-    id: '/$account/$domain',
-    path: '/$account/$domain',
-    getParentRoute: () => LayoutRegistryRoute,
+    id: '/registry/$account/$domain',
+    path: '/registry/$account/$domain',
+    getParentRoute: () => LayoutRoute,
   } as any)
 const LayoutAuthenticatedKeysKeyRoute =
   LayoutAuthenticatedKeysKeyRouteImport.update({
@@ -83,8 +83,8 @@ const LayoutAuthenticatedAdminDashboardRoute =
 export interface FileRoutesByFullPath {
   '/': typeof LayoutAuthenticatedIndexRoute
   '/login': typeof LayoutLoginRoute
-  '/registry': typeof LayoutRegistryRouteWithChildren
   '/p/$key': typeof LayoutPKeyRoute
+  '/registry/': typeof LayoutRegistryIndexRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/registry/$account/$domain': typeof LayoutRegistryAccountDomainRoute
@@ -93,8 +93,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof LayoutAuthenticatedIndexRoute
   '/login': typeof LayoutLoginRoute
-  '/registry': typeof LayoutRegistryRouteWithChildren
   '/p/$key': typeof LayoutPKeyRoute
+  '/registry': typeof LayoutRegistryIndexRoute
   '/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/registry/$account/$domain': typeof LayoutRegistryAccountDomainRoute
@@ -105,10 +105,10 @@ export interface FileRoutesById {
   '/_layout': typeof LayoutRouteWithChildren
   '/_layout/_authenticated': typeof LayoutAuthenticatedRouteWithChildren
   '/_layout/login': typeof LayoutLoginRoute
-  '/_layout/registry': typeof LayoutRegistryRouteWithChildren
   '/_layout/_authenticated/_admin': typeof LayoutAuthenticatedAdminRouteWithChildren
   '/_layout/p/$key': typeof LayoutPKeyRoute
   '/_layout/_authenticated/': typeof LayoutAuthenticatedIndexRoute
+  '/_layout/registry/': typeof LayoutRegistryIndexRoute
   '/_layout/_authenticated/_admin/dashboard': typeof LayoutAuthenticatedAdminDashboardRoute
   '/_layout/_authenticated/keys/$key': typeof LayoutAuthenticatedKeysKeyRoute
   '/_layout/registry/$account/$domain': typeof LayoutRegistryAccountDomainRoute
@@ -119,8 +119,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
-    | '/registry'
     | '/p/$key'
+    | '/registry/'
     | '/dashboard'
     | '/keys/$key'
     | '/registry/$account/$domain'
@@ -129,8 +129,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
-    | '/registry'
     | '/p/$key'
+    | '/registry'
     | '/dashboard'
     | '/keys/$key'
     | '/registry/$account/$domain'
@@ -140,10 +140,10 @@ export interface FileRouteTypes {
     | '/_layout'
     | '/_layout/_authenticated'
     | '/_layout/login'
-    | '/_layout/registry'
     | '/_layout/_authenticated/_admin'
     | '/_layout/p/$key'
     | '/_layout/_authenticated/'
+    | '/_layout/registry/'
     | '/_layout/_authenticated/_admin/dashboard'
     | '/_layout/_authenticated/keys/$key'
     | '/_layout/registry/$account/$domain'
@@ -163,13 +163,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_layout/registry': {
-      id: '/_layout/registry'
-      path: '/registry'
-      fullPath: '/registry'
-      preLoaderRoute: typeof LayoutRegistryRouteImport
-      parentRoute: typeof LayoutRoute
-    }
     '/_layout/login': {
       id: '/_layout/login'
       path: '/login'
@@ -182,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof LayoutAuthenticatedRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/registry/': {
+      id: '/_layout/registry/'
+      path: '/registry'
+      fullPath: '/registry/'
+      preLoaderRoute: typeof LayoutRegistryIndexRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/_authenticated/': {
@@ -214,10 +214,10 @@ declare module '@tanstack/react-router' {
     }
     '/_layout/registry/$account/$domain': {
       id: '/_layout/registry/$account/$domain'
-      path: '/$account/$domain'
+      path: '/registry/$account/$domain'
       fullPath: '/registry/$account/$domain'
       preLoaderRoute: typeof LayoutRegistryAccountDomainRouteImport
-      parentRoute: typeof LayoutRegistryRoute
+      parentRoute: typeof LayoutRoute
     }
     '/_layout/_authenticated/keys/$key': {
       id: '/_layout/_authenticated/keys/$key'
@@ -268,30 +268,20 @@ const LayoutAuthenticatedRouteChildren: LayoutAuthenticatedRouteChildren = {
 const LayoutAuthenticatedRouteWithChildren =
   LayoutAuthenticatedRoute._addFileChildren(LayoutAuthenticatedRouteChildren)
 
-interface LayoutRegistryRouteChildren {
-  LayoutRegistryAccountDomainRoute: typeof LayoutRegistryAccountDomainRoute
-}
-
-const LayoutRegistryRouteChildren: LayoutRegistryRouteChildren = {
-  LayoutRegistryAccountDomainRoute: LayoutRegistryAccountDomainRoute,
-}
-
-const LayoutRegistryRouteWithChildren = LayoutRegistryRoute._addFileChildren(
-  LayoutRegistryRouteChildren,
-)
-
 interface LayoutRouteChildren {
   LayoutAuthenticatedRoute: typeof LayoutAuthenticatedRouteWithChildren
   LayoutLoginRoute: typeof LayoutLoginRoute
-  LayoutRegistryRoute: typeof LayoutRegistryRouteWithChildren
   LayoutPKeyRoute: typeof LayoutPKeyRoute
+  LayoutRegistryIndexRoute: typeof LayoutRegistryIndexRoute
+  LayoutRegistryAccountDomainRoute: typeof LayoutRegistryAccountDomainRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAuthenticatedRoute: LayoutAuthenticatedRouteWithChildren,
   LayoutLoginRoute: LayoutLoginRoute,
-  LayoutRegistryRoute: LayoutRegistryRouteWithChildren,
   LayoutPKeyRoute: LayoutPKeyRoute,
+  LayoutRegistryIndexRoute: LayoutRegistryIndexRoute,
+  LayoutRegistryAccountDomainRoute: LayoutRegistryAccountDomainRoute,
 }
 
 const LayoutRouteWithChildren =

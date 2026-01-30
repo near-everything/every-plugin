@@ -66,7 +66,7 @@ function getOrCreateFederationInstance(config: RuntimeConfig) {
         alias: config.ui.name,
       },
     ],
-    shared,
+    // shared, DON'T UNCOMMENT
   });
 
   setGlobalFederationInstance(federationInstance);

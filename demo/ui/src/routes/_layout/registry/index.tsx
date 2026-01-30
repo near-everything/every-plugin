@@ -69,7 +69,7 @@ export async function fetchGateways(): Promise<GatewayEntry[]> {
   return parseGatewayData(data);
 }
 
-export const Route = createFileRoute("/_layout/registry")({
+export const Route = createFileRoute("/_layout/registry/")({
   loader: async () => {
     const data = await fetchGateways();
     return { data };
