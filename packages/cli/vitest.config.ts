@@ -7,5 +7,9 @@ export default defineConfig({
     hookTimeout: 90000,
     include: ["tests/**/*.test.ts"],
     fileParallelism: false,
+    sequence: {
+      shuffle: false,
+    },
+    reporters: ["verbose"],
   },
 });

@@ -6,8 +6,58 @@ on:
     branches: [main, develop]
 
 jobs:
-  lifecycle-tests:
-    name: Lifecycle (${{ matrix.os }})
+  unit-tests:
+    name: Unit Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Verify monitor command works
+        run: bun run src/cli.ts monitor --json --ports 19990,19991,19992 > baseline-snapshot.json
+        working-directory: packages/cli
+
+      - name: Display baseline snapshot
+        run: cat baseline-snapshot.json
+        working-directory: packages/cli
+
+      - name: Run unit tests
+        run: bun run vitest run tests/unit
+        working-directory: packages/cli
+        timeout-minutes: 5
+
+      - name: Capture post-test snapshot
+        if: always()
+        run: bun run src/cli.ts monitor --json --ports 19990,19991,19992 > post-test-snapshot.json
+        working-directory: packages/cli
+
+      - name: Upload unit test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results-${{ matrix.os }}
+          path: |
+            packages/cli/baseline-snapshot.json
+            packages/cli/post-test-snapshot.json
+          retention-days: 7
+
+  integration-tests:
+    name: Integration Tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -25,44 +75,37 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install root dependencies
+      - name: Install dependencies
         run: bun install
 
-      - name: Install CLI dependencies
-        run: bun install
-        working-directory: demo/cli
+      - name: Pre-test port check
+        run: bun run src/cli.ts monitor --json --ports 3000 > pre-integration-snapshot.json
+        working-directory: packages/cli
 
-      - name: Verify monitor command works
-        run: bun run src/cli.ts monitor --json --ports 3000,3002,3014 > baseline-snapshot.json
-        working-directory: demo/cli
-
-      - name: Display baseline snapshot
-        run: cat baseline-snapshot.json
-        working-directory: demo/cli
-
-      - name: Run lifecycle tests
-        run: bun run test
-        working-directory: demo/cli
+      - name: Run integration tests
+        run: bun run vitest run tests/integration
+        working-directory: packages/cli
         timeout-minutes: 10
 
-      - name: Capture post-test snapshot
+      - name: Post-test port check
         if: always()
-        run: bun run src/cli.ts monitor --json --ports 3000,3002,3014 > post-test-snapshot.json
-        working-directory: demo/cli
+        run: bun run src/cli.ts monitor --json --ports 3000 > post-integration-snapshot.json
+        working-directory: packages/cli
 
-      - name: Upload test artifacts
+      - name: Upload integration test artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: lifecycle-results-${{ matrix.os }}
+          name: integration-test-results-${{ matrix.os }}
           path: |
-            demo/cli/baseline-snapshot.json
-            demo/cli/post-test-snapshot.json
+            packages/cli/pre-integration-snapshot.json
+            packages/cli/post-integration-snapshot.json
+            packages/cli/test-metrics.json
           retention-days: 7
 
   summary:
     name: Test Summary
-    needs: lifecycle-tests
+    needs: [unit-tests, integration-tests]
     runs-on: ubuntu-latest
     if: always()
 
@@ -77,23 +120,43 @@ jobs:
           echo "## Resource Lifecycle Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          for dir in artifacts/lifecycle-results-*/; do
-            os=$(basename "$dir" | sed 's/lifecycle-results-//')
-            echo "### $os" >> $GITHUB_STEP_SUMMARY
-            
-            if [ -f "$dir/baseline-snapshot.json" ]; then
-              echo "✅ Baseline snapshot captured" >> $GITHUB_STEP_SUMMARY
-              platform=$(jq -r '.platform // "unknown"' "$dir/baseline-snapshot.json" 2>/dev/null || echo "unknown")
-              echo "  Platform: $platform" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "⚠️ No baseline snapshot" >> $GITHUB_STEP_SUMMARY
+          echo "### Unit Tests" >> $GITHUB_STEP_SUMMARY
+          for dir in artifacts/unit-test-results-*/; do
+            if [ -d "$dir" ]; then
+              os=$(basename "$dir" | sed 's/unit-test-results-//')
+              echo "#### $os" >> $GITHUB_STEP_SUMMARY
+              
+              if [ -f "$dir/baseline-snapshot.json" ]; then
+                echo "✅ Baseline snapshot captured" >> $GITHUB_STEP_SUMMARY
+                platform=$(jq -r '.platform // "unknown"' "$dir/baseline-snapshot.json" 2>/dev/null || echo "unknown")
+                echo "  Platform: $platform" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "⚠️ No baseline snapshot" >> $GITHUB_STEP_SUMMARY
+              fi
+              echo "" >> $GITHUB_STEP_SUMMARY
             fi
-            
-            if [ -f "$dir/post-test-snapshot.json" ]; then
-              echo "✅ Post-test snapshot captured" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "⚠️ No post-test snapshot" >> $GITHUB_STEP_SUMMARY
+          done
+          
+          echo "### Integration Tests" >> $GITHUB_STEP_SUMMARY
+          for dir in artifacts/integration-test-results-*/; do
+            if [ -d "$dir" ]; then
+              os=$(basename "$dir" | sed 's/integration-test-results-//')
+              echo "#### $os" >> $GITHUB_STEP_SUMMARY
+              
+              if [ -f "$dir/test-metrics.json" ]; then
+                echo "✅ Metrics captured" >> $GITHUB_STEP_SUMMARY
+                port_bind=$(jq -r '.metrics.portBindTimeMs // "N/A"' "$dir/test-metrics.json" 2>/dev/null || echo "N/A")
+                cleanup=$(jq -r '.metrics.cleanupTimeMs // "N/A"' "$dir/test-metrics.json" 2>/dev/null || echo "N/A")
+                memory=$(jq -r '.metrics.memoryUsageMb // "N/A"' "$dir/test-metrics.json" 2>/dev/null || echo "N/A")
+                has_leaks=$(jq -r '.hasLeaks // "N/A"' "$dir/test-metrics.json" 2>/dev/null || echo "N/A")
+                
+                echo "  Port bind time: ${port_bind}ms" >> $GITHUB_STEP_SUMMARY
+                echo "  Cleanup time: ${cleanup}ms" >> $GITHUB_STEP_SUMMARY
+                echo "  Memory usage: ${memory}MB" >> $GITHUB_STEP_SUMMARY
+                echo "  Has leaks: $has_leaks" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "⚠️ No metrics captured" >> $GITHUB_STEP_SUMMARY
+              fi
+              echo "" >> $GITHUB_STEP_SUMMARY
             fi
-            
-            echo "" >> $GITHUB_STEP_SUMMARY
           done

@@ -1,0 +1,124 @@
+{
+  "account": "every.near",
+  "testnet": "allthethings.testnet",
+  "template": "near-everything/every-plugin/demo",
+  "shared": {
+    "ui": {
+      "react": {
+        "requiredVersion": "19.2.4",
+        "singleton": true,
+        "eager": true
+      },
+      "react-dom": {
+        "requiredVersion": "19.2.4",
+        "singleton": true,
+        "eager": true
+      },
+      "@tanstack/react-query": {
+        "requiredVersion": "5.90.20",
+        "singleton": true,
+        "eager": true
+      },
+      "@tanstack/react-router": {
+        "requiredVersion": "1.157.16",
+        "singleton": true,
+        "eager": true
+      },
+      "@hot-labs/near-connect": {
+        "requiredVersion": "0.8.2",
+        "singleton": true
+      },
+      "near-kit": {
+        "requiredVersion": "0.10.0",
+        "singleton": true
+      },
+      "better-auth": {
+        "requiredVersion": "1.4.17",
+        "singleton": true
+      },
+      "better-near-auth": {
+        "requiredVersion": "0.3.4",
+        "singleton": true
+      }
+    }
+  },
+  "gateway": {
+    "development": "http://localhost:8787",
+    "production": "https://everything.dev"
+  },
+  "app": {
+    "host": {
+      "title": "demo | everything",
+      "description": "This is a demo application orchestrated by a bos.config.json in the project root.",
+      "development": "http://localhost:3000",
+      "production": "https://elliot-braem-1910-host-every-plugin-near-everythi-9ac1c3d34-ze.zephyrcloud.app",
+      "secrets": [
+        "HOST_DATABASE_URL",
+        "HOST_DATABASE_AUTH_TOKEN",
+        "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_URL"
+      ],
+      "template": "near-everything/every-plugin/demo/host",
+      "files": [
+        "rsbuild.config.ts",
+        "tsconfig.json",
+        "vitest.config.ts",
+        "drizzle.config.ts"
+      ],
+      "variables": {}
+    },
+    "ui": {
+      "name": "ui",
+      "development": "http://localhost:3002",
+      "production": "https://elliot-braem-1911-ui-every-plugin-near-everything-a37a37546-ze.zephyrcloud.app",
+      "exposes": {
+        "./Router": "./src/router.tsx",
+        "./Hydrate": "./src/hydrate.tsx",
+        "./remote": "./src/remote/index.ts",
+        "./components": "./src/components/index.ts",
+        "./providers": "./src/providers/index.tsx",
+        "./hooks": "./src/hooks/index.ts",
+        "./types": "./src/types/index.ts"
+      },
+      "ssr": "https://elliot-braem-1912-ui-every-plugin-near-everything-208738f05-ze.zephyrcloud.app",
+      "template": "near-everything/every-plugin/demo/ui",
+      "files": [
+        "rsbuild.config.ts",
+        "tsconfig.json",
+        "postcss.config.mjs",
+        "components.json",
+        "src/router.tsx",
+        "src/router.server.tsx",
+        "src/hydrate.tsx",
+        "src/env.d.ts",
+        "src/remote",
+        "src/utils/orpc.ts",
+        "src/types/index.ts",
+        "src/routes/__root.tsx",
+        "src/lib/auth-client.ts",
+        "src/lib/auth-utils.ts"
+      ],
+      "secrets": [],
+      "variables": {}
+    },
+    "api": {
+      "name": "api",
+      "development": "http://localhost:3014",
+      "production": "https://elliot-braem-1913-api-every-plugin-near-everythin-1a9cd6fd7-ze.zephyrcloud.app",
+      "proxy": "https://elliot-braem-1811-api-every-plugin-near-everythin-2defcb105-ze.zephyrcloud.app",
+      "variables": {},
+      "secrets": [
+        "API_DATABASE_URL",
+        "API_DATABASE_AUTH_TOKEN"
+      ],
+      "template": "near-everything/every-plugin/demo/api",
+      "files": [
+        "rspack.config.cjs",
+        "tsconfig.json",
+        "vitest.config.ts",
+        "drizzle.config.ts",
+        "plugin.dev.ts"
+      ]
+    }
+  }
+}
