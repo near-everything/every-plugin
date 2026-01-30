@@ -5,10 +5,6 @@ export const diffSnapshots = (from: Snapshot, to: Snapshot): SnapshotDiff => {
   const fromPids = new Set(from.processes.map((p) => p.pid));
   const toPids = new Set(to.processes.map((p) => p.pid));
 
-  const orphanedProcesses = from.processes.filter(
-    (p) => fromPids.has(p.pid) && !toPids.has(p.pid) && isProcessAliveSync(p.pid)
-  );
-
   const stillBoundPorts: PortInfo[] = [];
   const freedPorts: number[] = [];
 
@@ -24,6 +20,18 @@ export const diffSnapshots = (from: Snapshot, to: Snapshot): SnapshotDiff => {
       }
     }
   }
+
+  const stillBoundPids = new Set(
+    stillBoundPorts.map((p) => p.pid).filter((pid): pid is number => pid !== null)
+  );
+
+  const orphanedProcesses = from.processes.filter(
+    (p) =>
+      fromPids.has(p.pid) &&
+      !toPids.has(p.pid) &&
+      isProcessAliveSync(p.pid) &&
+      stillBoundPids.has(p.pid)
+  );
 
   const newProcesses = to.processes.filter((p) => !fromPids.has(p.pid));
   const killedProcesses = from.processes.filter((p) => !toPids.has(p.pid));
