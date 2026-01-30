@@ -1,4 +1,4 @@
-import { isProcessAlive } from "./snapshot";
+import { isProcessAliveSync } from "./snapshot";
 import type { PortInfo, Snapshot, SnapshotDiff } from "./types";
 
 export const diffSnapshots = (from: Snapshot, to: Snapshot): SnapshotDiff => {
@@ -6,7 +6,7 @@ export const diffSnapshots = (from: Snapshot, to: Snapshot): SnapshotDiff => {
   const toPids = new Set(to.processes.map((p) => p.pid));
 
   const orphanedProcesses = from.processes.filter(
-    (p) => fromPids.has(p.pid) && !toPids.has(p.pid) && isProcessAlive(p.pid)
+    (p) => fromPids.has(p.pid) && !toPids.has(p.pid) && isProcessAliveSync(p.pid)
   );
 
   const stillBoundPorts: PortInfo[] = [];

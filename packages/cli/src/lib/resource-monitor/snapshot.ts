@@ -128,15 +128,17 @@ export const findBosProcesses = (): Effect.Effect<
   return findProcessesByPattern(patterns);
 };
 
+export const isProcessAliveSync = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const isProcessAlive = (pid: number): Effect.Effect<boolean> =>
-  Effect.sync(() => {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch {
-      return false;
-    }
-  });
+  Effect.sync(() => isProcessAliveSync(pid));
 
 export const waitForProcessDeath = (
   pid: number,

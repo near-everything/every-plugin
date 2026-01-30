@@ -1,5 +1,5 @@
-import { Effect, Logger, LogLevel } from "effect";
 import { writeFile } from "node:fs/promises";
+import { Effect, Logger, LogLevel } from "effect";
 import {
   assertAllPortsFree,
   assertAllPortsFreeWithPlatform,
@@ -25,6 +25,7 @@ import {
   createSnapshotWithPlatform,
   findBosProcesses,
   isProcessAlive,
+  isProcessAliveSync,
   waitForPortFree,
   waitForPortFreeWithPlatform,
   waitForProcessDeath,
@@ -279,6 +280,7 @@ export {
   formatSnapshotSummary,
   hasLeaks,
   isProcessAlive,
+  isProcessAliveSync,
   MemoryLimitExceeded,
   MemoryPercentExceeded,
   OrphanedProcesses,
