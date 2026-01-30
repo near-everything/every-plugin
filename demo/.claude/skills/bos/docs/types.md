@@ -8,28 +8,33 @@ The `bos.config.json` file is the single source of truth for all runtime configu
 interface BosConfig {
   account: string;                    // NEAR mainnet account
   testnet?: string;                   // NEAR testnet account
+  nova?: NovaConfig;                  // Tenant's Nova SDK configuration
   template?: string;                  // Default template for scaffolding
-  
-  gateway: {
-    development: string;              // e.g., "http://localhost:8787"
-    production: string;               // e.g., "https://everything.dev"
-  };
-  
+  gateway: GatewayConfig;
   cli?: {
     version?: string;                 // CLI version for sync
   };
-  
   shared?: {                          // Shared dependencies by category
     ui?: Record<string, SharedDepConfig>;
     api?: Record<string, SharedDepConfig>;
   };
-  
   app: {
     host: HostConfig;
     ui?: RemoteConfig;
     api?: RemoteConfig;
     [key: string]: HostConfig | RemoteConfig;
   };
+}
+
+interface NovaConfig {
+  account: string;                    // Nova SDK account (e.g., "tenant.nova-sdk.near")
+}
+
+interface GatewayConfig {
+  development: string;                // e.g., "http://localhost:8787"
+  production: string;                 // e.g., "https://everything.dev"
+  account?: string;                   // Gateway's NEAR account
+  nova?: NovaConfig;                  // Gateway's Nova SDK configuration
 }
 
 interface HostConfig {
@@ -77,10 +82,17 @@ interface SyncConfig {
 {
   "account": "every.near",
   "testnet": "every.testnet",
+  "nova": {
+    "account": "tenant.nova-sdk.near"
+  },
   "template": "near-everything/every-plugin/demo",
   "gateway": {
     "development": "http://localhost:8787",
-    "production": "https://everything.dev"
+    "production": "https://everything.dev",
+    "account": "every.near",
+    "nova": {
+      "account": "gateway.nova-sdk.near"
+    }
   },
   "shared": {
     "ui": {
@@ -124,6 +136,20 @@ interface SyncConfig {
 
 ## Key Concepts
 
+### Nova SDK Configuration
+
+Nova SDK provides decentralized secrets management with TEE-secured encryption.
+
+**Tenant Nova Account** (`nova.account`):
+- Your Nova SDK account for uploading/managing secrets
+- Used by CLI commands (`bos secrets:sync`, `bos secrets:list`)
+- Login via: `bos login --token <API_KEY> --accountId tenant.nova-sdk.near`
+
+**Gateway Nova Account** (`gateway.nova.account`):
+- The gateway's Nova SDK account for retrieving tenant secrets
+- Added as a member of each tenant's secrets group during registration
+- Allows gateway to fetch secrets at runtime using its own API key
+
 ### Template Inheritance
 
 Templates are GitHub paths used for scaffolding:
@@ -150,4 +176,4 @@ The `sync` section controls what gets synced from upstream:
 Secrets are environment variable names that should be:
 1. Stored in `.env.bos` locally
 2. Uploaded to NOVA for encrypted storage
-3. Injected at runtime via template strings
+3. Injected at runtime via the gateway

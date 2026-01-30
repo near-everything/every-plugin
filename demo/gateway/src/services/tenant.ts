@@ -17,7 +17,7 @@ export interface TenantContext {
 export interface GatewayEnv {
   GATEWAY_DOMAIN: string;
   GATEWAY_ACCOUNT: string;
-  NOVA_SESSION_TOKEN?: string;
+  NOVA_API_KEY?: string;
 }
 
 export interface TenantService {
@@ -91,11 +91,11 @@ export const TenantServiceLive = Layer.effect(
           const config = configResult.right;
           let secrets: Record<string, string> = {};
 
-          if (env.NOVA_SESSION_TOKEN && secretsRefResult) {
+          if (env.NOVA_API_KEY && secretsRefResult) {
             const requiredKeys = configService.getAllRequiredSecrets(config);
 
             const secretsResult = yield* secretsService
-              .fetchSecrets(secretsRefResult, env.NOVA_SESSION_TOKEN)
+              .fetchSecrets(secretsRefResult, env.NOVA_API_KEY)
               .pipe(Effect.either);
 
             if (secretsResult._tag === "Right") {

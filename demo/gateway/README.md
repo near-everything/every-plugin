@@ -44,7 +44,7 @@ Set these in your Cloudflare dashboard or `wrangler.toml`:
 |----------|-------------|
 | `GATEWAY_DOMAIN` | Domain for tenant resolution (e.g., `everything.dev`) |
 | `GATEWAY_ACCOUNT` | NEAR account for gateway operations |
-| `NOVA_SESSION_TOKEN` | NOVA SDK session token for secrets retrieval |
+| `NOVA_API_KEY` | NOVA SDK session token for secrets retrieval |
 
 ### DNS Setup
 

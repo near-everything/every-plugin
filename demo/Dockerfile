@@ -1,6 +1,9 @@
-FROM oven/bun:alpine
-
+FROM oven/bun:alpine AS builder
 RUN bun install -g everything-dev@latest
+
+FROM oven/bun:alpine
+COPY --from=builder /root/.bun /root/.bun
+ENV PATH="/root/.bun/bin:$PATH"
 
 WORKDIR /app
 

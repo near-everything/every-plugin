@@ -20,7 +20,7 @@ export interface UploadResult {
 
 export const getNovaConfig = Effect.gen(function* () {
   const accountId = process.env.NOVA_ACCOUNT_ID;
-  const sessionToken = process.env.NOVA_SESSION_TOKEN;
+  const sessionToken = process.env.NOVA_API_KEY;
 
   if (!accountId || !sessionToken) {
     return yield* Effect.fail(
@@ -46,7 +46,7 @@ export function getSecretsGroupId(nearAccount: string): string {
 export const registerSecretsGroup = (
   nova: NovaSdk,
   nearAccount: string,
-  gatewayAccount: string
+  novaAccount: string
 ) =>
   Effect.gen(function* () {
     const groupId = getSecretsGroupId(nearAccount);
@@ -57,8 +57,8 @@ export const registerSecretsGroup = (
     });
 
     yield* Effect.tryPromise({
-      try: () => nova.addGroupMember(groupId, gatewayAccount),
-      catch: (e) => new Error(`Failed to add gateway to NOVA group: ${e}`),
+      try: () => nova.addGroupMember(groupId, novaAccount),
+      catch: (e) => new Error(`Failed to add gateway Nova account to group: ${e}`),
     });
 
     return groupId;
@@ -150,7 +150,7 @@ export function filterSecretsToRequired(
 }
 
 export function hasNovaCredentials(): boolean {
-  return !!(process.env.NOVA_ACCOUNT_ID && process.env.NOVA_SESSION_TOKEN);
+  return !!(process.env.NOVA_ACCOUNT_ID && process.env.NOVA_API_KEY);
 }
 
 function getBosEnvPath(): string {
@@ -182,8 +182,8 @@ export const saveNovaCredentials = (accountId: string, sessionToken: string) =>
       if (trimmed.startsWith("NOVA_ACCOUNT_ID=")) {
         newLines.push(`NOVA_ACCOUNT_ID=${accountId}`);
         foundAccountId = true;
-      } else if (trimmed.startsWith("NOVA_SESSION_TOKEN=")) {
-        newLines.push(`NOVA_SESSION_TOKEN=${sessionToken}`);
+      } else if (trimmed.startsWith("NOVA_API_KEY=")) {
+        newLines.push(`NOVA_API_KEY=${sessionToken}`);
         foundSessionToken = true;
       } else {
         newLines.push(line);
@@ -198,7 +198,7 @@ export const saveNovaCredentials = (accountId: string, sessionToken: string) =>
     }
 
     if (!foundSessionToken) {
-      newLines.push(`NOVA_SESSION_TOKEN=${sessionToken}`);
+      newLines.push(`NOVA_API_KEY=${sessionToken}`);
     }
 
     yield* Effect.tryPromise({
@@ -207,7 +207,7 @@ export const saveNovaCredentials = (accountId: string, sessionToken: string) =>
     });
 
     process.env.NOVA_ACCOUNT_ID = accountId;
-    process.env.NOVA_SESSION_TOKEN = sessionToken;
+    process.env.NOVA_API_KEY = sessionToken;
   });
 
 export const removeNovaCredentials = Effect.gen(function* () {
@@ -226,7 +226,7 @@ export const removeNovaCredentials = Effect.gen(function* () {
   const lines = content.split("\n");
   const newLines = lines.filter((line) => {
     const trimmed = line.trim();
-    return !trimmed.startsWith("NOVA_ACCOUNT_ID=") && !trimmed.startsWith("NOVA_SESSION_TOKEN=");
+    return !trimmed.startsWith("NOVA_ACCOUNT_ID=") && !trimmed.startsWith("NOVA_API_KEY=");
   });
 
   yield* Effect.tryPromise({
@@ -235,7 +235,7 @@ export const removeNovaCredentials = Effect.gen(function* () {
   });
 
   delete process.env.NOVA_ACCOUNT_ID;
-  delete process.env.NOVA_SESSION_TOKEN;
+  delete process.env.NOVA_API_KEY;
 });
 
 export const verifyNovaCredentials = (accountId: string, sessionToken: string) =>

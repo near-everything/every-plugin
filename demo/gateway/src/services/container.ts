@@ -76,6 +76,7 @@ export const ContainerServiceLive = Layer.succeed(
       Effect.gen(function* () {
         const headers = new Headers(request.headers);
         headers.set("X-Bos-Account", tenant.nearAccount);
+        headers.set("X-Bos-Config", JSON.stringify(tenant.config));
 
         const proxiedRequest = new Request(request.url, {
           method: request.method,
