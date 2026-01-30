@@ -1,10 +1,9 @@
-import type { ClientRuntimeConfig } from "./types";
+import { getAssetsUrl, getRuntimeConfig } from "./remote/runtime";
 
 export async function hydrate() {
   console.log("[Hydrate] Starting...");
 
-  const runtimeConfig = (window as { __RUNTIME_CONFIG__?: ClientRuntimeConfig })
-    .__RUNTIME_CONFIG__;
+  const runtimeConfig = getRuntimeConfig();
   if (!runtimeConfig) {
     console.error("[Hydrate] No runtime config found");
     return;
@@ -17,7 +16,7 @@ export async function hydrate() {
 
   const { router, queryClient } = createRouter({
     context: {
-      assetsUrl: runtimeConfig.assetsUrl,
+      assetsUrl: getAssetsUrl(runtimeConfig),
       runtimeConfig,
     },
   });

@@ -9,6 +9,7 @@ import {
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
+import { getBaseStyles, getRemoteScriptsWithMetadata } from "@/remote/head";
 import type { RouterContext } from "@/types";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 
@@ -75,41 +76,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         },
         { rel: "manifest", href: `${assetsUrl}/manifest.json` },
       ],
-      scripts: [
-        {
-          src: `${assetsUrl}/remoteEntry.js`,
-        },
-        {
-          children: `(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}})();`,
-        },
-        {
-          type: "application/ld+json",
-          children: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "WebSite",
-            name: siteName,
-            url: siteUrl,
-            description,
-          }),
-        },
-        {
-          children: `
-window.__RUNTIME_CONFIG__=${JSON.stringify(runtimeConfig)};
-function __hydrate(){
-  var container = window['ui'];
-  if (!container) { console.error('[Hydrate] Container not found'); return; }
-  container.init({}).then(function(){
-    return container.get('./Hydrate');
-  }).then(function(mod){
-    return mod().hydrate();
-  }).catch(function(e){
-    console.error('[Hydrate] Failed:', e);
-  });
-}
-if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',__hydrate);}else{__hydrate();}
-          `.trim(),
-        },
-      ],
+      scripts: getRemoteScriptsWithMetadata(
+        { assetsUrl, runtimeConfig },
+        { siteName, siteUrl, description },
+      ),
     };
   },
   component: RootComponent,
@@ -120,19 +90,7 @@ function RootComponent() {
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-              :root { --host-bg: #ffffff; --host-fg: #171717; }
-              .dark { --host-bg: #1c1c1e; --host-fg: #fafafa; }
-              *, *::before, *::after { box-sizing: border-box; }
-              html { height: 100%; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color-scheme: light dark; }
-              body { min-height: 100%; margin: 0; background-color: var(--host-bg); color: var(--host-fg); -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: background-color 0.2s ease; }
-              #root { min-height: 100vh; background-color: var(--host-bg); }
-              @supports (min-height: 100dvh) { #root { min-height: 100dvh; } }
-            `,
-          }}
-        />
+        <style dangerouslySetInnerHTML={{ __html: getBaseStyles() }} />
       </head>
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>

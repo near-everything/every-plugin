@@ -225,3 +225,64 @@ Interactive update of shared dependencies. Automatically syncs to catalog after 
 bos deps update              # Update shared.ui deps
 bos deps update api          # Update shared.api deps
 ```
+
+## Process Management
+
+### `bos ps`
+
+List all tracked BOS processes.
+
+```bash
+bos ps                       # Show PID, name, port, started time
+```
+
+### `bos kill`
+
+Kill all tracked processes with graceful shutdown (SIGTERM → SIGKILL).
+
+```bash
+bos kill                     # Graceful shutdown
+bos kill --force             # Force kill immediately (SIGKILL)
+```
+
+Process tracking uses `.bos/pids.json` to track spawned processes.
+
+## Docker
+
+### `bos docker build`
+
+Build Docker image for production or development.
+
+```bash
+bos docker build                         # Production image (Dockerfile)
+bos docker build --target development    # Dev image (Dockerfile.dev)
+bos docker build --tag my-tag            # Custom tag
+bos docker build --no-cache              # Build without cache
+```
+
+### `bos docker run`
+
+Run container with configurable modes.
+
+```bash
+bos docker run                                    # Production mode
+bos docker run --detach                           # Run in background
+bos docker run --port 8080                        # Custom port
+bos docker run --target development --mode serve  # Agent-ready (RPC exposed)
+bos docker run --target development --mode dev    # Full dev mode
+bos docker run --env KEY=value                    # Pass env vars
+```
+
+**Modes:**
+- `start` (default): Production mode, fetches config from Near Social
+- `serve`: Exposes CLI as RPC API at `/api/rpc` (agent-ready)
+- `dev`: Full development mode with hot reload
+
+### `bos docker stop`
+
+Stop running containers.
+
+```bash
+bos docker stop <containerId>   # Stop specific container
+bos docker stop --all           # Stop all BOS containers
+```

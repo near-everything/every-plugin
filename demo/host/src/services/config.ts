@@ -15,14 +15,12 @@ export interface SharedConfig {
 }
 
 export interface BootstrapConfig {
-  configPath?: string;
+  config?: BosConfig;
   secrets?: Record<string, string>;
   host?: { url?: string };
   ui?: { source?: SourceMode };
   api?: { source?: SourceMode; proxy?: string };
   database?: { url?: string };
-  gatewayConfig?: BosConfig;
-  gatewaySecrets?: Record<string, string>;
 }
 
 let globalBootstrap: BootstrapConfig | undefined;
@@ -78,7 +76,7 @@ function resolveSource(
   return env === "production" ? "remote" : "local";
 }
 
-function detectHostUrl(env: "development" | "production", bootstrapUrl?: string, port?: number): string {
+function detectHostUrl(bootstrapUrl?: string, port?: number): string {
   if (bootstrapUrl) return bootstrapUrl;
   
   if (process.env.HOST_URL) return process.env.HOST_URL;
@@ -105,7 +103,7 @@ function loadConfigFromGateway(
     env,
     account: gatewayConfig.account,
     title: gatewayConfig.app.host.title,
-    hostUrl: detectHostUrl(env),
+    hostUrl: detectHostUrl(),
     shared: (gatewayConfig as any).shared,
     ui: {
       name: uiConfig.name,
@@ -129,11 +127,11 @@ export const loadConfig: Effect.Effect<RuntimeConfig, ConfigError> = Effect.gen(
   const bootstrap = globalBootstrap;
   const env = (process.env.NODE_ENV as "development" | "production") || "development";
 
-  if (bootstrap?.gatewayConfig) {
-    return loadConfigFromGateway(bootstrap.gatewayConfig, bootstrap.gatewaySecrets, env);
+  if (bootstrap?.config) {
+    return loadConfigFromGateway(bootstrap.config, bootstrap.secrets, env);
   }
 
-  const path = bootstrap?.configPath ?? process.env.BOS_CONFIG_PATH ?? resolve(process.cwd(), "bos.config.json");
+  const path = process.env.BOS_CONFIG_PATH ?? resolve(process.cwd(), "bos.config.json");
 
   if (bootstrap?.secrets) {
     for (const [key, value] of Object.entries(bootstrap.secrets)) {
@@ -170,7 +168,7 @@ export const loadConfig: Effect.Effect<RuntimeConfig, ConfigError> = Effect.gen(
     env,
     account: config.account,
     title: config.app.host.title,
-    hostUrl: detectHostUrl(env, bootstrap?.host?.url),
+    hostUrl: detectHostUrl(bootstrap?.host?.url),
     shared: (config as any).shared,
     ui: {
       name: uiConfig.name,

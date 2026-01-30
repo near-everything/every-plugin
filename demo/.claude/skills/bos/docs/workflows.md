@@ -221,6 +221,53 @@ Each tenant can have their own:
 - Published config on Near Social
 - NOVA secrets group
 
+## Docker Deployment
+
+### Production Container
+
+Build and run a production container that fetches config from Near Social:
+
+```bash
+# Build production image
+bos docker build
+
+# Run in background
+bos docker run --detach
+
+# Stop all containers
+bos docker stop --all
+```
+
+### Agent-Ready Container
+
+For AI agents that need to interact via RPC:
+
+```bash
+# Build development image
+bos docker build --target development
+
+# Run with RPC exposed
+bos docker run --target development --mode serve --detach
+
+# RPC available at http://localhost:4000/api/rpc
+```
+
+### Container Management
+
+```bash
+# List running processes
+bos ps
+
+# Kill all BOS processes (graceful)
+bos kill
+
+# Force kill
+bos kill --force
+
+# Stop specific container
+bos docker stop <containerId>
+```
+
 ## Debugging
 
 ### Check Configuration

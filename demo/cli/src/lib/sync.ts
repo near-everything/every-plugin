@@ -1,6 +1,6 @@
-import { mkdtemp, rm, cp } from "fs/promises";
+import { mkdtemp, rm, cp, mkdir } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import { execa } from "execa";
 import type { BosConfig } from "../config";
 
@@ -51,7 +51,9 @@ export async function syncFiles(options: FileSyncOptions): Promise<FileSyncResul
         const destPath = join(pkgDir, file);
 
         try {
-          await cp(srcPath, destPath, { force });
+          const destDir = dirname(destPath);
+          await mkdir(destDir, { recursive: true });
+          await cp(srcPath, destPath, { force, recursive: true });
           filesSynced.push(file);
         } catch {
         }

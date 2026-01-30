@@ -1,4 +1,3 @@
-import { createServer, type IncomingHttpHeaders } from "node:http";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
@@ -11,6 +10,7 @@ import { formatORPCError } from "every-plugin/errors";
 import { onError } from "every-plugin/orpc";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
+import { createServer, type IncomingHttpHeaders } from "node:http";
 import { FullServerLive } from "./layers";
 import { type Auth, AuthService } from "./services/auth";
 import { type BootstrapConfig, ConfigService, type RuntimeConfig, setBootstrapConfig } from "./services/config";
@@ -18,7 +18,7 @@ import { createRequestContext } from "./services/context";
 import type { Database } from "./services/database";
 import { closeDatabase, DatabaseService } from "./services/database";
 import { loadRouterModule, type RouterModule } from "./services/federation.server";
-import { type PluginResult, PluginsService } from "./services/plugins";
+import { PluginsService } from "./services/plugins";
 import { createRouter } from "./services/router";
 import { logger } from "./utils/logger";
 
@@ -146,7 +146,6 @@ async function proxyRequest(req: Request, targetBase: string, rewriteCookies = f
 function setupApiRoutes(
   app: Hono,
   config: RuntimeConfig,
-  plugins: PluginResult,
   auth: Auth,
   db: Database,
   router: ReturnType<typeof createRouter>
@@ -252,7 +251,7 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
 
   const apiRouter = createRouter(plugins);
 
-  setupApiRoutes(app, config, plugins, auth, db, apiRouter);
+  setupApiRoutes(app, config, auth, db, apiRouter);
 
   logger.info(`[Config] Host URL: ${config.hostUrl}`);
   logger.info(`[Config] UI source: ${config.ui.source} → ${config.ui.url}`);
@@ -287,18 +286,18 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
     try {
       const { env, account, title, hostUrl } = config;
       const assetsUrl = config.ui.url;
-      
+
       const requestContext = await createRequestContext(c.req.raw, auth, db);
       const pluginApi = plugins.api as { createClient?: (ctx: unknown) => unknown } | null;
       if (pluginApi?.createClient) {
         (globalThis as Record<string, unknown>).$apiClient = pluginApi.createClient(requestContext);
       }
-      
+
       const result = await ssrRouterModule.renderToStream(c.req.raw, {
         assetsUrl,
         runtimeConfig: { env, account, title, hostUrl, assetsUrl, apiBase: "/api", rpcBase: "/api/rpc" },
       });
-      
+
       (globalThis as Record<string, unknown>).$apiClient = undefined;
       return new Response(result.stream, {
         status: result.statusCode,

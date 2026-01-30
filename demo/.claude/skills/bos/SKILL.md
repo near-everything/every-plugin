@@ -67,6 +67,34 @@ bos sync --account your.near --gateway your-gateway.com
 | `bos info` | Show current configuration |
 | `bos status` | Check remote health |
 
+### Process Management
+
+| Command | Description |
+|---------|-------------|
+| `bos ps` | List all tracked BOS processes |
+| `bos kill` | Kill all tracked processes (graceful SIGTERM → SIGKILL) |
+| `bos kill --force` | Force kill all processes immediately (SIGKILL) |
+
+Process tracking uses `.bos/pids.json` to track spawned processes for cleanup.
+
+### Docker Commands
+
+| Command | Description |
+|---------|-------------|
+| `bos docker build` | Build production Docker image |
+| `bos docker build --target development` | Build development/agent-ready image |
+| `bos docker build --no-cache` | Build without cache |
+| `bos docker run` | Run container in production mode |
+| `bos docker run --detach` | Run container in background |
+| `bos docker run --target development --mode serve` | Run agent-ready container (RPC exposed) |
+| `bos docker stop <containerId>` | Stop specific container |
+| `bos docker stop --all` | Stop all BOS containers |
+
+**Docker modes:**
+- `start` (default): Production mode, fetches config from Near Social
+- `serve`: Exposes CLI as RPC API (agent-ready)
+- `dev`: Full development mode
+
 For full command reference, see [commands.md](docs/commands.md).
 
 ## Configuration

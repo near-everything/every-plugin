@@ -1,11 +1,8 @@
 FROM oven/bun:alpine
 
+RUN bun install -g everything-dev@latest
+
 WORKDIR /app
-
-COPY package.json bun.lock bunfig.toml ./
-COPY */package.json ./*/
-
-RUN bun install --frozen-lockfile --production
 
 ENV NODE_ENV=production
 ENV PORT=3000

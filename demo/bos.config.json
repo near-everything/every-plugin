@@ -76,6 +76,7 @@
       "exposes": {
         "./Router": "./src/router.tsx",
         "./Hydrate": "./src/hydrate.tsx",
+        "./remote": "./src/remote/index.ts",
         "./components": "./src/components/index.ts",
         "./providers": "./src/providers/index.tsx",
         "./hooks": "./src/hooks/index.ts",
@@ -87,7 +88,17 @@
         "rsbuild.config.ts",
         "tsconfig.json",
         "postcss.config.mjs",
-        "components.json"
+        "components.json",
+        "src/router.tsx",
+        "src/router.server.tsx",
+        "src/hydrate.tsx",
+        "src/env.d.ts",
+        "src/remote",
+        "src/utils/orpc.ts",
+        "src/types/index.ts",
+        "src/routes/__root.tsx",
+        "src/lib/auth-client.ts",
+        "src/lib/auth-utils.ts"
       ],
       "sync": {
         "scripts": ["dev", "build", "type-check"]
