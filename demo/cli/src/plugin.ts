@@ -47,7 +47,10 @@ interface BosDeps {
   nearPrivateKey?: string;
 }
 
-function getGatewayDomain(config: BosConfigType): string {
+const DEFAULT_GATEWAY = "everything.dev";
+
+function getGatewayDomain(config: BosConfigType | null): string {
+  if (!config) return DEFAULT_GATEWAY;
   const gateway = config.gateway as string | { production: string } | undefined;
   if (typeof gateway === "string") {
     return gateway.replace(/^https?:\/\//, "");
@@ -55,7 +58,7 @@ function getGatewayDomain(config: BosConfigType): string {
   if (gateway && typeof gateway === "object" && "production" in gateway) {
     return gateway.production.replace(/^https?:\/\//, "");
   }
-  throw new Error("bos.config.json must have a 'gateway' field with production URL");
+  return DEFAULT_GATEWAY;
 }
 
 function getAccountForNetwork(config: BosConfigType, network: "mainnet" | "testnet"): string {
@@ -512,7 +515,7 @@ export default createPlugin({
             network,
             privateKey,
             gas: "300Tgas",
-            deposit: depositAmount === "0" ? "1" : depositAmount,
+            deposit: depositAmount === "0" ? "1yoctoNEAR" : `${depositAmount}yoctoNEAR`,
           });
 
           return {
@@ -1284,11 +1287,10 @@ export default createPlugin({
     sync: builder.sync.handler(async ({ input }) => {
       const { configDir, bosConfig } = deps;
 
-      const DEFAULT_SYNC_ACCOUNT = "every.near";
-      const DEFAULT_SYNC_GATEWAY = "everything.dev";
+      const DEFAULT_ACCOUNT = "every.near";
 
-      const account = input.account || bosConfig?.account || DEFAULT_SYNC_ACCOUNT;
-      const gateway = input.gateway || (bosConfig ? getGatewayDomain(bosConfig) : null) || DEFAULT_SYNC_GATEWAY;
+      const account = input.account || bosConfig?.account || DEFAULT_ACCOUNT;
+      const gateway = input.gateway || getGatewayDomain(bosConfig);
       const socialUrl = `https://near.social/mob.near/widget/State.Inspector?key=${account}/bos/gateways/${gateway}`;
 
       if (!bosConfig) {
