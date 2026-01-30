@@ -42,7 +42,7 @@ bos serve -p 5000            # Custom port
 
 ### `bos build`
 
-Build packages locally. Updates `bos.config.json` with Zephyr URLs when deploying.
+Build packages locally.
 
 ```bash
 bos build                    # Build all packages
@@ -55,7 +55,7 @@ bos build --force            # Force rebuild (ignore cache)
 
 ### `bos deploy`
 
-Build and deploy to Zephyr Cloud.
+Build and deploy to Zephyr Cloud. Updates `bos.config.json` with production Zephyr URLs after successful deployment.
 
 ```bash
 bos deploy                   # Deploy all
@@ -100,13 +100,14 @@ bos create gateway                     # Add gateway
 
 ### `bos sync`
 
-Sync dependencies and config from upstream.
+Sync dependencies and config from upstream. Replaces local `bos.config.json` with remote config while preserving `account`, `testnet`, and `development` URLs. Merges secrets arrays.
 
 ```bash
 bos sync                                    # From every.near/everything.dev
 bos sync --account foo.near --gateway foo.com
 bos sync --network testnet                  # Sync from testnet
 bos sync --force                            # Force update
+bos sync --files                            # Also sync template files (rsbuild.config.ts, etc.)
 ```
 
 ### `bos info`

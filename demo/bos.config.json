@@ -71,7 +71,8 @@
           "build",
           "test"
         ]
-      }
+      },
+      "variables": {}
     },
     "ui": {
       "name": "ui",
@@ -110,7 +111,9 @@
           "build",
           "type-check"
         ]
-      }
+      },
+      "secrets": [],
+      "variables": {}
     },
     "api": {
       "name": "api",

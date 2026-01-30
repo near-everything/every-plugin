@@ -180,7 +180,7 @@
     "drizzle-kit": "0.31.8",
     "drizzle-orm": "0.45.1",
     "every-plugin": "0.9.0",
-    "everything-dev": "0.0.18",
+    "everything-dev": "0.0.20",
     "near-kit": "0.10.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -1420,7 +1420,7 @@
 
     "every-plugin": ["every-plugin@0.9.0", "", { "dependencies": { "@module-federation/enhanced": "^0.23.0", "@module-federation/node": "^2.7.28", "@module-federation/runtime-core": "^0.23.0", "@orpc/client": "^1.13.4", "@orpc/contract": "^1.13.4", "@orpc/experimental-publisher": "^1.13.4", "@orpc/openapi": "^1.13.4", "@orpc/react-query": "^1.13.4", "@orpc/server": "^1.13.4", "@orpc/tanstack-query": "^1.13.4", "@orpc/zod": "^1.13.4" }, "peerDependencies": { "@rspack/core": "1.7.4", "effect": "^3.19.15", "typescript": "^5.9.3", "zod": "^4.3.6" } }, "sha512-q71sHK8IM+LG4psjg7UB5F45sOmPpxTPuki043zQ8XCSGVJgtLvWyTydyYclrtS3cjBmgBpIfsMTeRScHzjHoQ=="],
 
-    "everything-dev": ["everything-dev@0.0.18", "", { "dependencies": { "@clack/prompts": "^1.0.0", "@effect/platform": "^0.94.2", "@effect/platform-bun": "^0.87.1", "@hono/node-server": "^1.19.9", "@inquirer/prompts": "^8.2.0", "@libsql/client": "^0.17.0", "@module-federation/enhanced": "^0.23.0", "@module-federation/runtime-core": "^0.23.0", "borsh": "^2.0.0", "boxen": "^8.0.1", "chalk": "^5.6.2", "commander": "^14.0.2", "degit": "^2.8.4", "effect": "3.19.15", "every-plugin": "0.9.0", "execa": "^9.6.1", "gradient-string": "^3.0.0", "ink": "^5.2.1", "near-kit": "^0.10.0", "near-social-js": "^2.0.4", "nova-sdk-js": "^1.0.3", "open": "^11.0.0", "react": "18.3.1", "react-dom": "18.3.1", "zod": "4.3.5" }, "bin": { "bos": "src/cli.ts" } }, "sha512-UfUX7z0jV7bnge+93RTJy8cdfDAxYlIx3UggH317DBTfAHMo6mrtqowUnHnpbmGPWSQhrtLgNjxweyoLmhqM5w=="],
+    "everything-dev": ["everything-dev@0.0.20", "", { "dependencies": { "@clack/prompts": "^1.0.0", "@effect/platform": "^0.94.2", "@effect/platform-bun": "^0.87.1", "@hono/node-server": "^1.19.9", "@inquirer/prompts": "^8.2.0", "@libsql/client": "^0.17.0", "@module-federation/enhanced": "^0.23.0", "@module-federation/runtime-core": "^0.23.0", "borsh": "^2.0.0", "boxen": "^8.0.1", "chalk": "^5.6.2", "commander": "^14.0.2", "degit": "^2.8.4", "effect": "3.19.15", "every-plugin": "0.9.0", "execa": "^9.6.1", "gradient-string": "^3.0.0", "ink": "^5.2.1", "near-kit": "^0.10.0", "near-social-js": "^2.0.4", "nova-sdk-js": "^1.0.3", "open": "^11.0.0", "react": "18.3.1", "react-dom": "18.3.1", "zod": "4.3.5" }, "bin": { "bos": "src/cli.ts" } }, "sha512-/M/YHh/EgrsWjdkhEW8+f+I21mIdF79icNXqM7RO+BF6SuVJOkUzcN07Qrm+BweCEMz9GGAXGBbcO++9rT2COA=="],
 
     "execa": ["execa@9.6.1", "", { "dependencies": { "@sindresorhus/merge-streams": "^4.0.0", "cross-spawn": "^7.0.6", "figures": "^6.1.0", "get-stream": "^9.0.0", "human-signals": "^8.0.1", "is-plain-obj": "^4.1.0", "is-stream": "^4.0.1", "npm-run-path": "^6.0.0", "pretty-ms": "^9.2.0", "signal-exit": "^4.1.0", "strip-final-newline": "^4.0.0", "yoctocolors": "^2.1.1" } }, "sha512-9Be3ZoN4LmYR90tUoVu2te2BsbzHfhJyfEiAVfz7N5/zv+jduIfLrV2xdQXOHbaD6KgpGdO9PRPM1Y4Q9QkPkA=="],
 

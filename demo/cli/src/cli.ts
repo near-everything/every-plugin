@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { spinner } from "@clack/prompts";
 import { program } from "commander";
 import { createPluginRuntime } from "every-plugin";
 import { getConfigDir, getConfigPath, getPackages, getTitle, loadConfig, type BosConfig } from "./config";
@@ -747,24 +748,30 @@ Zephyr Configuration:
     .option("--gateway <gateway>", "Gateway domain to sync from (default: everything.dev)")
     .option("--network <network>", "Network: mainnet | testnet", "mainnet")
     .option("--force", "Force sync even if versions match")
-    .action(async (options: { account?: string; gateway?: string; network?: string; force?: boolean }) => {
+    .option("--files", "Also sync template files (tsconfig, etc.)")
+    .action(async (options: { account?: string; gateway?: string; network?: string; force?: boolean; files?: boolean }) => {
       console.log();
       const source = options.account || options.gateway 
         ? `${options.account || "every.near"}/${options.gateway || "everything.dev"}`
         : "every.near/everything.dev";
-      console.log(`  ${icons.pkg} Syncing from ${colors.cyan(source)}...`);
+
+      const s = spinner();
+      s.start(`Syncing from ${source}...`);
 
       const result = await client.sync({
         account: options.account,
         gateway: options.gateway,
         network: (options.network as "mainnet" | "testnet") || "mainnet",
         force: options.force || false,
+        files: options.files || false,
       });
 
       if (result.status === "error") {
-        console.error(colors.error(`${icons.err} Sync failed: ${result.error || "Unknown error"}`));
+        s.stop(colors.error(`${icons.err} Sync failed: ${result.error || "Unknown error"}`));
         process.exit(1);
       }
+
+      s.stop(colors.green(`${icons.ok} Synced from ${source}`));
 
       console.log();
       console.log(colors.cyan(frames.top(52)));
@@ -781,6 +788,18 @@ Zephyr Configuration:
       
       if (result.packagesUpdated.length > 0) {
         console.log(colors.green(`  ${icons.ok} Updated packages: ${result.packagesUpdated.join(", ")}`));
+      }
+
+      if (result.filesSynced && result.filesSynced.length > 0) {
+        const totalFiles = result.filesSynced.reduce((sum, pkg) => sum + pkg.files.length, 0);
+        console.log(colors.green(`  ${icons.ok} Synced ${totalFiles} files`));
+        for (const pkg of result.filesSynced) {
+          console.log(colors.dim(`    ${pkg.package}: ${pkg.files.join(", ")}`));
+        }
+      }
+
+      if (!result.catalogUpdated && result.packagesUpdated.length === 0 && (!result.filesSynced || result.filesSynced.length === 0)) {
+        console.log(colors.dim(`  ${icons.ok} Already up to date`));
       }
       
       console.log();

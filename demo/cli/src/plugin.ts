@@ -1247,7 +1247,7 @@ export default createPlugin({
         const graph = new Graph();
         const configPath = `${account}/bos/gateways/${gateway}/bos.config.json`;
 
-        let remoteConfig: { cli?: { version?: string }; app?: { host?: { production?: string } } } | null = null;
+        let remoteConfig: BosConfigType | null = null;
 
         const data = await graph.get({ keys: [configPath] });
         if (data) {
@@ -1262,7 +1262,7 @@ export default createPlugin({
             }
           }
           if (typeof current === "string") {
-            remoteConfig = JSON.parse(current);
+            remoteConfig = JSON.parse(current) as BosConfigType;
           }
         }
 
@@ -1291,13 +1291,50 @@ export default createPlugin({
           };
         }
 
+        const mergeAppConfig = (localApp: Record<string, unknown>, remoteApp: Record<string, unknown>): Record<string, unknown> => {
+          const merged: Record<string, unknown> = {};
+          
+          for (const key of Object.keys(remoteApp)) {
+            const local = localApp[key] as Record<string, unknown> | undefined;
+            const remote = remoteApp[key] as Record<string, unknown>;
+            
+            if (!local) {
+              merged[key] = remote;
+              continue;
+            }
 
+            merged[key] = {
+              ...remote,
+              development: local.development,
+              secrets: [...new Set([
+                ...((remote.secrets as string[]) || []),
+                ...((local.secrets as string[]) || []),
+              ])],
+              variables: {
+                ...((remote.variables as Record<string, unknown>) || {}),
+                ...((local.variables as Record<string, unknown>) || {}),
+              },
+            };
+          }
+          
+          return merged;
+        };
+
+        const updatedBosConfig: BosConfigType = {
+          account: bosConfig.account,
+          testnet: bosConfig.testnet,
+          template: remoteConfig.template,
+          shared: remoteConfig.shared,
+          gateway: remoteConfig.gateway,
+          app: mergeAppConfig(
+            bosConfig.app as Record<string, unknown>,
+            remoteConfig.app as Record<string, unknown>
+          ) as BosConfigType["app"],
+        };
 
         const bosConfigPath = `${configDir}/bos.config.json`;
-        const updatedBosConfig = {
-          ...bosConfig,
-        };
         await Bun.write(bosConfigPath, JSON.stringify(updatedBosConfig, null, 2));
+        setConfig(updatedBosConfig, configDir);
 
         const sharedUiDeps: Record<string, string> = {};
         const sharedUi = updatedBosConfig.shared?.ui as Record<string, { requiredVersion?: string }> | undefined;
@@ -1325,10 +1362,12 @@ export default createPlugin({
         const packagesUpdated: string[] = [];
 
         for (const pkg of packages) {
-          const pkgPath = `${configDir}/${pkg}/package.json`;
-          const pkgFile = Bun.file(pkgPath);
+          const pkgDir = `${configDir}/${pkg}`;
+          const pkgDirExists = await Bun.file(`${pkgDir}/package.json`).exists();
+          if (!pkgDirExists) continue;
 
-          if (!(await pkgFile.exists())) continue;
+          const pkgPath = `${pkgDir}/package.json`;
+          const pkgFile = Bun.file(pkgPath);
 
           const pkgJson = await pkgFile.json() as {
             dependencies?: Record<string, string>;
@@ -1361,8 +1400,8 @@ export default createPlugin({
         if (input.files) {
           const results = await syncFiles({
             configDir,
-            packages: Object.keys(bosConfig.app),
-            bosConfig,
+            packages: Object.keys(updatedBosConfig.app),
+            bosConfig: updatedBosConfig,
             catalog: rootPkg.workspaces?.catalog ?? {},
             force: input.force,
           });

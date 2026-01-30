@@ -32,14 +32,33 @@ bos sync --account other.near --gateway other-gateway.com
 # Force sync (even if versions match)
 bos sync --force
 
+# Also sync template files (rsbuild.config.ts, etc.)
+bos sync --files
+
 # Install updated dependencies
 bun install
 ```
 
-What gets synced:
-- Package.json catalog (shared dependencies)
-- Package-level dependencies (to use `catalog:`)
-- Configuration patterns
+What gets synced from remote:
+- `app.*.production` - Zephyr production URLs
+- `app.*.ssr` - SSR URLs
+- `app.*.exposes` - Module Federation exposes
+- `app.*.template` - package templates
+- `app.*.files` - files to sync
+- `app.*.sync` - sync config (scripts)
+- `app.*.proxy` - proxy URLs
+- `shared` - all shared dependencies with versions
+- `gateway` - gateway URLs
+- `template` - scaffolding template
+
+What stays local:
+- `account` - your NEAR account
+- `testnet` - your testnet account  
+- `app.*.development` - local dev URLs
+
+What gets merged:
+- `app.*.secrets` - union of remote + local secrets
+- `app.*.variables` - merged (local can override remote)
 
 ## Development Workflow
 
@@ -79,23 +98,24 @@ Test with all production modules:
 bos start --no-interactive
 ```
 
-## Build → Publish → Sync Cycle
+## Deploy → Publish → Sync Cycle
 
 The core sharing workflow:
 
-### 1. Build
+### 1. Deploy
 
-Build updates `bos.config.json` with Zephyr CDN URLs:
+Deploy builds and uploads to Zephyr Cloud, updating `bos.config.json` with production URLs:
 
 ```bash
-# Build everything
-bos build
-
-# Build and deploy
+# Deploy everything
 bos deploy
+
+# Deploy specific packages
+bos deploy ui
+bos deploy api
 ```
 
-After building, your `bos.config.json` has updated `production` URLs.
+After deploying, your `bos.config.json` has updated `production` URLs.
 
 ### 2. Publish
 

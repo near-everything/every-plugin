@@ -1,7 +1,7 @@
-import { mkdtemp, rm, cp, mkdir } from "fs/promises";
-import { tmpdir } from "os";
-import { join, dirname } from "path";
 import { execa } from "execa";
+import { cp, mkdir, mkdtemp, rm } from "fs/promises";
+import { tmpdir } from "os";
+import { dirname, join } from "path";
 import type { BosConfig } from "../config";
 
 export interface FileSyncResult {
@@ -24,6 +24,10 @@ export async function syncFiles(options: FileSyncOptions): Promise<FileSyncResul
   const results: FileSyncResult[] = [];
 
   for (const pkg of packages) {
+    const pkgDir = `${configDir}/${pkg}`;
+    const pkgDirExists = await Bun.file(`${pkgDir}/package.json`).exists();
+    if (!pkgDirExists) continue;
+
     const appConfig = bosConfig.app[pkg] as {
       template?: string;
       files?: string[];
@@ -44,7 +48,6 @@ export async function syncFiles(options: FileSyncOptions): Promise<FileSyncResul
       const filesSynced: string[] = [];
       const depsAdded: string[] = [];
       const depsUpdated: string[] = [];
-      const pkgDir = `${configDir}/${pkg}`;
 
       for (const file of appConfig.files) {
         const srcPath = join(tempDir, file);
@@ -53,7 +56,7 @@ export async function syncFiles(options: FileSyncOptions): Promise<FileSyncResul
         try {
           const destDir = dirname(destPath);
           await mkdir(destDir, { recursive: true });
-          await cp(srcPath, destPath, { force, recursive: true });
+          await cp(srcPath, destPath, { force: true, recursive: true });
           filesSynced.push(file);
         } catch {
         }

@@ -1,6 +1,6 @@
 ---
 name: bos
-description: CLI for everything-dev Module Federation projects. Use when creating new BOS projects, publishing bos.config.json to Near Social, syncing with remote configs (every.near/everything.dev), running development servers (bos dev), or building/deploying federated apps. Build → publish → sync workflow for shared configuration.
+description: CLI for everything-dev Module Federation projects. Use when creating new BOS projects, publishing bos.config.json to Near Social, syncing with remote configs (every.near/everything.dev), running development servers (bos dev), or building/deploying federated apps. Deploy → publish → sync workflow for shared configuration.
 ---
 
 # BOS CLI
@@ -37,13 +37,13 @@ bos dev                      # Full local (initial setup only)
 bos start --no-interactive   # All remotes, production URLs
 ```
 
-## Build → Publish → Sync
+## Deploy → Publish → Sync
 
 The core workflow for sharing configuration:
 
 ```bash
-# 1. Build apps (updates bos.config.json with Zephyr CDN URLs)
-bos build
+# 1. Deploy apps to Zephyr (updates bos.config.json with production URLs)
+bos deploy
 
 # 2. Publish config to Near Social (on-chain registry)
 bos publish
