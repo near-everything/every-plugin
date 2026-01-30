@@ -2,6 +2,7 @@ import { loadConfig } from "../config";
 
 export function loadSecretsFor(component: string): Record<string, string> {
   const config = loadConfig();
+  if (!config) return {};
   const componentConfig = config.app[component];
   if (!componentConfig) return {};
 

@@ -1,7 +1,6 @@
-import { resolve } from "node:path";
 import { Command } from "@effect/platform";
 import { Deferred, Effect, Fiber, Ref, Stream } from "every-plugin/effect";
-import { getConfigDir, getPortsFromConfig, type SourceMode } from "../config";
+import { type BosConfig, getConfigDir, getPortsFromConfig, type SourceMode } from "../config";
 import type { ProcessStatus } from "../components/dev-view";
 import { loadSecretsFor } from "./secrets";
 
@@ -204,7 +203,7 @@ interface ServerHandle {
 }
 
 interface BootstrapConfig {
-  configPath?: string;
+  config?: BosConfig;
   secrets?: Record<string, string>;
   host?: { url?: string };
   ui?: { source?: SourceMode };
@@ -255,7 +254,8 @@ const patchConsole = (
 
 export const spawnRemoteHost = (
   config: DevProcess,
-  callbacks: ProcessCallbacks
+  callbacks: ProcessCallbacks,
+  bosConfig?: BosConfig
 ) =>
   Effect.gen(function* () {
     const remoteUrl = config.env?.HOST_REMOTE_URL;
@@ -272,9 +272,6 @@ export const spawnRemoteHost = (
 
     callbacks.onStatus(config.name, "starting");
 
-    const configDir = getConfigDir();
-    const configPath = resolve(configDir, "bos.config.json");
-
     let hostUrl = `http://localhost:${config.port}`;
     if (process.env.HOST_URL) {
       hostUrl = process.env.HOST_URL;
@@ -289,7 +286,7 @@ export const spawnRemoteHost = (
     const apiProxy = config.env?.API_PROXY;
 
     const bootstrap: BootstrapConfig = {
-      configPath,
+      config: bosConfig,
       secrets: allSecrets,
       host: { url: hostUrl },
       ui: { source: uiSource },
@@ -364,7 +361,8 @@ export const makeDevProcess = (
   pkg: string,
   env: Record<string, string> | undefined,
   callbacks: ProcessCallbacks,
-  portOverride?: number
+  portOverride?: number,
+  bosConfig?: BosConfig
 ) =>
   Effect.gen(function* () {
     const config = getProcessConfig(pkg, env, portOverride);
@@ -373,7 +371,7 @@ export const makeDevProcess = (
     }
 
     if (pkg === "host" && env?.HOST_SOURCE === "remote") {
-      return yield* spawnRemoteHost(config, callbacks);
+      return yield* spawnRemoteHost(config, callbacks, bosConfig);
     }
 
     return yield* spawnDevProcess(config, callbacks);

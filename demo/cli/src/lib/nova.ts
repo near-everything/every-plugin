@@ -35,7 +35,7 @@ export const getNovaConfig = Effect.gen(function* () {
 
 export function createNovaClient(config: NovaConfig): NovaSdk {
   return new NovaSdk(config.accountId, {
-    sessionToken: config.sessionToken,
+    apiKey: config.sessionToken,
   });
 }
 
@@ -240,7 +240,7 @@ export const removeNovaCredentials = Effect.gen(function* () {
 
 export const verifyNovaCredentials = (accountId: string, sessionToken: string) =>
   Effect.gen(function* () {
-    const nova = new NovaSdk(accountId, { sessionToken });
+    const nova = new NovaSdk(accountId, { apiKey: sessionToken });
 
     yield* Effect.tryPromise({
       try: () => nova.getBalance(),

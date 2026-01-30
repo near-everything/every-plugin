@@ -224,6 +224,7 @@ export default createPlugin({
         env,
         description,
         appConfig,
+        bosConfig: deps.bosConfig ?? undefined,
         port: input.port,
         interactive: input.interactive,
       };
@@ -259,7 +260,9 @@ export default createPlugin({
             }
             if (typeof current === "string") {
               remoteConfig = JSON.parse(current) as BosConfigType;
-              setConfig(remoteConfig);
+              const configFilePath = `${process.cwd()}/bos.config.json`;
+              await Bun.write(configFilePath, JSON.stringify(remoteConfig, null, 2));
+              setConfig(remoteConfig, process.cwd());
             }
           }
         } catch (error) {
@@ -320,6 +323,7 @@ export default createPlugin({
           ui: "remote",
           api: "remote",
         },
+        bosConfig: config,
         port,
         interactive: input.interactive,
         noLogs: true,
@@ -1570,10 +1574,10 @@ export default createPlugin({
 
         if (input.containerId) {
           yield* Effect.tryPromise({
-            try: () => execa("docker", ["stop", input.containerId]),
+            try: () => execa("docker", ["stop", input.containerId!]),
             catch: (e) => new Error(`Failed to stop container: ${e}`),
           });
-          stopped.push(input.containerId);
+          stopped.push(input.containerId!);
         } else if (input.all) {
           const imageName = bosConfig?.account?.replace(/\./g, "-") || "bos-app";
           
@@ -1613,60 +1617,3 @@ export default createPlugin({
 });
 
 
-
-
-
-
----
-
-
-Fix these type errors:
-
-➜  cli git:(main) ✗ bun run typecheck
-$ tsc --noEmit
-src/contract.ts:295:10 - error TS2554: Expected 2-3 arguments, but got 1.
-
-295   env: z.record(z.string()).optional(),
-             ~~~~~~
-
-  node_modules/zod/v4/classic/schemas.d.cts:513:107
-    513 export declare function record<Key extends core.$ZodRecordKey, Value extends core.SomeType>(keyType: Key, valueType: Value, params?: string | core.$ZodRecordParams): ZodRecord<Key, Value>;
-                                                                                                                  ~~~~~~~~~~~~~~~~
-    An argument for 'valueType' was not provided.
-
-src/lib/nova.ts:38:5 - error TS2353: Object literal may only specify known properties, and 'sessionToken' does not exist in type 'NovaSdkConfig'.
-
-38     sessionToken: config.sessionToken,
-       ~~~~~~~~~~~~
-
-src/lib/nova.ts:243:43 - error TS2353: Object literal may only specify known properties, and 'sessionToken' does not exist in type 'NovaSdkConfig'.
-
-243     const nova = new NovaSdk(accountId, { sessionToken });
-                                              ~~~~~~~~~~~~
-
-src/lib/secrets.ts:5:27 - error TS18047: 'config' is possibly 'null'.
-
-5   const componentConfig = config.app[component];
-                            ~~~~~~
-
-src/plugin.ts:1573:24 - error TS2769: No overload matches this call.
-  Overload 1 of 4, '(templateString_0: TemplateStringsArray, ...templateString: TemplateExpression[]): ResultPromise<{}>', gave the following error.
-    Argument of type 'string' is not assignable to parameter of type 'TemplateStringsArray'.
-  Overload 2 of 4, '(file: string | URL, arguments?: readonly string[] | undefined, options?: {} | undefined): ResultPromise<{}>', gave the following error.
-    Type 'string | undefined' is not assignable to type 'string'.
-      Type 'undefined' is not assignable to type 'string'.
-  Overload 3 of 4, '(file: string | URL, options?: Options | undefined): ResultPromise<Options>', gave the following error.
-    Type '(string | undefined)[]' has no properties in common with type 'Options'.
-
-1573             try: () => execa("docker", ["stop", input.containerId]),
-                            ~~~~~
-
-
-
-Found 5 errors in 4 files.
-
-Errors  Files
-     1  src/contract.ts:295
-     2  src/lib/nova.ts:38
-     1  src/lib/secrets.ts:5
-     1  src/plugin.ts:1573

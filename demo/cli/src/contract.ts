@@ -292,7 +292,7 @@ const DockerRunOptionsSchema = z.object({
   mode: z.enum(["start", "serve", "dev"]).default("start"),
   port: z.number().optional(),
   detach: z.boolean().default(false),
-  env: z.record(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
 });
 
 const DockerRunResultSchema = z.object({

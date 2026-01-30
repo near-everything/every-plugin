@@ -2,14 +2,14 @@ import { appendFile } from "node:fs/promises";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect } from "every-plugin/effect";
 import path from "path";
-import type { AppConfig } from "../config";
 import {
   type DevViewHandle,
   type LogEntry,
   type ProcessState,
   renderDevView,
 } from "../components/dev-view";
-import { renderStreamingView, type StreamingViewHandle } from "../components/streaming-view";
+import { renderStreamingView } from "../components/streaming-view";
+import type { AppConfig, BosConfig } from "../config";
 import { getProcessConfig, makeDevProcess, type ProcessCallbacks, type ProcessHandle } from "./process";
 
 const LOG_NOISE_PATTERNS = [
@@ -32,6 +32,7 @@ export interface AppOrchestrator {
   env: Record<string, string>;
   description: string;
   appConfig: AppConfig;
+  bosConfig?: BosConfig;
   port?: number;
   interactive?: boolean;
   noLogs?: boolean;
@@ -79,12 +80,12 @@ export const runDevServers = (orchestrator: AppOrchestrator) =>
     const initialProcesses: ProcessState[] = orderedPackages.map((pkg) => {
       const portOverride = pkg === "host" ? orchestrator.port : undefined;
       const config = getProcessConfig(pkg, undefined, portOverride);
-      const source = pkg === "host" 
-        ? orchestrator.appConfig.host 
+      const source = pkg === "host"
+        ? orchestrator.appConfig.host
         : pkg === "ui" || pkg === "ui-ssr"
           ? orchestrator.appConfig.ui
-          : pkg === "api" 
-            ? orchestrator.appConfig.api 
+          : pkg === "api"
+            ? orchestrator.appConfig.api
             : undefined;
       return {
         name: pkg,
@@ -139,22 +140,22 @@ export const runDevServers = (orchestrator: AppOrchestrator) =>
     };
 
     const useInteractive = orchestrator.interactive ?? isInteractiveSupported();
-    
+
     view = useInteractive
       ? renderDevView(
-          initialProcesses,
-          orchestrator.description,
-          orchestrator.env,
-          () => cleanup(false),
-          () => cleanup(true)
-        )
+        initialProcesses,
+        orchestrator.description,
+        orchestrator.env,
+        () => cleanup(false),
+        () => cleanup(true)
+      )
       : renderStreamingView(
-          initialProcesses,
-          orchestrator.description,
-          orchestrator.env,
-          () => cleanup(false),
-          () => cleanup(true)
-        );
+        initialProcesses,
+        orchestrator.description,
+        orchestrator.env,
+        () => cleanup(false),
+        () => cleanup(true)
+      );
 
     const callbacks: ProcessCallbacks = {
       onStatus: (name, status, message) => {
@@ -182,7 +183,7 @@ export const runDevServers = (orchestrator: AppOrchestrator) =>
 
     for (const pkg of orderedPackages) {
       const portOverride = pkg === "host" ? orchestrator.port : undefined;
-      const handle = yield* makeDevProcess(pkg, orchestrator.env, callbacks, portOverride);
+      const handle = yield* makeDevProcess(pkg, orchestrator.env, callbacks, portOverride, orchestrator.bosConfig);
       handles.push(handle);
 
       yield* Effect.race(
