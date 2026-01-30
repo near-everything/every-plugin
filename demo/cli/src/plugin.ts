@@ -1,7 +1,7 @@
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
-import { Graph } from "near-social-js";
+import { Graph, calculateRequiredDeposit } from "near-social-js";
 
 import { createProcessRegistry } from "./lib/process-registry";
 import {
@@ -9,6 +9,7 @@ import {
   type BosConfig as BosConfigType,
   DEFAULT_DEV_CONFIG,
   getConfigDir,
+  getExistingPackages,
   getHost,
   getHostRemoteUrl,
   getPackages,
@@ -16,6 +17,7 @@ import {
   getRemotes,
   loadConfig,
   type RemoteConfig,
+  resolvePackageModes,
   type SourceMode, 
   setConfig
 } from "./config";
@@ -197,10 +199,24 @@ export default createPlugin({
 
   createRouter: (deps: BosDeps, builder) => ({
     dev: builder.dev.handler(async ({ input }) => {
+      const { modes, autoRemote } = await resolvePackageModes(
+        ["host", "ui", "api"],
+        { host: input.host, ui: input.ui, api: input.api }
+      );
+
+      if (autoRemote.length > 0) {
+        console.log();
+        console.log(colors.cyan(`  ${icons.config} Auto-detecting packages...`));
+        for (const pkg of autoRemote) {
+          console.log(colors.dim(`    ${pkg} not found locally → using remote`));
+        }
+        console.log();
+      }
+
       const appConfig = buildAppConfig({
-        host: input.host,
-        ui: input.ui,
-        api: input.api,
+        host: modes.host,
+        ui: modes.ui,
+        api: modes.api,
         proxy: input.proxy,
       });
 
@@ -211,6 +227,7 @@ export default createPlugin({
             status: "error" as const,
             description: "No remote URL configured for host",
             processes: [],
+            autoRemote,
           };
         }
       }
@@ -363,6 +380,27 @@ export default createPlugin({
         return {
           status: "error" as const,
           built: [],
+          skipped: [],
+        };
+      }
+
+      const { existing, missing } = await getExistingPackages(targets);
+
+      if (missing.length > 0) {
+        console.log();
+        console.log(colors.cyan(`  ${icons.config} Auto-detecting packages...`));
+        for (const pkg of missing) {
+          console.log(colors.dim(`    ${pkg} not found locally → skipping`));
+        }
+        console.log();
+      }
+
+      if (existing.length === 0) {
+        console.log(colors.dim(`  No packages found locally to build`));
+        return {
+          status: "error" as const,
+          built: [],
+          skipped: missing,
         };
       }
 
@@ -384,7 +422,7 @@ export default createPlugin({
           }
         }
 
-        for (const target of targets) {
+        for (const target of existing) {
           const buildConfig = buildCommands[target];
           if (!buildConfig) continue;
 
@@ -404,6 +442,7 @@ export default createPlugin({
       return {
         status: "success" as const,
         built,
+        skipped: missing,
         deployed: buildInput.deploy,
       };
     }),
@@ -434,8 +473,28 @@ export default createPlugin({
           const bosEnv = yield* loadBosEnv;
           const privateKey = nearPrivateKey || bosEnv.NEAR_PRIVATE_KEY;
 
-          const socialArgs = buildSocialSetArgs(account, gatewayDomain, bosConfig);
+          const socialArgs = buildSocialSetArgs(account, gatewayDomain, bosConfig) as {
+            data: Record<string, Record<string, unknown>>;
+          };
           const argsBase64 = Buffer.from(JSON.stringify(socialArgs)).toString("base64");
+
+          const graph = new Graph({ 
+            network,
+            contractId: socialContract,
+          });
+          const storageBalance = yield* Effect.tryPromise({
+            try: () => graph.storageBalanceOf(account),
+            catch: () => new Error("Failed to fetch storage balance"),
+          });
+
+          const requiredDeposit = calculateRequiredDeposit({
+            data: socialArgs.data,
+            storageBalance: storageBalance ? {
+              available: BigInt(storageBalance.available),
+              total: BigInt(storageBalance.total),
+            } : null,
+          });
+          const depositAmount = requiredDeposit.toFixed();
 
           if (publishInput.dryRun) {
             return {
@@ -453,7 +512,7 @@ export default createPlugin({
             network,
             privateKey,
             gas: "300Tgas",
-            deposit: "0.05NEAR",
+            deposit: depositAmount === "0" ? "1" : depositAmount,
           });
 
           return {
@@ -1228,14 +1287,16 @@ export default createPlugin({
       const DEFAULT_SYNC_ACCOUNT = "every.near";
       const DEFAULT_SYNC_GATEWAY = "everything.dev";
 
-      const account = input.account || DEFAULT_SYNC_ACCOUNT;
-      const gateway = input.gateway || DEFAULT_SYNC_GATEWAY;
+      const account = input.account || bosConfig?.account || DEFAULT_SYNC_ACCOUNT;
+      const gateway = input.gateway || (bosConfig ? getGatewayDomain(bosConfig) : null) || DEFAULT_SYNC_GATEWAY;
+      const socialUrl = `https://near.social/mob.near/widget/State.Inspector?key=${account}/bos/gateways/${gateway}`;
 
       if (!bosConfig) {
         return {
           status: "error" as const,
           account,
           gateway,
+          socialUrl,
           hostUrl: "",
           catalogUpdated: false,
           packagesUpdated: [],
@@ -1415,6 +1476,7 @@ export default createPlugin({
           status: "synced" as const,
           account,
           gateway,
+          socialUrl,
           hostUrl,
           catalogUpdated: true,
           packagesUpdated,

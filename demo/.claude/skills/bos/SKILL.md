@@ -16,19 +16,26 @@ bos create project my-app
 # Or sync an existing project with the root template
 bos sync
 
-# Start development (remote host is typical workflow)
-bos dev --host remote
+# Start development (auto-detects missing packages → uses remote)
+bos dev
 ```
 
 ## Development Workflow
 
-**Typical development** runs host remotely while working on UI/API locally:
+**Auto-detection**: The CLI automatically detects which packages exist locally and uses remote mode for missing ones. No need to explicitly specify `--host=remote`, `--ui=remote`, etc.
 
 ```bash
-bos dev --host remote        # Remote host, local UI + API (typical)
-bos dev --ui remote          # Isolate API work (local host + API)
-bos dev --api remote         # Isolate UI work (local host + UI)
-bos dev                      # Full local (initial setup only)
+bos dev                      # Auto-detects: missing packages use remote
+bos dev --host remote        # Explicit remote host (optional)
+bos dev --ui remote          # Explicit remote UI (optional)  
+bos dev --api remote         # Explicit remote API (optional)
+```
+
+**Example output** when packages are missing:
+```
+  ⚙ Auto-detecting packages...
+    host not found locally → using remote
+    api not found locally → using remote
 ```
 
 **Production mode:**
@@ -60,12 +67,23 @@ bos sync --account your.near --gateway your-gateway.com
 |---------|-------------|
 | `bos create project <name>` | Scaffold new project |
 | `bos sync` | Sync from every.near/everything.dev |
-| `bos dev --host remote` | Development (typical) |
+| `bos dev` | Development (auto-detects missing packages) |
 | `bos start --no-interactive` | Production mode |
-| `bos build` | Build all packages |
+| `bos build` | Build existing packages (skips missing) |
+| `bos deploy` | Deploy existing packages to Zephyr |
 | `bos publish` | Publish config to Near Social |
 | `bos info` | Show current configuration |
 | `bos status` | Check remote health |
+
+### Auto-Detection Behavior
+
+Commands automatically detect which packages exist locally:
+
+| Command | Missing Package Behavior |
+|---------|-------------------------|
+| `bos dev` | Uses remote mode |
+| `bos build` | Skips package |
+| `bos deploy` | Skips package |
 
 ### Process Management
 

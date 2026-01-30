@@ -31,7 +31,7 @@ export async function syncFiles(options: FileSyncOptions): Promise<FileSyncResul
     const appConfig = bosConfig.app[pkg] as {
       template?: string;
       files?: string[];
-      sync?: { dependencies?: boolean; devDependencies?: boolean; scripts?: string[] | true };
+      sync?: { dependencies?: boolean; devDependencies?: boolean };
     };
 
     if (!appConfig?.template || !appConfig?.files) {
@@ -106,16 +106,10 @@ export async function syncFiles(options: FileSyncOptions): Promise<FileSyncResul
             }
           }
 
-          if (syncConfig.scripts && templatePkg.scripts) {
+          if (templatePkg.scripts) {
             if (!localPkg.scripts) localPkg.scripts = {};
-            const scriptsToSync = syncConfig.scripts === true
-              ? Object.keys(templatePkg.scripts)
-              : syncConfig.scripts;
-
-            for (const scriptName of scriptsToSync) {
-              if (templatePkg.scripts[scriptName]) {
-                localPkg.scripts[scriptName] = templatePkg.scripts[scriptName];
-              }
+            for (const [name, script] of Object.entries(templatePkg.scripts)) {
+              localPkg.scripts[name] = script;
             }
           }
 

@@ -743,17 +743,17 @@ Zephyr Configuration:
 
   program
     .command("sync")
-    .description("Sync dependencies and config from everything-dev CLI")
-    .option("--account <account>", "NEAR account to sync from (default: every.near)")
-    .option("--gateway <gateway>", "Gateway domain to sync from (default: everything.dev)")
+    .description("Sync dependencies and config from published bos.config.json")
+    .option("--account <account>", "NEAR account to sync from (default: from config)")
+    .option("--gateway <gateway>", "Gateway domain to sync from (default: from config)")
     .option("--network <network>", "Network: mainnet | testnet", "mainnet")
     .option("--force", "Force sync even if versions match")
     .option("--files", "Also sync template files (tsconfig, etc.)")
     .action(async (options: { account?: string; gateway?: string; network?: string; force?: boolean; files?: boolean }) => {
       console.log();
-      const source = options.account || options.gateway 
-        ? `${options.account || "every.near"}/${options.gateway || "everything.dev"}`
-        : "every.near/everything.dev";
+      const gateway = config?.gateway as { production?: string } | undefined;
+      const gatewayDomain = gateway?.production?.replace(/^https?:\/\//, "") || "everything.dev";
+      const source = `${options.account || config?.account || "every.near"}/${options.gateway || gatewayDomain}`;
 
       const s = spinner();
       s.start(`Syncing from ${source}...`);
@@ -779,6 +779,7 @@ Zephyr Configuration:
       console.log(colors.cyan(frames.bottom(52)));
       console.log();
       console.log(`  ${colors.dim("Source:")}   ${colors.cyan(`${result.account}/${result.gateway}`)}`);
+      console.log(`  ${colors.dim("URL:")}      ${colors.cyan(result.socialUrl)}`);
       console.log(`  ${colors.dim("Host URL:")} ${colors.cyan(result.hostUrl)}`);
       console.log();
       

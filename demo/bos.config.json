@@ -51,7 +51,7 @@
       "title": "demo | everything",
       "description": "This is a demo application orchestrated by a bos.config.json in the project root.",
       "development": "http://localhost:3000",
-      "production": "https://elliot-braem-1906-host-every-plugin-near-everythi-00c0a9cf7-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1910-host-every-plugin-near-everythi-9ac1c3d34-ze.zephyrcloud.app",
       "secrets": [
         "HOST_DATABASE_URL",
         "HOST_DATABASE_AUTH_TOKEN",
@@ -65,19 +65,12 @@
         "vitest.config.ts",
         "drizzle.config.ts"
       ],
-      "sync": {
-        "scripts": [
-          "dev",
-          "build",
-          "test"
-        ]
-      },
       "variables": {}
     },
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1907-ui-every-plugin-near-everything-34456802c-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1911-ui-every-plugin-near-everything-a37a37546-ze.zephyrcloud.app",
       "exposes": {
         "./Router": "./src/router.tsx",
         "./Hydrate": "./src/hydrate.tsx",
@@ -87,7 +80,7 @@
         "./hooks": "./src/hooks/index.ts",
         "./types": "./src/types/index.ts"
       },
-      "ssr": "https://elliot-braem-1908-ui-every-plugin-near-everything-26275aca4-ze.zephyrcloud.app",
+      "ssr": "https://elliot-braem-1912-ui-every-plugin-near-everything-208738f05-ze.zephyrcloud.app",
       "template": "near-everything/every-plugin/demo/ui",
       "files": [
         "rsbuild.config.ts",
@@ -105,20 +98,13 @@
         "src/lib/auth-client.ts",
         "src/lib/auth-utils.ts"
       ],
-      "sync": {
-        "scripts": [
-          "dev",
-          "build",
-          "type-check"
-        ]
-      },
       "secrets": [],
       "variables": {}
     },
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://elliot-braem-1909-api-every-plugin-near-everythin-0fbe6edb9-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1913-api-every-plugin-near-everythin-1a9cd6fd7-ze.zephyrcloud.app",
       "proxy": "https://elliot-braem-1811-api-every-plugin-near-everythin-2defcb105-ze.zephyrcloud.app",
       "variables": {},
       "secrets": [
@@ -132,14 +118,7 @@
         "vitest.config.ts",
         "drizzle.config.ts",
         "plugin.dev.ts"
-      ],
-      "sync": {
-        "scripts": [
-          "dev",
-          "build",
-          "test"
-        ]
-      }
+      ]
     }
   }
 }

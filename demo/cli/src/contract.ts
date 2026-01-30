@@ -223,6 +223,7 @@ const SyncResultSchema = z.object({
   status: z.enum(["synced", "error"]),
   account: z.string(),
   gateway: z.string(),
+  socialUrl: z.string().optional(),
   hostUrl: z.string(),
   catalogUpdated: z.boolean(),
   packagesUpdated: z.array(z.string()),

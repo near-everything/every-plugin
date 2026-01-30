@@ -202,3 +202,48 @@ export function getGatewayUrl(env: "development" | "production" = "development")
   }
   return config.gateway[env];
 }
+
+export async function packageExists(pkg: string): Promise<boolean> {
+  const dir = getConfigDir();
+  return Bun.file(`${dir}/${pkg}/package.json`).exists();
+}
+
+export async function resolvePackageModes(
+  packages: string[],
+  input: Record<string, SourceMode | undefined>
+): Promise<{ modes: Record<string, SourceMode>; autoRemote: string[] }> {
+  const dir = getConfigDir();
+  const modes: Record<string, SourceMode> = {};
+  const autoRemote: string[] = [];
+
+  for (const pkg of packages) {
+    const exists = await Bun.file(`${dir}/${pkg}/package.json`).exists();
+    const requestedMode = input[pkg] ?? "local";
+
+    if (!exists && requestedMode === "local") {
+      modes[pkg] = "remote";
+      autoRemote.push(pkg);
+    } else {
+      modes[pkg] = requestedMode;
+    }
+  }
+
+  return { modes, autoRemote };
+}
+
+export async function getExistingPackages(packages: string[]): Promise<{ existing: string[]; missing: string[] }> {
+  const dir = getConfigDir();
+  const existing: string[] = [];
+  const missing: string[] = [];
+
+  for (const pkg of packages) {
+    const exists = await Bun.file(`${dir}/${pkg}/package.json`).exists();
+    if (exists) {
+      existing.push(pkg);
+    } else {
+      missing.push(pkg);
+    }
+  }
+
+  return { existing, missing };
+}
