@@ -756,7 +756,12 @@ export default createPlugin({
           const novaConfig = yield* getNovaConfig;
           const nova = createNovaClient(novaConfig);
 
-          yield* registerSecretsGroup(nova, fullAccount, parentAccount);
+          const gatewayNovaAccount = bosConfig.gateway?.nova?.account;
+          if (!gatewayNovaAccount) {
+            return yield* Effect.fail(new Error("gateway.nova.account is required for secrets registration"));
+          }
+
+          yield* registerSecretsGroup(nova, fullAccount, gatewayNovaAccount);
 
           return {
             status: "registered" as const,
@@ -1101,7 +1106,7 @@ export default createPlugin({
 
       try {
         const gatewayDomain = getGatewayDomain(bosConfig);
-        const gatewayAccount = bosConfig.account;
+        const gatewayAccount = bosConfig.gateway?.account || bosConfig.account;
 
         const wranglerContent = await Bun.file(wranglerPath).text();
 

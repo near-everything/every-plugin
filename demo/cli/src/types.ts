@@ -30,9 +30,16 @@ export const RemoteConfigSchema = z.object({
 });
 export type RemoteConfig = z.infer<typeof RemoteConfigSchema>;
 
+export const NovaConfigSchema = z.object({
+  account: z.string(),
+});
+export type NovaConfig = z.infer<typeof NovaConfigSchema>;
+
 export const GatewayConfigSchema = z.object({
   development: z.string(),
   production: z.string(),
+  account: z.string().optional(),
+  nova: NovaConfigSchema.optional(),
 });
 export type GatewayConfig = z.infer<typeof GatewayConfigSchema>;
 
@@ -54,6 +61,7 @@ export type SyncConfig = z.infer<typeof SyncConfigSchema>;
 export const BosConfigSchema = z.object({
   account: z.string(),
   testnet: z.string().optional(),
+  nova: NovaConfigSchema.optional(),
   gateway: GatewayConfigSchema,
   template: z.string().optional(),
   cli: z.object({

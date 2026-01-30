@@ -117,6 +117,46 @@ const detectStatus = (
   return null;
 };
 
+const killProcessTree = (pid: number) =>
+  Effect.gen(function* () {
+    const killSignal = (signal: NodeJS.Signals) =>
+      Effect.try({
+        try: () => {
+          process.kill(-pid, signal);
+        },
+        catch: () => null,
+      }).pipe(Effect.ignore);
+
+    const killDirect = (signal: NodeJS.Signals) =>
+      Effect.try({
+        try: () => {
+          process.kill(pid, signal);
+        },
+        catch: () => null,
+      }).pipe(Effect.ignore);
+
+    const isRunning = () =>
+      Effect.try({
+        try: () => {
+          process.kill(pid, 0);
+          return true;
+        },
+        catch: () => false,
+      });
+
+    yield* killSignal("SIGTERM");
+    yield* killDirect("SIGTERM");
+
+    yield* Effect.sleep("200 millis");
+
+    const stillRunning = yield* isRunning();
+    if (stillRunning) {
+      yield* killSignal("SIGKILL");
+      yield* killDirect("SIGKILL");
+      yield* Effect.sleep("100 millis");
+    }
+  });
+
 export const spawnDevProcess = (
   config: DevProcess,
   callbacks: ProcessCallbacks
@@ -181,11 +221,16 @@ export const spawnDevProcess = (
       name: config.name,
       pid: proc.pid,
       kill: async () => {
-        proc.kill("SIGTERM");
-        await new Promise((r) => setTimeout(r, 100));
-        try {
-          proc.kill("SIGKILL");
-        } catch { }
+        const pid = proc.pid;
+        if (pid) {
+          await Effect.runPromise(killProcessTree(pid));
+        } else {
+          proc.kill("SIGTERM");
+          await new Promise((r) => setTimeout(r, 100));
+          try {
+            proc.kill("SIGKILL");
+          } catch { }
+        }
       },
       waitForReady: Deferred.await(readyDeferred),
       waitForExit: Effect.gen(function* () {

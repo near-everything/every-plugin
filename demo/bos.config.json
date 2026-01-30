@@ -1,6 +1,9 @@
 {
   "account": "every.near",
   "testnet": "allthethings.testnet",
+  "nova": {
+    "account": "efiz.nova-sdk.near"
+  },
   "template": "near-everything/every-plugin/demo",
   "shared": {
     "ui": {
@@ -44,7 +47,11 @@
   },
   "gateway": {
     "development": "http://localhost:8787",
-    "production": "https://everything.dev"
+    "production": "https://everything.dev",
+    "account": "every.near",
+    "nova": {
+      "account": "every.nova-sdk.near"
+    }
   },
   "app": {
     "host": {

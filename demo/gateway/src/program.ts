@@ -1,17 +1,17 @@
 import { type Container } from "@cloudflare/containers";
 import { Effect, Layer } from "effect";
 import { TenantNotFoundError } from "./errors";
-import { CacheServiceLive, CacheServiceTag } from "./services/cache";
-import { ConfigServiceLive, ConfigServiceTag } from "./services/config";
+import { CacheServiceLive } from "./services/cache";
+import { ConfigServiceLive } from "./services/config";
 import { type ContainerEnv, ContainerServiceLive, ContainerServiceTag } from "./services/container";
-import { SecretsServiceLive, SecretsServiceTag } from "./services/secrets";
+import { SecretsServiceLive } from "./services/secrets";
 import { type GatewayEnv, TenantServiceLive, TenantServiceTag } from "./services/tenant";
 
 export interface Env extends GatewayEnv, ContainerEnv {
   TENANT_CONTAINER: DurableObjectNamespace<Container>;
   GATEWAY_DOMAIN: string;
   GATEWAY_ACCOUNT: string;
-  NOVA_SESSION_TOKEN?: string;
+  NOVA_API_KEY?: string;
 }
 
 const BaseLive = Layer.mergeAll(

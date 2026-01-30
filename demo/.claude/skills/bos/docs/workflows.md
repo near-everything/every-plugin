@@ -142,36 +142,90 @@ Now others can sync from your published config:
 bos sync --account your.near --gateway your-gateway.com
 ```
 
-## Secrets Management
+## Secrets Management with Nova SDK
+
+Nova SDK provides decentralized, TEE-secured secrets management for multi-tenant applications.
+
+### Understanding Nova Accounts
+
+There are two Nova account types in `bos.config.json`:
+
+```json
+{
+  "nova": {
+    "account": "tenant.nova-sdk.near"      // YOUR Nova account (for CLI)
+  },
+  "gateway": {
+    "nova": {
+      "account": "gateway.nova-sdk.near"   // Gateway's Nova account
+    }
+  }
+}
+```
+
+- **Tenant Nova Account** (`nova.account`): Used by CLI to upload/manage secrets
+- **Gateway Nova Account** (`gateway.nova.account`): Used by gateway to retrieve secrets at runtime
 
 ### Initial Setup
 
-```bash
-# Login to NOVA
-bos login
+1. **Create a Nova account** at [nova-sdk.com](https://nova-sdk.com)
+2. **Generate an API key** from "Manage Account"
+3. **Login via CLI**:
 
-# Sync existing .env file
-bos secrets sync --env .env.local
+```bash
+bos login --token <YOUR_API_KEY> --accountId tenant.nova-sdk.near
 ```
 
-### Day-to-Day
+This saves credentials to `.env.bos`:
+```
+NOVA_ACCOUNT_ID=tenant.nova-sdk.near
+NOVA_API_KEY=nova_sk_xxxxx
+```
+
+### Uploading Secrets
 
 ```bash
-# Set a single secret
-bos secrets set MY_API_KEY=secret-value
+# Sync from .env file (uploads to "{account}-secrets" group)
+bos secrets:sync .env.bos
 
-# List configured secrets
-bos secrets list
+# Set individual secret
+bos secrets:set MY_API_KEY=secret-value
+
+# List uploaded secrets
+bos secrets:list
 
 # Delete a secret
-bos secrets delete OLD_KEY
+bos secrets:delete OLD_KEY
 ```
 
-### In CI/CD
+### How Gateway Accesses Secrets
 
-Secrets are retrieved at runtime via NOVA. Ensure:
-1. `NOVA_ACCOUNT_ID` and `NOVA_SESSION_TOKEN` are set
-2. Secrets group is registered for your account
+The gateway uses its own Nova API key (`NOVA_API_KEY` in wrangler.toml secrets) to retrieve tenant secrets:
+
+1. Tenant creates secrets group: `{account}-secrets` (e.g., `every.near-secrets`)
+2. Gateway's Nova account is added as group member during registration
+3. Gateway fetches secrets using its API key as an authorized member
+
+```
+Tenant uploads → "{tenant.account}-secrets" group
+                        ↓
+Gateway (member) → retrieves using gateway.nova.account + NOVA_API_KEY
+```
+
+### Gateway Secrets Configuration
+
+Set the gateway's Nova API key as a Cloudflare secret:
+
+```bash
+cd demo/gateway
+wrangler secret put NOVA_API_KEY
+```
+
+### CI/CD
+
+Ensure these are set in your CI environment:
+- `NOVA_ACCOUNT_ID` - Your Nova SDK account
+- `NOVA_API_KEY` - Your Nova API key
 
 ## Gateway Deployment
 
