@@ -95,7 +95,20 @@ export const ContainerServiceLive = Layer.succeed(
             }),
         });
 
-        return response;
+        const origin = request.headers.get("Origin");
+        const responseHeaders = new Headers(response.headers);
+
+        if (origin) {
+          responseHeaders.set("Access-Control-Allow-Origin", origin);
+          responseHeaders.set("Access-Control-Allow-Credentials", "true");
+          responseHeaders.set("Access-Control-Expose-Headers", "Set-Cookie");
+        }
+
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders,
+        });
       }),
   })
 );

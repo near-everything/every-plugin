@@ -54,7 +54,8 @@ export interface RuntimeConfig {
   };
 }
 
-export type ClientRuntimeConfig = Pick<RuntimeConfig, "env" | "title" | "hostUrl"> & {
+export type ClientRuntimeConfig = Pick<RuntimeConfig, "env" | "title"> & {
+  hostUrl?: string;
   assetsUrl: string;
   apiBase: string;
   rpcBase: string;

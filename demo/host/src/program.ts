@@ -284,7 +284,7 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
     }
 
     try {
-      const { env, account, title, hostUrl } = config;
+      const { env, account, title } = config;
       const assetsUrl = config.ui.url;
 
       const requestContext = await createRequestContext(c.req.raw, auth, db);
@@ -295,7 +295,7 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
 
       const result = await ssrRouterModule.renderToStream(c.req.raw, {
         assetsUrl,
-        runtimeConfig: { env, account, title, hostUrl, assetsUrl, apiBase: "/api", rpcBase: "/api/rpc" },
+        runtimeConfig: { env, account, title, assetsUrl, apiBase: "/api", rpcBase: "/api/rpc" },
       });
 
       (globalThis as Record<string, unknown>).$apiClient = undefined;

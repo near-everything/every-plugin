@@ -27,10 +27,28 @@ const TenantLive = TenantServiceLive.pipe(
 
 const GatewayLive = Layer.merge(BaseLive, TenantLive);
 
+function createCorsPreflightResponse(request: Request): Response {
+  const origin = request.headers.get("Origin") ?? "*";
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Cookie",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+}
+
 const handleRequest = (request: Request, env: Env) =>
   Effect.gen(function* () {
     const url = new URL(request.url);
     const hostname = url.hostname;
+
+    if (request.method === "OPTIONS") {
+      return createCorsPreflightResponse(request);
+    }
 
     if (url.pathname === "/health") {
       return new Response("OK", { status: 200 });
