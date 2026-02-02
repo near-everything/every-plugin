@@ -12,6 +12,8 @@ import { renderStreamingView } from "../components/streaming-view";
 import type { AppConfig, BosConfig } from "../config";
 import { getProcessConfig, makeDevProcess, type ProcessCallbacks, type ProcessHandle } from "./process";
 
+let activeCleanup: (() => Promise<void>) | null = null;
+
 const LOG_NOISE_PATTERNS = [
   /\[ Federation Runtime \] Version .* from host of shared singleton module/,
   /Executing an Effect versioned \d+\.\d+\.\d+ with a Runtime of version/,
@@ -137,7 +139,10 @@ export const runDevServers = (orchestrator: AppOrchestrator) =>
       if (showLogs) {
         await exportLogs();
       }
+      activeCleanup = null;
     };
+
+    activeCleanup = cleanup;
 
     const useInteractive = orchestrator.interactive ?? isInteractiveSupported();
 
@@ -220,12 +225,18 @@ export const startApp = (orchestrator: AppOrchestrator) => {
     }))
   );
 
+  const handleSignal = async () => {
+    if (activeCleanup) {
+      await activeCleanup();
+    }
+  };
+
   process.on("SIGINT", () => {
-    setTimeout(() => process.exit(0), 500);
+    handleSignal().finally(() => process.exit(0));
   });
 
   process.on("SIGTERM", () => {
-    setTimeout(() => process.exit(0), 500);
+    handleSignal().finally(() => process.exit(0));
   });
 
   BunRuntime.runMain(program);

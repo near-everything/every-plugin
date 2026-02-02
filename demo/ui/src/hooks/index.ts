@@ -1,7 +1,7 @@
 export {
-  useIsClient,
   useClientValue,
+  useIsClient,
+  useLocalStorage,
   useMediaQuery,
   usePrefersDarkMode,
-  useLocalStorage,
 } from './use-client';

@@ -15,7 +15,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { GatewayEntry } from "./registry";
+import type { GatewayEntry } from ".";
 
 function getAccountSlug(account: string): string {
   return account.replace(/\.near$/, "").replace(/\./g, "-");

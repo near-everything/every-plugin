@@ -1,3 +1,4 @@
+import { createServer, type IncomingHttpHeaders } from "node:http";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
@@ -5,12 +6,11 @@ import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { RPCHandler } from "@orpc/server/fetch";
 import { BatchHandlerPlugin } from "@orpc/server/plugins";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { Cause, Effect, ManagedRuntime } from "every-plugin/effect";
+import { Cause, Deferred, Effect, Exit, Fiber, ManagedRuntime } from "every-plugin/effect";
 import { formatORPCError } from "every-plugin/errors";
 import { onError } from "every-plugin/orpc";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
-import { createServer, type IncomingHttpHeaders } from "node:http";
 import { FullServerLive } from "./layers";
 import { type Auth, AuthService } from "./services/auth";
 import { type BootstrapConfig, ConfigService, type RuntimeConfig, setBootstrapConfig } from "./services/config";
@@ -334,7 +334,7 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
     app.use("/robots.txt", serveStatic({ root: "./dist" }));
   }
 
-  const startHttpServer = () => {
+  const startHttpServer = (): { close: (callback?: () => void) => void } => {
     if (isDev) {
       const server = createServer(async (req, res) => {
         const url = req.url || "/";
@@ -381,18 +381,34 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
         logger.info(`  http://localhost:${port}/api/rpc → RPC endpoint`);
         onReady?.();
       });
+
+      return server;
     } else {
       const hostname = process.env.HOST || "0.0.0.0";
-      serve({ fetch: app.fetch, port, hostname }, (info: { port: number }) => {
+      const server = serve({ fetch: app.fetch, port, hostname }, (info: { port: number }) => {
         logger.info(`Host production server running at http://${hostname}:${info.port}`);
         logger.info(`  http://${hostname}:${info.port}/api     → REST API (OpenAPI docs)`);
         logger.info(`  http://${hostname}:${info.port}/api/rpc → RPC endpoint`);
         onReady?.();
       });
+
+      return server;
     }
   };
 
-  startHttpServer();
+  const httpServer = startHttpServer();
+
+  yield* Effect.addFinalizer(() =>
+    Effect.promise(() =>
+      new Promise<void>((resolve) => {
+        logger.info("[Server] Closing HTTP server...");
+        httpServer.close(() => {
+          logger.info("[Server] HTTP server closed");
+          resolve();
+        });
+      })
+    )
+  );
 
   yield* Effect.fork(
     Effect.gen(function* () {
@@ -429,29 +445,36 @@ export const runServer = (bootstrap?: BootstrapConfig): ServerHandle => {
     setBootstrapConfig(bootstrap);
   }
 
-  let resolveReady: () => void;
-  let rejectReady: (err: unknown) => void;
+  const runtime = ManagedRuntime.make(ServerLive);
+  let serverFiber: Fiber.RuntimeFiber<void, never> | null = null;
 
-  const ready = new Promise<void>((resolve, reject) => {
-    resolveReady = resolve;
-    rejectReady = reject;
+  const program = Effect.gen(function* () {
+    const readyDeferred = yield* Deferred.make<void>();
+
+    const fiber = yield* Effect.forkDaemon(
+      Effect.scoped(
+        createStartServer(() => Deferred.unsafeDone(readyDeferred, Exit.void))
+      )
+    );
+
+    serverFiber = fiber;
+
+    yield* Deferred.await(readyDeferred);
   });
 
-  const runtime = ManagedRuntime.make(ServerLive);
+  const ready = runtime.runPromise(program);
 
   const shutdown = async () => {
-    console.log("[Server] Shutting down...");
+    logger.info("[Server] Shutting down...");
+
+    if (serverFiber) {
+      await Effect.runPromise(Fiber.interrupt(serverFiber));
+    }
+
     closeDatabase();
     await runtime.dispose();
-    console.log("[Server] Shutdown complete");
+    logger.info("[Server] Shutdown complete");
   };
-
-  const serverEffect = createStartServer(() => resolveReady());
-
-  runtime.runPromise(serverEffect).catch((err) => {
-    console.error("Failed to start server:", err);
-    rejectReady(err);
-  });
 
   return { ready, shutdown };
 };

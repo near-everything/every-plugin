@@ -1138,6 +1138,91 @@ Zephyr Configuration:
       console.log();
     });
 
+  program
+    .command("session")
+    .description("Record a performance analysis session with Playwright")
+    .option("--headless", "Run browser in headless mode (default: true)", true)
+    .option("--no-headless", "Run browser with UI visible")
+    .option("-t, --timeout <ms>", "Session timeout in milliseconds", "120000")
+    .option("-o, --output <path>", "Output report path", "./session-report.json")
+    .option("-f, --format <format>", "Report format: json | html", "json")
+    .option("--flow <flow>", "Flow to run: login | navigation | custom", "login")
+    .option("--routes <routes>", "Routes for navigation flow (comma-separated)")
+    .option("--interval <ms>", "Snapshot interval in milliseconds", "2000")
+    .action(async (options) => {
+      console.log();
+      console.log(colors.cyan(frames.top(52)));
+      console.log(`  ${icons.scan} ${gradients.cyber("SESSION RECORDER")}`);
+      console.log(colors.cyan(frames.bottom(52)));
+      console.log();
+      console.log(`  ${colors.dim("Flow:")}     ${colors.white(options.flow)}`);
+      console.log(`  ${colors.dim("Headless:")} ${colors.white(String(options.headless))}`);
+      console.log(`  ${colors.dim("Output:")}   ${colors.white(options.output)}`);
+      console.log(`  ${colors.dim("Timeout:")}  ${colors.white(options.timeout)}ms`);
+      console.log();
+
+      const s = spinner();
+      s.start("Starting session recording...");
+
+      const result = await client.session({
+        headless: options.headless,
+        timeout: parseInt(options.timeout, 10),
+        output: options.output,
+        format: options.format as "json" | "html",
+        flow: options.flow as "login" | "navigation" | "custom",
+        routes: options.routes ? options.routes.split(",") : undefined,
+        snapshotInterval: parseInt(options.interval, 10),
+      });
+
+      if (result.status === "error") {
+        s.stop(colors.error(`${icons.err} Session failed: ${result.error}`));
+        process.exit(1);
+      }
+
+      if (result.status === "timeout") {
+        s.stop(colors.error(`${icons.err} Session timed out`));
+        process.exit(1);
+      }
+
+      s.stop(colors.green(`${icons.ok} Session completed`));
+
+      console.log();
+      console.log(colors.cyan(frames.top(52)));
+      console.log(`  ${icons.ok} ${gradients.cyber("SESSION SUMMARY")}`);
+      console.log(colors.cyan(frames.bottom(52)));
+      console.log();
+
+      if (result.summary) {
+        console.log(`  ${colors.dim("Session ID:")}  ${colors.white(result.sessionId || "")}`);
+        console.log(`  ${colors.dim("Duration:")}    ${colors.white(`${(result.summary.duration / 1000).toFixed(1)}s`)}`);
+        console.log(`  ${colors.dim("Events:")}      ${colors.white(String(result.summary.eventCount))}`);
+        console.log();
+        console.log(`  ${colors.dim("Peak Memory:")} ${colors.cyan(`${result.summary.peakMemoryMb.toFixed(1)} MB`)}`);
+        console.log(`  ${colors.dim("Avg Memory:")}  ${colors.cyan(`${result.summary.averageMemoryMb.toFixed(1)} MB`)}`);
+        console.log(`  ${colors.dim("Delta:")}       ${result.summary.totalMemoryDeltaMb >= 0 ? colors.cyan("+") : ""}${colors.cyan(`${result.summary.totalMemoryDeltaMb.toFixed(1)} MB`)}`);
+        console.log();
+        console.log(`  ${colors.dim("Processes:")}   ${colors.white(`${result.summary.processesSpawned} spawned, ${result.summary.processesKilled} killed`)}`);
+        console.log(`  ${colors.dim("Ports:")}       ${colors.white(result.summary.portsUsed.join(", "))}`);
+        console.log();
+
+        if (result.status === "leaks_detected") {
+          console.log(colors.error(`  ${icons.err} RESOURCE LEAKS DETECTED`));
+          if (result.summary.orphanedProcesses > 0) {
+            console.log(colors.error(`     - ${result.summary.orphanedProcesses} orphaned process(es)`));
+          }
+          if (result.summary.portsLeaked > 0) {
+            console.log(colors.error(`     - ${result.summary.portsLeaked} port(s) still bound`));
+          }
+        } else {
+          console.log(colors.green(`  ${icons.ok} No resource leaks detected`));
+        }
+      }
+
+      console.log();
+      console.log(`  ${colors.dim("Report:")} ${colors.cyan(result.reportPath || options.output)}`);
+      console.log();
+    });
+
   program.parse();
 }
 

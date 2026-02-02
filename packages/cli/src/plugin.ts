@@ -18,7 +18,7 @@ import {
   loadConfig,
   type RemoteConfig,
   resolvePackageModes,
-  type SourceMode, 
+  type SourceMode,
   setConfig
 } from "./config";
 import { bosContract } from "./contract";
@@ -43,6 +43,13 @@ import {
   formatSnapshotSummary,
   runWithInfo
 } from "./lib/resource-monitor";
+import {
+  formatReportSummary,
+  navigateTo,
+  runLoginFlow,
+  runNavigationFlow,
+  SessionRecorder,
+} from "./lib/session-recorder";
 import { syncFiles } from "./lib/sync";
 import { run } from "./utils/run";
 import { colors, icons } from "./utils/theme";
@@ -1756,6 +1763,96 @@ export default createPlugin({
           status: "snapshot" as const,
           snapshot: snapshot as any,
         };
+      } catch (error) {
+        return {
+          status: "error" as const,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }),
+
+    session: builder.session.handler(async ({ input }) => {
+      const sessionEffect = Effect.gen(function* () {
+        const recorder = yield* SessionRecorder.create({
+          ports: [3000],
+          snapshotIntervalMs: input.snapshotInterval,
+          headless: input.headless,
+          baseUrl: "http://localhost:3000",
+          timeout: input.timeout,
+        });
+
+        try {
+          yield* recorder.startServers("start");
+
+          yield* recorder.startRecording();
+
+          const browser = yield* recorder.launchBrowser();
+
+          if (input.flow === "login") {
+            yield* runLoginFlow(browser, {
+              recordEvent: (type, label, metadata) =>
+                recorder.recordEvent(type, label, metadata).pipe(
+                  Effect.asVoid,
+                  Effect.catchAll(() => Effect.void)
+                ),
+            }, {
+              baseUrl: "http://localhost:3000",
+              headless: input.headless,
+              stubWallet: input.headless,
+              timeout: 30000,
+            });
+          } else if (input.flow === "navigation" && input.routes) {
+            yield* runNavigationFlow(
+              browser,
+              {
+                recordEvent: (type, label, metadata) =>
+                  recorder.recordEvent(type, label, metadata).pipe(
+                    Effect.asVoid,
+                    Effect.catchAll(() => Effect.void)
+                  ),
+              },
+              input.routes,
+              "http://localhost:3000"
+            );
+          } else {
+            yield* navigateTo(browser.page, "http://localhost:3000");
+            yield* Effect.sleep("5 seconds");
+          }
+
+          yield* recorder.cleanup();
+
+          const report = yield* recorder.stopRecording();
+
+          yield* recorder.exportReport(input.output, input.format);
+
+          console.log(formatReportSummary(report));
+
+          return {
+            status: report.summary.hasLeaks ? "leaks_detected" as const : "completed" as const,
+            sessionId: recorder.getSessionId(),
+            reportPath: input.output,
+            summary: {
+              totalMemoryDeltaMb: report.summary.totalMemoryDeltaMb,
+              peakMemoryMb: report.summary.peakMemoryMb,
+              averageMemoryMb: report.summary.averageMemoryMb,
+              processesSpawned: report.summary.processesSpawned,
+              processesKilled: report.summary.processesKilled,
+              orphanedProcesses: report.summary.orphanedProcesses,
+              portsUsed: report.summary.portsUsed,
+              portsLeaked: report.summary.portsLeaked,
+              hasLeaks: report.summary.hasLeaks,
+              eventCount: report.summary.eventCount,
+              duration: report.summary.duration,
+            },
+          };
+        } catch (error) {
+          yield* recorder.cleanup();
+          throw error;
+        }
+      });
+
+      try {
+        return await Effect.runPromise(sessionEffect);
       } catch (error) {
         return {
           status: "error" as const,

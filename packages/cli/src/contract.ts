@@ -360,6 +360,38 @@ const MonitorResultSchema = z.object({
   error: z.string().optional(),
 });
 
+const SessionOptionsSchema = z.object({
+  headless: z.boolean().default(true),
+  timeout: z.number().default(120000),
+  output: z.string().default("./session-report.json"),
+  format: z.enum(["json", "html"]).default("json"),
+  flow: z.enum(["login", "navigation", "custom"]).default("login"),
+  routes: z.array(z.string()).optional(),
+  snapshotInterval: z.number().default(2000),
+});
+
+const SessionSummarySchema = z.object({
+  totalMemoryDeltaMb: z.number(),
+  peakMemoryMb: z.number(),
+  averageMemoryMb: z.number(),
+  processesSpawned: z.number(),
+  processesKilled: z.number(),
+  orphanedProcesses: z.number(),
+  portsUsed: z.array(z.number()),
+  portsLeaked: z.number(),
+  hasLeaks: z.boolean(),
+  eventCount: z.number(),
+  duration: z.number(),
+});
+
+const SessionResultSchema = z.object({
+  status: z.enum(["completed", "leaks_detected", "error", "timeout"]),
+  sessionId: z.string().optional(),
+  reportPath: z.string().optional(),
+  summary: SessionSummarySchema.optional(),
+  error: z.string().optional(),
+});
+
 const DepsUpdateOptionsSchema = z.object({
   category: z.enum(["ui", "api"]).default("ui"),
   packages: z.array(z.string()).optional(),
@@ -511,6 +543,11 @@ export const bosContract = oc.router({
     .route({ method: "GET", path: "/monitor" })
     .input(MonitorOptionsSchema)
     .output(MonitorResultSchema),
+
+  session: oc
+    .route({ method: "POST", path: "/session" })
+    .input(SessionOptionsSchema)
+    .output(SessionResultSchema),
 });
 
 export type BosContract = typeof bosContract;
@@ -552,3 +589,6 @@ export type FilesSyncResult = z.infer<typeof FilesSyncResultSchema>;
 export type MonitorOptions = z.infer<typeof MonitorOptionsSchema>;
 export type MonitorResult = z.infer<typeof MonitorResultSchema>;
 export type MonitorSnapshot = z.infer<typeof SnapshotSchema>;
+export type SessionOptions = z.infer<typeof SessionOptionsSchema>;
+export type SessionResult = z.infer<typeof SessionResultSchema>;
+export type SessionSummary = z.infer<typeof SessionSummarySchema>;

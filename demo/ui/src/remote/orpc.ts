@@ -23,6 +23,7 @@ export const queryClient = new QueryClient({
       staleTime: 5 * 60 * 1000,
       gcTime: 10 * 60 * 1000,
       retry: (failureCount, error) => {
+        // this needs better parity with the api behavior (oRPC Error and Effect)
         if (error && typeof error === 'object' && 'message' in error) {
           const message = String(error.message).toLowerCase();
           if (message.includes('fetch') || message.includes('network')) {

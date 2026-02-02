@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { MarkdownRenderer } from "../../../components/markdown-renderer";
+import { getGuide, getGuideMetadata, isGuide } from "../../../lib/guides";
 
 function generateOgImageSvg(keyId: string): string {
   const escapedKey = keyId.length > 40 ? `${keyId.slice(0, 37)}...` : keyId;
@@ -9,13 +11,17 @@ function generateOgImageSvg(keyId: string): string {
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
-export const Route = createFileRoute("/_layout/p/$key")({
+export const Route = createFileRoute("/_layout/page/$key")({
   ssr: true,
   head: ({ params }) => {
     const keyName = params.key;
-    const title = `${keyName} | demo.everything`;
-    const description = `This is a sample page for "${keyName}" that is publicly visible without authentication.`;
-    const ogImage = generateOgImageSvg(keyName);
+    const metadata = getGuideMetadata(keyName);
+
+    const title = metadata ? `${metadata.title} | everything.dev` : `${keyName} | demo.everything`;
+    const description = metadata
+      ? metadata.description
+      : `This is a sample page for "${keyName}" that is publicly visible without authentication.`;
+    const ogImage = generateOgImageSvg(metadata?.title ?? keyName);
 
     return {
       meta: [
@@ -36,6 +42,15 @@ export const Route = createFileRoute("/_layout/p/$key")({
 
 function PublicKeyPage() {
   const { key } = Route.useParams();
+  const guideContent = getGuide(key);
+
+  if (guideContent) {
+    return (
+      <article className="max-w-4xl mx-auto px-4 md:px-8 py-12">
+        <MarkdownRenderer content={guideContent} />
+      </article>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-8 py-12">
