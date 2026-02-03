@@ -6,14 +6,14 @@ import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { RPCHandler } from "@orpc/server/fetch";
 import { BatchHandlerPlugin } from "@orpc/server/plugins";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { Cause, Deferred, Effect, Exit, Fiber, ManagedRuntime } from "every-plugin/effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, ManagedRuntime } from "every-plugin/effect";
 import { formatORPCError } from "every-plugin/errors";
 import { onError } from "every-plugin/orpc";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
-import { FullServerLive } from "./layers";
+import { BaseLive, PluginsLive } from "./layers";
 import { type Auth, AuthService } from "./services/auth";
-import { type BootstrapConfig, ConfigService, type RuntimeConfig, setBootstrapConfig } from "./services/config";
+import { ConfigService, type RuntimeConfig } from "./services/config";
 import { createRequestContext } from "./services/context";
 import type { Database } from "./services/database";
 import { closeDatabase, DatabaseService } from "./services/database";
@@ -431,19 +431,21 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
   yield* Effect.never;
 });
 
-export const startServer = createStartServer();
-
-export const ServerLive = FullServerLive;
+export interface ServerInput {
+  config: RuntimeConfig;
+}
 
 export interface ServerHandle {
   ready: Promise<void>;
   shutdown: () => Promise<void>;
 }
 
-export const runServer = (bootstrap?: BootstrapConfig): ServerHandle => {
-  if (bootstrap) {
-    setBootstrapConfig(bootstrap);
-  }
+export const runServer = (input: ServerInput): ServerHandle => {
+  const ConfigLive = Layer.succeed(ConfigService, input.config);
+  const ServerLive = Layer.provideMerge(
+    Layer.mergeAll(BaseLive, PluginsLive),
+    ConfigLive
+  );
 
   const runtime = ManagedRuntime.make(ServerLive);
   let serverFiber: Fiber.RuntimeFiber<void, never> | null = null;
@@ -479,8 +481,8 @@ export const runServer = (bootstrap?: BootstrapConfig): ServerHandle => {
   return { ready, shutdown };
 };
 
-export const runServerBlocking = async () => {
-  const handle = runServer();
+export const runServerBlocking = async (input: ServerInput) => {
+  const handle = runServer(input);
 
   process.on("SIGINT", () => void handle.shutdown().then(() => process.exit(0)));
   process.on("SIGTERM", () => void handle.shutdown().then(() => process.exit(0)));

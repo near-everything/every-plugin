@@ -131,5 +131,5 @@ export class PluginsService extends Context.Tag("host/PluginsService")<
 
       return plugins;
     })
-  ).pipe(Layer.provide(ConfigService.Default));
+  );
 }

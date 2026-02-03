@@ -1,8 +1,8 @@
 import { Command } from "@effect/platform";
 import { Deferred, Effect, Fiber, Ref, Stream } from "every-plugin/effect";
-import { type BosConfig, getConfigDir, getPortsFromConfig, type SourceMode } from "../config";
 import type { ProcessStatus } from "../components/dev-view";
-import { loadSecretsFor } from "./secrets";
+import { type BosConfig, getConfigDir, getPortsFromConfig, type RemoteConfig, type SourceMode } from "../config";
+import type { RuntimeConfig } from "../types";
 
 export interface DevProcess {
   name: string;
@@ -68,7 +68,7 @@ export const getProcessConfig = (
   if (!base) return null;
 
   const ports = getPortsFromConfig();
-  
+
   let port: number;
   if (pkg === "host") {
     port = portOverride ?? ports.host;
@@ -157,9 +157,47 @@ const killProcessTree = (pid: number) =>
     }
   });
 
+export function buildRuntimeConfig(
+  bosConfig: BosConfig,
+  options: {
+    uiSource: SourceMode;
+    apiSource: SourceMode;
+    hostUrl: string;
+    proxy?: string;
+    env?: "development" | "production";
+  }
+): RuntimeConfig {
+  const uiConfig = bosConfig.app.ui as RemoteConfig;
+  const apiConfig = bosConfig.app.api as RemoteConfig;
+
+  return {
+    env: options.env ?? "development",
+    account: bosConfig.account,
+    title: bosConfig.app.host.title,
+    hostUrl: options.hostUrl,
+    shared: (bosConfig as { shared?: { ui?: Record<string, unknown> } }).shared as RuntimeConfig["shared"],
+    ui: {
+      name: uiConfig.name,
+      url: options.uiSource === "remote" ? uiConfig.production : uiConfig.development,
+      ssrUrl: options.uiSource === "remote" ? uiConfig.ssr : undefined,
+      source: options.uiSource,
+      exposes: uiConfig.exposes || {},
+    },
+    api: {
+      name: apiConfig.name,
+      url: options.apiSource === "remote" ? apiConfig.production : apiConfig.development,
+      source: options.apiSource,
+      proxy: options.proxy,
+      variables: apiConfig.variables,
+      secrets: apiConfig.secrets,
+    },
+  };
+}
+
 export const spawnDevProcess = (
   config: DevProcess,
-  callbacks: ProcessCallbacks
+  callbacks: ProcessCallbacks,
+  runtimeConfig?: RuntimeConfig
 ) =>
   Effect.gen(function* () {
     const configDir = getConfigDir();
@@ -169,15 +207,20 @@ export const spawnDevProcess = (
 
     callbacks.onStatus(config.name, "starting");
 
+    const envVars: Record<string, string> = {
+      ...process.env as Record<string, string>,
+      ...config.env,
+      FORCE_COLOR: "1",
+      ...(config.port > 0 ? { PORT: String(config.port) } : {}),
+    };
+
+    if (runtimeConfig && config.name === "host") {
+      envVars.BOS_RUNTIME_CONFIG = JSON.stringify(runtimeConfig);
+    }
+
     const cmd = Command.make(config.command, ...config.args).pipe(
       Command.workingDirectory(fullCwd),
-      Command.env({
-        ...process.env,
-        ...config.env,
-        BOS_CONFIG_PATH: "../bos.config.json",
-        FORCE_COLOR: "1",
-        ...(config.port > 0 ? { PORT: String(config.port) } : {}),
-      })
+      Command.env(envVars)
     );
 
     const proc = yield* Command.start(cmd);
@@ -247,13 +290,8 @@ interface ServerHandle {
   shutdown: () => Promise<void>;
 }
 
-interface BootstrapConfig {
-  config?: BosConfig;
-  secrets?: Record<string, string>;
-  host?: { url?: string };
-  ui?: { source?: SourceMode };
-  api?: { source?: SourceMode; proxy?: string };
-  database?: { url?: string };
+interface ServerInput {
+  config: RuntimeConfig;
 }
 
 const patchConsole = (
@@ -300,7 +338,7 @@ const patchConsole = (
 export const spawnRemoteHost = (
   config: DevProcess,
   callbacks: ProcessCallbacks,
-  bosConfig?: BosConfig
+  runtimeConfig: RuntimeConfig
 ) =>
   Effect.gen(function* () {
     const remoteUrl = config.env?.HOST_REMOTE_URL;
@@ -316,27 +354,6 @@ export const spawnRemoteHost = (
     }
 
     callbacks.onStatus(config.name, "starting");
-
-    let hostUrl = `http://localhost:${config.port}`;
-    if (process.env.HOST_URL) {
-      hostUrl = process.env.HOST_URL;
-    }
-
-    const hostSecrets = loadSecretsFor("host");
-    const apiSecrets = loadSecretsFor("api");
-    const allSecrets = { ...hostSecrets, ...apiSecrets };
-
-    const uiSource = (config.env?.UI_SOURCE as SourceMode) ?? "local";
-    const apiSource = (config.env?.API_SOURCE as SourceMode) ?? "local";
-    const apiProxy = config.env?.API_PROXY;
-
-    const bootstrap: BootstrapConfig = {
-      config: bosConfig,
-      secrets: allSecrets,
-      host: { url: hostUrl },
-      ui: { source: uiSource },
-      api: { source: apiSource, proxy: apiProxy },
-    };
 
     callbacks.onLog(config.name, `Remote: ${remoteUrl}`);
 
@@ -369,7 +386,7 @@ export const spawnRemoteHost = (
     callbacks.onLog(config.name, `Loading host from ${remoteEntryUrl}...`);
 
     const hostModule = yield* Effect.tryPromise({
-      try: () => mf.loadRemote<{ runServer: (bootstrap?: BootstrapConfig) => ServerHandle }>("host/Server"),
+      try: () => mf.loadRemote<{ runServer: (input: ServerInput) => ServerHandle }>("host/Server"),
       catch: (e) => new Error(`Failed to load host module: ${e}`),
     });
 
@@ -378,7 +395,7 @@ export const spawnRemoteHost = (
     }
 
     callbacks.onLog(config.name, "Starting server...");
-    const serverHandle = hostModule.runServer(bootstrap);
+    const serverHandle = hostModule.runServer({ config: runtimeConfig });
 
     yield* Effect.tryPromise({
       try: () => serverHandle.ready,
@@ -415,8 +432,29 @@ export const makeDevProcess = (
       return yield* Effect.fail(new Error(`Unknown package: ${pkg}`));
     }
 
-    if (pkg === "host" && env?.HOST_SOURCE === "remote") {
-      return yield* spawnRemoteHost(config, callbacks, bosConfig);
+    if (pkg === "host" && bosConfig) {
+      const uiSource = (env?.UI_SOURCE as SourceMode) ?? "local";
+      const apiSource = (env?.API_SOURCE as SourceMode) ?? "local";
+      const apiProxy = env?.API_PROXY;
+
+      let hostUrl = `http://localhost:${config.port}`;
+      if (process.env.HOST_URL) {
+        hostUrl = process.env.HOST_URL;
+      }
+
+      const runtimeConfig = buildRuntimeConfig(bosConfig, {
+        uiSource,
+        apiSource,
+        hostUrl,
+        proxy: apiProxy,
+        env: "development",
+      });
+
+      if (env?.HOST_SOURCE === "remote") {
+        return yield* spawnRemoteHost(config, callbacks, runtimeConfig);
+      }
+
+      return yield* spawnDevProcess(config, callbacks, runtimeConfig);
     }
 
     return yield* spawnDevProcess(config, callbacks);

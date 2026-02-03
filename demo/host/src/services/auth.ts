@@ -55,8 +55,5 @@ export const createAuth = Effect.gen(function* () {
 });
 
 export class AuthService extends Context.Tag("host/AuthService")<AuthService, Auth>() {
-  static Default = Layer.effect(AuthService, createAuth).pipe(
-    Layer.provide(ConfigService.Default),
-    Layer.provide(DatabaseService.Default)
-  );
+  static Default = Layer.effect(AuthService, createAuth);
 }

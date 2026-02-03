@@ -88,3 +88,38 @@ export const PortConfigSchema = z.object({
   api: z.number(),
 });
 export type PortConfig = z.infer<typeof PortConfigSchema>;
+
+export const SharedConfigSchema = z.object({
+  requiredVersion: z.string().optional(),
+  singleton: z.boolean().optional(),
+  eager: z.boolean().optional(),
+  strictVersion: z.boolean().optional(),
+  shareScope: z.string().optional(),
+});
+export type SharedConfig = z.infer<typeof SharedConfigSchema>;
+
+export const RuntimeConfigSchema = z.object({
+  env: z.enum(["development", "production"]),
+  account: z.string(),
+  title: z.string(),
+  hostUrl: z.string(),
+  shared: z.object({
+    ui: z.record(z.string(), SharedConfigSchema).optional(),
+  }).optional(),
+  ui: z.object({
+    name: z.string(),
+    url: z.string(),
+    ssrUrl: z.string().optional(),
+    source: SourceModeSchema,
+    exposes: z.record(z.string(), z.string()),
+  }),
+  api: z.object({
+    name: z.string(),
+    url: z.string(),
+    source: SourceModeSchema,
+    proxy: z.string().optional(),
+    variables: z.record(z.string(), z.string()).optional(),
+    secrets: z.array(z.string()).optional(),
+  }),
+});
+export type RuntimeConfig = z.infer<typeof RuntimeConfigSchema>;
