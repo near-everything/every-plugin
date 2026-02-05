@@ -1,6 +1,6 @@
 import { Effect } from "every-plugin/effect";
+import { loadBosConfig, type RuntimeConfig } from "everything-dev/config";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { loadBosConfig, type RuntimeConfig } from "@/services/config";
 import { loadRouterModule } from "@/services/federation.server";
 import type { RouterModule } from "@/types";
 
@@ -39,13 +39,12 @@ describe("SSR Stream Lifecycle", () => {
   describe("Stream Completion", () => {
     it("completes stream for root route without timeout", async () => {
       const startTime = Date.now();
-      
+
       const head = await routerModule.getRouteHead("/", {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -54,7 +53,7 @@ describe("SSR Stream Lifecycle", () => {
       });
 
       const elapsed = Date.now() - startTime;
-      
+
       expect(head).toBeDefined();
       expect(head.meta).toBeDefined();
       expect(elapsed).toBeLessThan(5000);
@@ -62,13 +61,12 @@ describe("SSR Stream Lifecycle", () => {
 
     it("completes stream for layout routes", async () => {
       const startTime = Date.now();
-      
+
       const head = await routerModule.getRouteHead("/login", {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -77,20 +75,19 @@ describe("SSR Stream Lifecycle", () => {
       });
 
       const elapsed = Date.now() - startTime;
-      
+
       expect(head).toBeDefined();
       expect(elapsed).toBeLessThan(5000);
     });
 
     it("does not block on authenticated routes with ssr: false", async () => {
       const startTime = Date.now();
-      
+
       const head = await routerModule.getRouteHead("/keys", {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -99,20 +96,19 @@ describe("SSR Stream Lifecycle", () => {
       });
 
       const elapsed = Date.now() - startTime;
-      
+
       expect(head).toBeDefined();
       expect(elapsed).toBeLessThan(5000);
     });
 
     it("handles dynamic authenticated routes without blocking", async () => {
       const startTime = Date.now();
-      
+
       const head = await routerModule.getRouteHead("/keys/test-key-123", {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -121,7 +117,7 @@ describe("SSR Stream Lifecycle", () => {
       });
 
       const elapsed = Date.now() - startTime;
-      
+
       expect(head).toBeDefined();
       expect(elapsed).toBeLessThan(5000);
     });
@@ -134,7 +130,6 @@ describe("SSR Stream Lifecycle", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -150,13 +145,12 @@ describe("SSR Stream Lifecycle", () => {
 
     it("authenticated route head does not trigger auth check during SSR", async () => {
       const authCallsBefore = mockApiClient.protected.mock.calls.length;
-      
+
       await routerModule.getRouteHead("/keys", {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -172,8 +166,8 @@ describe("SSR Stream Lifecycle", () => {
   describe("Public SSR Routes", () => {
     const STREAM_TIMEOUT = 5000;
 
-    it("renders public /p/{key} route with full SSR", { timeout: 6000 }, async () => {
-      const request = new Request("http://localhost/p/test-public-key");
+    it("renders public /page/{key} route with full SSR", { timeout: 6000 }, async () => {
+      const request = new Request("http://localhost/page/test-public-key");
       const startTime = Date.now();
 
       const result = await routerModule.renderToStream(request, {
@@ -181,7 +175,6 @@ describe("SSR Stream Lifecycle", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -200,12 +193,11 @@ describe("SSR Stream Lifecycle", () => {
     });
 
     it("includes OG metadata in public route head", async () => {
-      const head = await routerModule.getRouteHead("/p/my-og-test", {
+      const head = await routerModule.getRouteHead("/page/my-og-test", {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -232,14 +224,13 @@ describe("SSR Stream Lifecycle", () => {
     });
 
     it("renders key parameter in full SSR stream", { timeout: 6000 }, async () => {
-      const request = new Request("http://localhost/p/rendered-key-value");
+      const request = new Request("http://localhost/page/rendered-key-value");
 
       const result = await routerModule.renderToStream(request, {
         assetsUrl: config.ui.url,
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -266,7 +257,6 @@ describe("SSR Stream Lifecycle", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -292,7 +282,6 @@ describe("SSR Stream Lifecycle", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -317,7 +306,6 @@ describe("SSR Stream Lifecycle", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -343,7 +331,6 @@ describe("SSR Stream Lifecycle", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",

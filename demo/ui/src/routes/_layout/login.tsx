@@ -9,14 +9,18 @@ type SearchParams = {
 };
 
 export const Route = createFileRoute("/_layout/login")({
-  ssr: false,
+  ssr: true,
   validateSearch: (search: Record<string, unknown>): SearchParams => ({
     redirect: typeof search.redirect === "string" ? search.redirect : undefined,
   }),
   beforeLoad: async ({ search }) => {
-    const { data: session } = await authClient.getSession();
-    if (session?.user) {
-      throw redirect({ to: search.redirect || "/" });
+    try {
+      const { data: session } = await authClient.getSession();
+      if (session?.user) {
+        throw redirect({ to: search.redirect || "/" });
+      }
+    } catch (error) {
+      if ((error as { isRedirect?: boolean })?.isRedirect) throw error;
     }
   },
   component: LoginPage,

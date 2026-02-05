@@ -1,4 +1,6 @@
-import { dirname, join } from "path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { access, readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type {
   AppConfig,
   BosConfig,
@@ -6,10 +8,11 @@ import type {
   HostConfig,
   PortConfig,
   RemoteConfig,
+  RuntimeConfig,
   SourceMode,
 } from "./types";
 
-export type { AppConfig, BosConfig, GatewayConfig, HostConfig, PortConfig, RemoteConfig, SourceMode };
+export type { AppConfig, BosConfig, GatewayConfig, HostConfig, PortConfig, RemoteConfig, RuntimeConfig, SourceMode };
 
 export const DEFAULT_DEV_CONFIG: AppConfig = {
   host: "local",
@@ -25,13 +28,8 @@ export function findConfigPath(startDir: string): string | null {
   let dir = startDir;
   while (dir !== "/") {
     const configPath = join(dir, "bos.config.json");
-    if (Bun.file(configPath).size > 0) {
-      try {
-        Bun.file(configPath).text();
-        return configPath;
-      } catch {
-        // File doesn't exist or can't be read
-      }
+    if (existsSync(configPath) && statSync(configPath).size > 0) {
+      return configPath;
     }
     dir = dirname(dir);
   }
@@ -42,8 +40,7 @@ function findConfigPathSync(startDir: string): string | null {
   let dir = startDir;
   while (dir !== "/") {
     const configPath = join(dir, "bos.config.json");
-    const file = Bun.file(configPath);
-    if (file.size > 0) {
+    if (existsSync(configPath) && statSync(configPath).size > 0) {
       return configPath;
     }
     dir = dirname(dir);
@@ -195,9 +192,13 @@ export function getGatewayUrl(env: "development" | "production" = "development")
   return config.gateway[env];
 }
 
+async function fileExists(path: string): Promise<boolean> {
+  return access(path).then(() => true).catch(() => false);
+}
+
 export async function packageExists(pkg: string): Promise<boolean> {
   const dir = getConfigDir();
-  return Bun.file(`${dir}/${pkg}/package.json`).exists();
+  return fileExists(`${dir}/${pkg}/package.json`);
 }
 
 export async function resolvePackageModes(
@@ -209,7 +210,7 @@ export async function resolvePackageModes(
   const autoRemote: string[] = [];
 
   for (const pkg of packages) {
-    const exists = await Bun.file(`${dir}/${pkg}/package.json`).exists();
+    const exists = await fileExists(`${dir}/${pkg}/package.json`);
     const requestedMode = input[pkg] ?? "local";
 
     if (!exists && requestedMode === "local") {
@@ -229,7 +230,7 @@ export async function getExistingPackages(packages: string[]): Promise<{ existin
   const missing: string[] = [];
 
   for (const pkg of packages) {
-    const exists = await Bun.file(`${dir}/${pkg}/package.json`).exists();
+    const exists = await fileExists(`${dir}/${pkg}/package.json`);
     if (exists) {
       existing.push(pkg);
     } else {
@@ -238,4 +239,47 @@ export async function getExistingPackages(packages: string[]): Promise<{ existin
   }
 
   return { existing, missing };
+}
+
+export async function loadBosConfig(
+  env: "development" | "production" = "production"
+): Promise<RuntimeConfig> {
+  const configPath = process.env.BOS_CONFIG_PATH;
+  
+  let bosConfig: BosConfig;
+  if (configPath) {
+    const text = await readFile(configPath, "utf-8");
+    bosConfig = JSON.parse(text) as BosConfig;
+  } else {
+    const config = loadConfig();
+    if (!config) {
+      throw new Error("No bos.config.json found");
+    }
+    bosConfig = config;
+  }
+
+  const uiConfig = bosConfig.app.ui as RemoteConfig;
+  const apiConfig = bosConfig.app.api as RemoteConfig;
+
+  return {
+    env,
+    account: bosConfig.account,
+    title: bosConfig.account,
+    hostUrl: bosConfig.app.host[env],
+    shared: bosConfig.shared,
+    ui: {
+      name: uiConfig.name,
+      url: uiConfig[env],
+      ssrUrl: uiConfig.ssr,
+      source: "remote",
+    },
+    api: {
+      name: apiConfig.name,
+      url: apiConfig[env],
+      source: "remote",
+      proxy: apiConfig.proxy,
+      variables: apiConfig.variables,
+      secrets: apiConfig.secrets,
+    },
+  };
 }

@@ -28,6 +28,14 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     const siteName = "Every Demo";
     const ogImage = `${assetsUrl}/metadata.png`;
 
+    const structuredData = {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: siteName,
+      description,
+      url: siteUrl,
+    };
+
     return {
       meta: [
         { charSet: "utf-8" },
@@ -76,7 +84,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         },
         { rel: "manifest", href: `${assetsUrl}/manifest.json` },
       ],
-      scripts: getRemoteScripts({ assetsUrl, runtimeConfig }),
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify(structuredData),
+        },
+        ...getRemoteScripts({ assetsUrl, runtimeConfig }),
+      ],
     };
   },
   component: RootComponent,

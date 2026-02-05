@@ -1,5 +1,4 @@
-import { isProcessAliveSync } from "./snapshot";
-import type { PortInfo, Snapshot, SnapshotDiff } from "./types";
+import type { PortInfo, ProcessInfo, Snapshot, SnapshotDiff } from "./types";
 
 export const diffSnapshots = (from: Snapshot, to: Snapshot): SnapshotDiff => {
   const fromPids = new Set(from.processes.map((p) => p.pid));
@@ -21,17 +20,7 @@ export const diffSnapshots = (from: Snapshot, to: Snapshot): SnapshotDiff => {
     }
   }
 
-  const stillBoundPids = new Set(
-    stillBoundPorts.map((p) => p.pid).filter((pid): pid is number => pid !== null)
-  );
-
-  const orphanedProcesses = from.processes.filter(
-    (p) =>
-      fromPids.has(p.pid) &&
-      !toPids.has(p.pid) &&
-      isProcessAliveSync(p.pid) &&
-      stillBoundPids.has(p.pid)
-  );
+  const orphanedProcesses = findOrphanedProcesses(from, to, fromPids, toPids);
 
   const newProcesses = to.processes.filter((p) => !fromPids.has(p.pid));
   const killedProcesses = from.processes.filter((p) => !toPids.has(p.pid));
@@ -48,6 +37,31 @@ export const diffSnapshots = (from: Snapshot, to: Snapshot): SnapshotDiff => {
     newProcesses,
     killedProcesses,
   };
+};
+
+const findOrphanedProcesses = (
+  from: Snapshot,
+  to: Snapshot,
+  fromPids: Set<number>,
+  toPids: Set<number>
+): ProcessInfo[] => {
+  const orphaned: ProcessInfo[] = [];
+
+  for (const toProc of to.processes) {
+    const parentPid = toProc.ppid;
+    
+    if (parentPid <= 1) continue;
+
+    const parentWasTracked = fromPids.has(parentPid);
+    const parentIsGone = !toPids.has(parentPid);
+    const childStillAlive = toPids.has(toProc.pid);
+
+    if (parentWasTracked && parentIsGone && childStillAlive) {
+      orphaned.push(toProc);
+    }
+  }
+
+  return orphaned;
 };
 
 export const hasLeaks = (diff: SnapshotDiff): boolean => {

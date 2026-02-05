@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "types": ["bun"],
+    "types": ["bun", "node"],
     "lib": ["ESNext", "DOM"],
     "module": "ESNext",
     "target": "ESNext",

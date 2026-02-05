@@ -1,6 +1,9 @@
+import chalk from "chalk";
 import { linkify } from "../utils/linkify";
 import { colors, icons } from "../utils/theme";
 import type { ProcessState, ProcessStatus } from "./dev-view";
+
+const orange = chalk.hex("#ffaa00");
 
 export interface StreamingViewHandle {
   updateProcess: (name: string, status: ProcessStatus, message?: string) => void;
@@ -34,7 +37,7 @@ const getStatusIcon = (status: ProcessStatus): string => {
 export function renderStreamingView(
   initialProcesses: ProcessState[],
   description: string,
-  _env: Record<string, string>,
+  env: Record<string, string>,
   onExit?: () => void,
   _onExportLogs?: () => void,
 ): StreamingViewHandle {
@@ -46,12 +49,18 @@ export function renderStreamingView(
   let allReadyPrinted = false;
   const hostProcess = initialProcesses.find(p => p.name === "host");
   const hostPort = hostProcess?.port || 3000;
+  const proxyTarget = env.API_PROXY;
 
   console.log();
   console.log(colors.cyan(`${"─".repeat(52)}`));
   console.log(`  ${icons.run} ${colors.cyan(description.toUpperCase())}`);
   console.log(colors.cyan(`${"─".repeat(52)}`));
   console.log();
+
+  if (proxyTarget) {
+    console.log(orange(`  ${icons.arrow} API PROXY → ${proxyTarget}`));
+    console.log();
+  }
 
   for (const proc of initialProcesses) {
     const color = getServiceColor(proc.name);

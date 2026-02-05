@@ -1,8 +1,8 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { Effect, Metric } from "effect";
+import { spawn, type ChildProcess } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Effect, Metric } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   assertAllPortsFreeWithPlatform,
@@ -11,9 +11,14 @@ import {
   diffSnapshots,
   formatDiff,
   hasLeaks,
-  runSilent,
-  type Snapshot
+  runSilent
 } from "../../src/lib/resource-monitor";
+import {
+  SessionRecorder,
+  closeBrowser,
+  formatReportSummary,
+  runLoginFlow
+} from "../../src/lib/session-recorder";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI_DIR = resolve(__dirname, "../..");
@@ -22,6 +27,7 @@ const IS_WINDOWS = process.platform === "win32";
 const START_PORT = 3000;
 const STARTUP_TIMEOUT = 90000;
 const CLEANUP_TIMEOUT = 15000;
+const BASE_URL = "http://localhost:3000";
 
 const memoryUsageGauge = Metric.gauge("bos_start_memory_mb");
 const portBindTimeGauge = Metric.gauge("bos_start_port_bind_time_ms");
@@ -99,7 +105,6 @@ const waitForPortBound = async (
         return true;
       }
     } catch {
-      // ignore
     }
     await sleep(500);
   }
@@ -120,7 +125,6 @@ const waitForPortFree = async (
         return true;
       }
     } catch {
-      // ignore
     }
     await sleep(200);
   }
@@ -137,54 +141,6 @@ const cleanupProcess = async (proc: StartProcess | null): Promise<void> => {
     proc.kill("SIGKILL");
   }
   await proc.waitForExit(5000);
-};
-
-interface LifecycleMetrics {
-  portBindTimeMs: number;
-  cleanupTimeMs: number;
-  memoryUsageMb: number;
-  processCount: number;
-  baseline: Snapshot;
-  running: Snapshot;
-  after: Snapshot;
-  hasLeaks: boolean;
-}
-
-const writeMetricsReport = async (
-  metrics: LifecycleMetrics,
-  filepath: string
-): Promise<void> => {
-  const report = {
-    timestamp: new Date().toISOString(),
-    platform: process.platform,
-    metrics: {
-      portBindTimeMs: metrics.portBindTimeMs,
-      cleanupTimeMs: metrics.cleanupTimeMs,
-      memoryUsageMb: metrics.memoryUsageMb,
-      processCount: metrics.processCount,
-    },
-    snapshots: {
-      baseline: {
-        timestamp: metrics.baseline.timestamp,
-        portsMonitored: Object.keys(metrics.baseline.ports).length,
-        processCount: metrics.baseline.processes.length,
-      },
-      running: {
-        timestamp: metrics.running.timestamp,
-        portsMonitored: Object.keys(metrics.running.ports).length,
-        processCount: metrics.running.processes.length,
-        memoryRssMb: metrics.running.memory.processRss / 1024 / 1024,
-      },
-      after: {
-        timestamp: metrics.after.timestamp,
-        portsMonitored: Object.keys(metrics.after.ports).length,
-        processCount: metrics.after.processes.length,
-      },
-    },
-    hasLeaks: metrics.hasLeaks,
-  };
-
-  await writeFile(filepath, JSON.stringify(report, null, 2));
 };
 
 describe("BOS Start Lifecycle Integration Tests", () => {
@@ -206,6 +162,16 @@ describe("BOS Start Lifecycle Integration Tests", () => {
       );
       expect(baseline.ports[START_PORT].state).toBe("FREE");
 
+      const recorder = await Effect.runPromise(
+        SessionRecorder.create({
+          ports: [START_PORT],
+          baseUrl: BASE_URL,
+          headless: true,
+        })
+      );
+
+      await Effect.runPromise(recorder.startRecording());
+
       const startTime = Date.now();
       startProcess = spawnBosStart();
 
@@ -219,6 +185,10 @@ describe("BOS Start Lifecycle Integration Tests", () => {
       expect(ready).toBe(true);
 
       const portBindTimeMs = Date.now() - startTime;
+
+      await Effect.runPromise(
+        recorder.recordEvent("custom", "server_ready", { portBindTimeMs })
+      );
 
       const running = await runSilent(
         createSnapshotWithPlatform({ ports: [START_PORT] })
@@ -240,6 +210,10 @@ describe("BOS Start Lifecycle Integration Tests", () => {
         startProcess.kill("SIGTERM");
       }
 
+      await Effect.runPromise(
+        recorder.recordEvent("custom", "shutdown_initiated")
+      );
+
       const freed = await waitForPortFree(START_PORT, CLEANUP_TIMEOUT);
 
       if (!freed) {
@@ -258,6 +232,9 @@ describe("BOS Start Lifecycle Integration Tests", () => {
       const diff = diffSnapshots(running, after);
       const leaks = hasLeaks(diff);
 
+      const sessionReport = await Effect.runPromise(recorder.stopRecording());
+
+      console.log("\n" + formatReportSummary(sessionReport));
       console.log("\n--- Lifecycle Metrics ---");
       console.log(`Port bind time: ${portBindTimeMs}ms`);
       console.log(`Cleanup time: ${cleanupTimeMs}ms`);
@@ -271,18 +248,10 @@ describe("BOS Start Lifecycle Integration Tests", () => {
         console.error(formatDiff(diff));
       }
 
-      const metrics: LifecycleMetrics = {
-        portBindTimeMs,
-        cleanupTimeMs,
-        memoryUsageMb,
-        processCount,
-        baseline,
-        running,
-        after,
-        hasLeaks: leaks,
-      };
-
-      await writeMetricsReport(metrics, resolve(CLI_DIR, "test-metrics.json"));
+      await writeFile(
+        resolve(CLI_DIR, "session-report.json"),
+        JSON.stringify(sessionReport, null, 2)
+      );
 
       expect(after.ports[START_PORT].state).toBe("FREE");
       expect(diff.orphanedProcesses).toHaveLength(0);
@@ -295,5 +264,90 @@ describe("BOS Start Lifecycle Integration Tests", () => {
       startProcess = null;
     },
     STARTUP_TIMEOUT + CLEANUP_TIMEOUT + 5000
+  );
+
+  it(
+    "should support login flow after server starts",
+    async () => {
+      const baseline = await runSilent(
+        createSnapshotWithPlatform({ ports: [START_PORT] })
+      );
+      expect(baseline.ports[START_PORT].state).toBe("FREE");
+
+      const recorder = await Effect.runPromise(
+        SessionRecorder.create({
+          ports: [START_PORT],
+          baseUrl: BASE_URL,
+          headless: true,
+        })
+      );
+
+      await Effect.runPromise(recorder.startRecording());
+
+      startProcess = spawnBosStart();
+
+      const ready = await waitForPortBound(START_PORT, STARTUP_TIMEOUT);
+      if (!ready) {
+        console.error("Server failed to start. Captured output:");
+        console.error("STDOUT:", startProcess.stdout);
+        console.error("STDERR:", startProcess.stderr);
+      }
+      expect(ready).toBe(true);
+
+      await Effect.runPromise(
+        recorder.recordEvent("custom", "server_ready")
+      );
+
+      const browser = await Effect.runPromise(
+        recorder.launchBrowser()
+      );
+
+      const flowRecorder = {
+        recordEvent: (type: Parameters<typeof recorder.recordEvent>[0], label: string, metadata?: Record<string, unknown>) =>
+          recorder.recordEvent(type, label, metadata).pipe(Effect.asVoid),
+      };
+
+      const loginResult = await Effect.runPromise(
+        Effect.either(
+          runLoginFlow(browser, flowRecorder as any, {
+            baseUrl: BASE_URL,
+            headless: true,
+            stubWallet: true,
+            timeout: 30000,
+          })
+        )
+      );
+
+      if (loginResult._tag === "Left") {
+        console.error("Login flow failed:", loginResult.left);
+      }
+
+      await Effect.runPromise(closeBrowser(browser));
+
+      if (IS_WINDOWS) {
+        startProcess.kill();
+      } else {
+        startProcess.kill("SIGTERM");
+      }
+
+      await waitForPortFree(START_PORT, CLEANUP_TIMEOUT);
+
+      const sessionReport = await Effect.runPromise(recorder.stopRecording());
+
+      console.log("\n" + formatReportSummary(sessionReport));
+
+      await writeFile(
+        resolve(CLI_DIR, "session-login-report.json"),
+        JSON.stringify(sessionReport, null, 2)
+      );
+
+      const after = await runSilent(
+        createSnapshotWithPlatform({ ports: [START_PORT] })
+      );
+      expect(after.ports[START_PORT].state).toBe("FREE");
+
+      startProcess = null;
+    },
+    STARTUP_TIMEOUT + CLEANUP_TIMEOUT + 30000
   );
 });

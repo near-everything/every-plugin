@@ -71,7 +71,7 @@ function extractErrorDetails(error: unknown): { message: string; stack?: string;
   return { message: String(error) };
 }
 
-async function proxyRequest(req: Request, targetBase: string, rewriteCookies = false): Promise<Response> {
+export async function proxyRequest(req: Request, targetBase: string, rewriteCookies = false): Promise<Response> {
   const url = new URL(req.url);
   const targetUrl = `${targetBase}${url.pathname}${url.search}`;
 

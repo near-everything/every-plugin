@@ -55,10 +55,8 @@
   },
   "app": {
     "host": {
-      "title": "demo | everything",
-      "description": "This is a demo application orchestrated by a bos.config.json in the project root.",
       "development": "http://localhost:3000",
-      "production": "https://elliot-braem-1955-host-every-plugin-near-everythi-181bdad3e-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1976-host-every-plugin-near-everythi-a0a28fbca-ze.zephyrcloud.app",
       "secrets": [
         "HOST_DATABASE_URL",
         "HOST_DATABASE_AUTH_TOKEN",
@@ -77,16 +75,7 @@
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-1956-ui-every-plugin-near-everything-7f28a41ea-ze.zephyrcloud.app",
-      "exposes": {
-        "./Router": "./src/router.tsx",
-        "./Hydrate": "./src/hydrate.tsx",
-        "./remote": "./src/remote/index.ts",
-        "./components": "./src/components/index.ts",
-        "./providers": "./src/providers/index.tsx",
-        "./hooks": "./src/hooks/index.ts",
-        "./types": "./src/types/index.ts"
-      },
+      "production": "https://elliot-braem-1977-ui-every-plugin-near-everything-0390ddf0d-ze.zephyrcloud.app",
       "ssr": "https://elliot-braem-1957-ui-every-plugin-near-everything-afdb5d0d1-ze.zephyrcloud.app",
       "template": "near-everything/every-plugin/demo/ui",
       "files": [
@@ -111,7 +100,7 @@
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://elliot-braem-1958-api-every-plugin-near-everythin-5b95b8406-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-1979-api-every-plugin-near-everythin-0685d654a-ze.zephyrcloud.app",
       "proxy": "https://elliot-braem-1811-api-every-plugin-near-everythin-2defcb105-ze.zephyrcloud.app",
       "variables": {},
       "secrets": [

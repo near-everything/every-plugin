@@ -255,7 +255,7 @@ describe("SessionRecorder", () => {
     it("detects still-bound ports", () => {
       const baseline = createMockSnapshot({
         ports: {
-          "3000": { port: 3000, pid: null, command: null, state: "FREE" },
+          "3000": { port: 3000, pid: 1234, command: "node", state: "LISTEN" },
         },
       });
 
@@ -301,7 +301,7 @@ describe("SessionRecorder", () => {
     it("returns true when ports still bound", () => {
       const baseline = createMockSnapshot({
         ports: {
-          "3000": { port: 3000, pid: null, command: null, state: "FREE" },
+          "3000": { port: 3000, pid: 1234, command: "node", state: "LISTEN" },
         },
       });
       const after = createMockSnapshot({

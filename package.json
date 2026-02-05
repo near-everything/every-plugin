@@ -32,6 +32,7 @@
 		"templates/*",
 		"plugins/*",
 		"examples/*",
-		"packages/every-plugin/tests/fixtures/*"
+		"packages/every-plugin/tests/fixtures/*",
+		"demo"
 	]
 }

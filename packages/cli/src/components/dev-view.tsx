@@ -11,6 +11,7 @@ export interface ProcessState {
   port: number;
   message?: string;
   source?: "local" | "remote";
+  proxyTarget?: string;
 }
 
 export interface LogEntry {
@@ -24,6 +25,7 @@ interface DevViewProps {
   processes: ProcessState[];
   logs: LogEntry[];
   description: string;
+  proxyTarget?: string;
   onExit?: () => void;
   onExportLogs?: () => void;
 }
@@ -90,10 +92,25 @@ function LogLine({ entry }: { entry: LogEntry }) {
   );
 }
 
+function truncateUrl(url: string, maxLen: number): string {
+  if (url.length <= maxLen) return url;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.host;
+    if (host.length > maxLen - 10) {
+      return `${host.slice(0, maxLen - 13)}...`;
+    }
+    return host;
+  } catch {
+    return `${url.slice(0, maxLen - 3)}...`;
+  }
+}
+
 function DevView({
   processes,
   logs,
   description,
+  proxyTarget,
   onExit,
   onExportLogs,
 }: DevViewProps) {
@@ -147,6 +164,15 @@ function DevView({
               {icons.arrow} http://localhost:{hostPort}
             </Text>
           </Box>
+        </Box>
+      )}
+
+      {proxyTarget && (
+        <Box marginBottom={1}>
+          <Text color="#ffaa00">
+            {"  "}
+            {icons.arrow} API PROXY → {truncateUrl(proxyTarget, 38)}
+          </Text>
         </Box>
       )}
 
@@ -211,6 +237,7 @@ export function renderDevView(
   let processes = [...initialProcesses];
   let logs: LogEntry[] = [];
   let rerender: (() => void) | null = null;
+  const proxyTarget = env.API_PROXY;
 
   const updateProcess = (
     name: string,
@@ -244,6 +271,7 @@ export function renderDevView(
         processes={processes}
         logs={logs}
         description={description}
+        proxyTarget={proxyTarget}
         onExit={onExit}
         onExportLogs={onExportLogs}
       />

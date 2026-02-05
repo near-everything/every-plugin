@@ -159,7 +159,33 @@ function determineProcesses(config: AppConfig): string[] {
   return processes;
 }
 
-function buildEnvVars(config: AppConfig): Record<string, string> {
+function isValidProxyUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function resolveProxyUrl(bosConfig: BosConfigType | null): string | null {
+  if (!bosConfig) return null;
+  
+  const apiConfig = bosConfig.app.api as RemoteConfig | undefined;
+  if (!apiConfig) return null;
+
+  if (apiConfig.proxy && isValidProxyUrl(apiConfig.proxy)) {
+    return apiConfig.proxy;
+  }
+  
+  if (apiConfig.production && isValidProxyUrl(apiConfig.production)) {
+    return apiConfig.production;
+  }
+  
+  return null;
+}
+
+function buildEnvVars(config: AppConfig, bosConfig?: BosConfigType | null): Record<string, string> {
   const env: Record<string, string> = {};
 
   env.HOST_SOURCE = config.host;
@@ -174,9 +200,11 @@ function buildEnvVars(config: AppConfig): Record<string, string> {
   }
 
   if (config.proxy) {
-    const bosConfig = loadConfig();
-    const apiConfig = bosConfig?.app.api as RemoteConfig | undefined;
-    env.API_PROXY = apiConfig?.proxy || apiConfig?.production || "true";
+    const resolvedBosConfig = bosConfig ?? loadConfig();
+    const proxyUrl = resolveProxyUrl(resolvedBosConfig);
+    if (proxyUrl) {
+      env.API_PROXY = proxyUrl;
+    }
   }
 
   return env;
@@ -248,8 +276,28 @@ export default createPlugin({
         }
       }
 
+      let proxyUrl: string | undefined;
+      if (appConfig.proxy) {
+        proxyUrl = resolveProxyUrl(deps.bosConfig) ?? undefined;
+        if (!proxyUrl) {
+          console.log();
+          console.log(colors.red(`  ${icons.err} Proxy mode requested but no valid proxy URL found`));
+          console.log(colors.dim(`    Configure 'api.proxy' or 'api.production' in bos.config.json`));
+          console.log();
+          return {
+            status: "error" as const,
+            description: "No valid proxy URL configured in bos.config.json",
+            processes: [],
+            autoRemote,
+          };
+        }
+        console.log();
+        console.log(colors.cyan(`  ${icons.arrow} API Proxy: ${colors.bold(proxyUrl)}`));
+        console.log();
+      }
+
       const processes = determineProcesses(appConfig);
-      const env = buildEnvVars(appConfig);
+      const env = buildEnvVars(appConfig, deps.bosConfig);
       const description = buildDescription(appConfig);
 
       const orchestrator: AppOrchestrator = {

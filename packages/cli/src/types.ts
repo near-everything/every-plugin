@@ -98,6 +98,7 @@ export type SharedConfig = z.infer<typeof SharedConfigSchema>;
 export const RuntimeConfigSchema = z.object({
   env: z.enum(["development", "production"]),
   account: z.string(),
+  title: z.string().optional(),
   hostUrl: z.string(),
   shared: z.object({
     ui: z.record(z.string(), SharedConfigSchema).optional(),

@@ -172,46 +172,59 @@ const getMemoryInfo = (): Effect.Effect<MemoryInfo, never> =>
   Effect.gen(function* () {
     yield* Effect.logDebug("[darwin] Getting memory info");
 
-    const vmStat = yield* execShellSafe("vm_stat 2>/dev/null || true");
-    const pageSize = 16384;
-
-    let free = 0;
-    let active = 0;
-    let inactive = 0;
-    let wired = 0;
-    let speculative = 0;
-
-    for (const line of vmStat.split("\n")) {
-      const match = line.match(/^(.+):\s+(\d+)/);
-      if (!match) continue;
-
-      const [, key, value] = match;
-      const pages = parseInt(value, 10);
-
-      if (key.includes("free")) free = pages * pageSize;
-      else if (key.includes("active")) active = pages * pageSize;
-      else if (key.includes("inactive")) inactive = pages * pageSize;
-      else if (key.includes("wired")) wired = pages * pageSize;
-      else if (key.includes("speculative")) speculative = pages * pageSize;
-    }
-
     const sysctlMem = yield* execShellSafe(
       "sysctl -n hw.memsize 2>/dev/null || echo 0"
     );
     const total = parseInt(sysctlMem, 10) || 16 * 1024 * 1024 * 1024;
 
+    const pageSizeOutput = yield* execShellSafe(
+      "sysctl -n hw.pagesize 2>/dev/null || echo 16384"
+    );
+    const pageSize = parseInt(pageSizeOutput.trim(), 10) || 16384;
+
+    const vmStat = yield* execShellSafe("vm_stat 2>/dev/null || true");
+
+    let freePages = 0;
+    let activePages = 0;
+    let inactivePages = 0;
+    let wiredPages = 0;
+    let speculativePages = 0;
+
+    for (const line of vmStat.split("\n")) {
+      const match = line.match(/^(.+?):\s+(\d+)/);
+      if (!match) continue;
+
+      const [, key, value] = match;
+      const pages = parseInt(value, 10);
+
+      if (key.includes("Pages free")) freePages = pages;
+      else if (key.includes("Pages active")) activePages = pages;
+      else if (key.includes("Pages inactive")) inactivePages = pages;
+      else if (key.includes("Pages wired")) wiredPages = pages;
+      else if (key.includes("Pages speculative")) speculativePages = pages;
+    }
+
+    const free = freePages * pageSize;
+    const active = activePages * pageSize;
+    const inactive = inactivePages * pageSize;
+    const wired = wiredPages * pageSize;
+    const speculative = speculativePages * pageSize;
+
     const used = active + inactive + wired + speculative;
+
+    const effectiveFree = free > 0 ? free : Math.max(0, total - used);
 
     const totalMB = (total / 1024 / 1024).toFixed(0);
     const usedMB = (used / 1024 / 1024).toFixed(0);
+    const freeMB = (effectiveFree / 1024 / 1024).toFixed(0);
     yield* Effect.logDebug(
-      `[darwin] Memory: ${usedMB}MB used / ${totalMB}MB total`
+      `[darwin] Memory: ${usedMB}MB used / ${freeMB}MB free / ${totalMB}MB total`
     );
 
     return {
       total,
       used,
-      free: total - used,
+      free: effectiveFree,
       processRss: 0,
     };
   });

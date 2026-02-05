@@ -1,4 +1,4 @@
-import { loadBosConfig, type RuntimeConfig } from "@/services/config";
+import { loadBosConfig, type RuntimeConfig } from "everything-dev/config";
 import { loadRouterModule } from "@/services/federation.server";
 import type { HeadData, RouterModule } from "@/types";
 import { Effect } from "every-plugin/effect";
@@ -102,7 +102,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -239,7 +238,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -260,7 +258,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -285,7 +282,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -313,7 +309,6 @@ describe("SEO Head Extraction", () => {
           runtimeConfig: {
             env: config.env,
             account: config.account,
-            title: config.title,
             hostUrl: config.hostUrl,
             apiBase: "/api",
             rpcBase: "/api/rpc",
@@ -334,7 +329,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -360,7 +354,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -386,7 +379,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -420,7 +412,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -438,7 +429,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -459,7 +449,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
@@ -478,7 +467,6 @@ describe("SEO Head Extraction", () => {
         runtimeConfig: {
           env: config.env,
           account: config.account,
-          title: config.title,
           hostUrl: config.hostUrl,
           apiBase: "/api",
           rpcBase: "/api/rpc",
