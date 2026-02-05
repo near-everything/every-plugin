@@ -1,7 +1,7 @@
 import { Box, render, Text, useApp, useInput } from "ink";
 import { useEffect, useState } from "react";
 import { linkify } from "../utils/linkify";
-import { colors, divider, gradients, icons, frames } from "../utils/theme";
+import { colors, divider, frames, gradients, icons } from "../utils/theme";
 
 export type ProcessStatus = "pending" | "starting" | "ready" | "error";
 
@@ -64,14 +64,14 @@ function ProcessRow({ proc }: { proc: ProcessState }) {
       <Text>{"  "}</Text>
       <StatusIcon status={proc.status} />
       <Text> </Text>
-      <Text color={color} bold>{proc.name.toUpperCase().padEnd(6)}</Text>
+      <Text color={color} bold>
+        {proc.name.toUpperCase().padEnd(6)}
+      </Text>
       <Text color="gray">{sourceLabel.padEnd(10)}</Text>
       <Text color={proc.status === "ready" ? "#00ff41" : "gray"}>
         {statusText}
       </Text>
-      {proc.port > 0 && (
-        <Text color="#00ffff"> {portStr}</Text>
-      )}
+      {proc.port > 0 && <Text color="#00ffff"> {portStr}</Text>}
     </Box>
   );
 }
@@ -82,7 +82,10 @@ function LogLine({ entry }: { entry: LogEntry }) {
   return (
     <Box>
       <Text color={color}>[{entry.source}]</Text>
-      <Text color={entry.isError ? "#ff3366" : undefined}> {linkify(entry.line)}</Text>
+      <Text color={entry.isError ? "#ff3366" : undefined}>
+        {" "}
+        {linkify(entry.line)}
+      </Text>
     </Box>
   );
 }
@@ -133,10 +136,16 @@ function DevView({
       {allReady && (
         <Box marginBottom={1} flexDirection="column">
           <Box>
-            <Text color="#00ff41">{"  "}{icons.app} APP READY</Text>
+            <Text color="#00ff41">
+              {"  "}
+              {icons.app} APP READY
+            </Text>
           </Box>
           <Box>
-            <Text color="#00ff41" bold>{"  "}{icons.arrow} http://localhost:{hostPort}</Text>
+            <Text color="#00ff41" bold>
+              {"  "}
+              {icons.arrow} http://localhost:{hostPort}
+            </Text>
           </Box>
         </Box>
       )}
@@ -160,7 +169,10 @@ function DevView({
             ? `${icons.ok} All ${total} services running`
             : `${icons.scan} ${readyCount}/${total} ready`}
         </Text>
-        <Text color="gray"> {icons.dot} q quit {icons.dot} l logs</Text>
+        <Text color="gray">
+          {" "}
+          {icons.dot} q quit {icons.dot} l logs
+        </Text>
       </Box>
 
       {recentLogs.length > 0 && (

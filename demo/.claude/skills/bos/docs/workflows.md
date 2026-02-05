@@ -18,22 +18,19 @@ bos dev --host remote
 
 The default template comes from `every.near/everything.dev` published on Near Social.
 
-## Syncing with Upstream
+## Updating from Upstream
 
 Keep your project in sync with the root template:
 
 ```bash
-# Sync from every.near/everything.dev (default)
-bos sync
+# Update from every.near/everything.dev (default)
+bos update
 
-# Sync from a specific account/gateway
-bos sync --account other.near --gateway other-gateway.com
+# Update from a specific account/gateway
+bos update --account other.near --gateway other-gateway.com
 
-# Force sync (even if versions match)
-bos sync --force
-
-# Also sync template files (rsbuild.config.ts, etc.)
-bos sync --files
+# Force update (even if versions match)
+bos update --force
 
 # Install updated dependencies
 bun install
@@ -42,7 +39,6 @@ bun install
 What gets synced from remote:
 - `app.*.production` - Zephyr production URLs
 - `app.*.ssr` - SSR URLs
-- `app.*.exposes` - Module Federation exposes
 - `app.*.template` - package templates
 - `app.*.files` - files to sync
 - `app.*.sync` - sync config (scripts)
@@ -98,48 +94,57 @@ Test with all production modules:
 bos start --no-interactive
 ```
 
-## Deploy → Publish → Sync Cycle
+## Publish → Update Cycle
 
 The core sharing workflow:
 
-### 1. Deploy
+### 1. Publish (Full Release)
 
-Deploy builds and uploads to Zephyr Cloud, updating `bos.config.json` with production URLs:
-
-```bash
-# Deploy everything
-bos deploy
-
-# Deploy specific packages
-bos deploy ui
-bos deploy api
-```
-
-After deploying, your `bos.config.json` has updated `production` URLs.
-
-### 2. Publish
-
-Publish your config to Near Social:
+`bos publish` builds, deploys to Zephyr Cloud, and publishes config to Near Social in one step:
 
 ```bash
 # Preview first
 bos publish --dry-run
 
-# Publish to mainnet
+# Full release: build + deploy + publish to mainnet
 bos publish
 
-# Or testnet
+# Publish to testnet
 bos publish --network testnet
+
+# Publish specific packages only
+bos publish ui,api
 ```
+
+The publish command:
+1. Builds packages locally (`bun run build`)
+2. Deploys to Zephyr Cloud (updates `production` URLs in config)
+3. Publishes config to Near Social
 
 Your config is now at: `{account}/bos/gateways/{gateway}/bos.config.json`
 
-### 3. Others Sync
+### 2. Others Update
 
-Now others can sync from your published config:
+Now others can update from your published config:
 
 ```bash
-bos sync --account your.near --gateway your-gateway.com
+bos update --account your.near --gateway your-gateway.com
+```
+
+### Build Only
+
+If you need to build without deploying:
+
+```bash
+# Build all packages
+bos build
+
+# Build specific packages
+bos build ui
+bos build api
+
+# Force rebuild
+bos build --force
 ```
 
 ## Secrets Management with Nova SDK

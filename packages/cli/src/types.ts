@@ -4,8 +4,6 @@ export const SourceModeSchema = z.enum(["local", "remote"]);
 export type SourceMode = z.infer<typeof SourceModeSchema>;
 
 export const HostConfigSchema = z.object({
-  title: z.string(),
-  description: z.string().optional(),
   development: z.string(),
   production: z.string(),
   secrets: z.array(z.string()).optional(),
@@ -21,7 +19,6 @@ export const RemoteConfigSchema = z.object({
   production: z.string(),
   ssr: z.string().optional(),
   proxy: z.string().optional(),
-  exposes: z.record(z.string(), z.string()).optional(),
   variables: z.record(z.string(), z.string()).optional(),
   secrets: z.array(z.string()).optional(),
   template: z.string().optional(),
@@ -101,7 +98,6 @@ export type SharedConfig = z.infer<typeof SharedConfigSchema>;
 export const RuntimeConfigSchema = z.object({
   env: z.enum(["development", "production"]),
   account: z.string(),
-  title: z.string(),
   hostUrl: z.string(),
   shared: z.object({
     ui: z.record(z.string(), SharedConfigSchema).optional(),
@@ -111,7 +107,6 @@ export const RuntimeConfigSchema = z.object({
     url: z.string(),
     ssrUrl: z.string().optional(),
     source: SourceModeSchema,
-    exposes: z.record(z.string(), z.string()),
   }),
   api: z.object({
     name: z.string(),
@@ -123,3 +118,17 @@ export const RuntimeConfigSchema = z.object({
   }),
 });
 export type RuntimeConfig = z.infer<typeof RuntimeConfigSchema>;
+
+export const ClientRuntimeConfigSchema = z.object({
+  env: z.enum(["development", "production"]),
+  account: z.string(),
+  hostUrl: z.string().optional(),
+  assetsUrl: z.string(),
+  apiBase: z.string(),
+  rpcBase: z.string(),
+  ui: z.object({
+    name: z.string(),
+    url: z.string(),
+  }).optional(),
+});
+export type ClientRuntimeConfig = z.infer<typeof ClientRuntimeConfigSchema>;

@@ -8,10 +8,9 @@ export type {
   RenderResult,
   RouterContext,
   RouterModule,
-} from "../../ui/src/types";
+} from "everything-dev/ui/types";
 export type {
   ClientRuntimeConfig,
   RuntimeConfig,
   SourceMode,
-  WindowRuntimeConfig,
 } from "./services/config";

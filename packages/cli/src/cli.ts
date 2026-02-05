@@ -2,7 +2,7 @@
 import { spinner } from "@clack/prompts";
 import { program } from "commander";
 import { createPluginRuntime } from "every-plugin";
-import { type BosConfig, getConfigDir, getConfigPath, getPackages, getTitle, loadConfig } from "./config";
+import { type BosConfig, getConfigDir, getConfigPath, getPackages, loadConfig } from "./config";
 import BosPlugin from "./plugin";
 import { printBanner } from "./utils/banner";
 import { colors, frames, gradients, icons } from "./utils/theme";
@@ -21,9 +21,6 @@ function getHelpHeader(config: BosConfig | null, configPath: string): string {
     lines.push(`  ${colors.dim("Account")} ${colors.cyan(config.account)}`);
     lines.push(`  ${colors.dim("Gateway")} ${colors.white(config.gateway?.production ?? "not configured")}`);
     lines.push(`  ${colors.dim("Config ")} ${colors.dim(configPath)}`);
-    if (host?.description) {
-      lines.push(`  ${colors.dim("About  ")} ${colors.white(host.description)}`);
-    }
   } else {
     lines.push(`  ${colors.dim("No project config found")}`);
     lines.push(`  ${colors.dim("Run")} ${colors.cyan("bos create project <name>")} ${colors.dim("to get started")}`);
@@ -48,7 +45,6 @@ async function main() {
   const config = loadConfig();
   const configPath = config ? getConfigPath() : process.cwd();
   const packages = config ? getPackages() : [];
-  const title = config ? getTitle() : "BOS CLI";
 
   if (config) {
     const envPath = `${getConfigDir()}/.env.bos`;
@@ -69,7 +65,7 @@ async function main() {
     }
   }
 
-  printBanner(title);
+  printBanner("BOS CLI");
 
   const runtime = createPluginRuntime({
     registry: {
@@ -113,10 +109,6 @@ async function main() {
 
       const host = result.config.app.host;
       console.log(colors.magenta(`  ┌─ HOST ${"─".repeat(42)}┐`));
-      console.log(`  ${colors.magenta("│")} ${colors.dim("title")}        ${colors.white(host.title)}`);
-      if (host.description) {
-        console.log(`  ${colors.magenta("│")} ${colors.dim("description")}  ${colors.gray(host.description)}`);
-      }
       console.log(`  ${colors.magenta("│")} ${colors.dim("development")}  ${colors.cyan(host.development)}`);
       console.log(`  ${colors.magenta("│")} ${colors.dim("production")}   ${colors.green(host.production)}`);
       console.log(colors.magenta(`  └${"─".repeat(49)}┘`));
@@ -238,7 +230,7 @@ async function main() {
           new OpenAPIReferencePlugin({
             schemaConverters: [new ZodToJsonSchemaConverter()],
             specGenerateOptions: {
-              info: { title: "BOS CLI API", version: "1.0.0" },
+              info: { title: "everything-dev api", version: "1.0.0" },
               servers: [{ url: `http://localhost:${port}/api` }],
             },
           }),
@@ -248,7 +240,7 @@ async function main() {
 
       app.get("/", (c) => c.json({ 
         ok: true, 
-        plugin: "bos-cli", 
+        plugin: "everything-dev", 
         status: "ready",
         endpoints: {
           health: "/",
@@ -341,47 +333,49 @@ async function main() {
     });
 
   program
-    .command("deploy")
-    .description(`Build and deploy to Zephyr Cloud (${packages.join(", ")})`)
-    .argument("[packages]", "Packages to deploy (comma-separated: host,ui,api)", "all")
+    .command("publish")
+    .description("Build, deploy, and publish to Near Social (full release)")
+    .argument("[packages]", "Packages to build/deploy (comma-separated: host,ui,api)", "all")
     .option("--force", "Force rebuild")
+    .option("--network <network>", "Network: mainnet | testnet", "mainnet")
+    .option("--path <path>", "Near Social relative path", "bos.config.json")
+    .option("--dry-run", "Show what would be published without sending")
     .addHelpText("after", `
+Release Workflow:
+  1. Build packages (bun run build)
+  2. Deploy to Zephyr Cloud (updates production URLs)
+  3. Publish config to Near Social
+
 Zephyr Configuration:
   Set ZE_SERVER_TOKEN and ZE_USER_EMAIL in .env.bos for CI/CD deployment.
   Docs: https://docs.zephyr-cloud.io/features/ci-cd-server-token
 `)
     .action(async (pkgs: string, options) => {
       console.log();
-      console.log(`  ${icons.pkg} Building & deploying...`);
-
-      const result = await client.build({
-        packages: pkgs,
-        force: options.force || false,
-        deploy: true,
-      });
-
-      if (result.status === "error") {
-        console.error(colors.error(`${icons.err} Deploy failed`));
-        process.exit(1);
-      }
-
-      console.log();
-      console.log(colors.green(`${icons.ok} Deployed: ${result.built.join(", ")}`));
-      console.log(colors.dim(`  Deployed to Zephyr Cloud`));
-      console.log();
-    });
-
-  program
-    .command("publish")
-    .description("Publish bos.config.json to on-chain registry (Near Social)")
-    .option("--network <network>", "Network: mainnet | testnet", "mainnet")
-    .option("--path <path>", "Near Social relative path", "bos.config.json")
-    .option("--dry-run", "Show what would be published without sending")
-    .action(async (options) => {
-      console.log();
-      console.log(`  ${icons.pkg} Publishing to Near Social...`);
+      console.log(`  ${icons.pkg} Starting release workflow...`);
       console.log(colors.dim(`  Account: ${config?.account}`));
       console.log(colors.dim(`  Network: ${options.network}`));
+      console.log();
+
+      if (!options.dryRun) {
+        console.log(`  ${icons.pkg} Step 1/3: Building & deploying...`);
+
+        const buildResult = await client.build({
+          packages: pkgs,
+          force: options.force || false,
+          deploy: true,
+        });
+
+        if (buildResult.status === "error") {
+          console.error(colors.error(`${icons.err} Build/deploy failed`));
+          process.exit(1);
+        }
+
+        console.log(colors.green(`  ${icons.ok} Built & deployed: ${buildResult.built.join(", ")}`));
+        console.log();
+      }
+
+      console.log(`  ${icons.pkg} ${options.dryRun ? "Dry run:" : "Step 2/3:"} Publishing to Near Social...`);
 
       if (options.dryRun) {
         console.log(colors.cyan(`  ${icons.scan} Dry run mode - no transaction will be sent`));
@@ -406,10 +400,11 @@ Zephyr Configuration:
         return;
       }
 
-      console.log();
-      console.log(colors.green(`${icons.ok} Published!`));
+      console.log(colors.green(`  ${icons.ok} Published to Near Social`));
       console.log(`  ${colors.dim("TX:")} ${result.txHash}`);
       console.log(`  ${colors.dim("URL:")} ${result.registryUrl}`);
+      console.log();
+      console.log(colors.green(`${icons.ok} Release complete!`));
       console.log();
     });
 
@@ -742,40 +737,38 @@ Zephyr Configuration:
     });
 
   program
-    .command("sync")
-    .description("Sync dependencies and config from published bos.config.json")
-    .option("--account <account>", "NEAR account to sync from (default: from config)")
-    .option("--gateway <gateway>", "Gateway domain to sync from (default: from config)")
+    .command("update")
+    .description("Update from published config (host prod, secrets, shared deps, UI files)")
+    .option("--account <account>", "NEAR account to update from (default: from config)")
+    .option("--gateway <gateway>", "Gateway domain (default: from config)")
     .option("--network <network>", "Network: mainnet | testnet", "mainnet")
-    .option("--force", "Force sync even if versions match")
-    .option("--files", "Also sync template files (tsconfig, etc.)")
-    .action(async (options: { account?: string; gateway?: string; network?: string; force?: boolean; files?: boolean }) => {
+    .option("--force", "Force update even if versions match")
+    .action(async (options: { account?: string; gateway?: string; network?: string; force?: boolean }) => {
       console.log();
       const gateway = config?.gateway as { production?: string } | undefined;
       const gatewayDomain = gateway?.production?.replace(/^https?:\/\//, "") || "everything.dev";
       const source = `${options.account || config?.account || "every.near"}/${options.gateway || gatewayDomain}`;
 
       const s = spinner();
-      s.start(`Syncing from ${source}...`);
+      s.start(`Updating from ${source}...`);
 
-      const result = await client.sync({
+      const result = await client.update({
         account: options.account,
         gateway: options.gateway,
         network: (options.network as "mainnet" | "testnet") || "mainnet",
         force: options.force || false,
-        files: options.files || false,
       });
 
       if (result.status === "error") {
-        s.stop(colors.error(`${icons.err} Sync failed: ${result.error || "Unknown error"}`));
+        s.stop(colors.error(`${icons.err} Update failed: ${result.error || "Unknown error"}`));
         process.exit(1);
       }
 
-      s.stop(colors.green(`${icons.ok} Synced from ${source}`));
+      s.stop(colors.green(`${icons.ok} Updated from ${source}`));
 
       console.log();
       console.log(colors.cyan(frames.top(52)));
-      console.log(`  ${icons.ok} ${gradients.cyber("SYNCED")}`);
+      console.log(`  ${icons.ok} ${gradients.cyber("UPDATED")}`);
       console.log(colors.cyan(frames.bottom(52)));
       console.log();
       console.log(`  ${colors.dim("Source:")}   ${colors.cyan(`${result.account}/${result.gateway}`)}`);
@@ -793,7 +786,7 @@ Zephyr Configuration:
 
       if (result.filesSynced && result.filesSynced.length > 0) {
         const totalFiles = result.filesSynced.reduce((sum, pkg) => sum + pkg.files.length, 0);
-        console.log(colors.green(`  ${icons.ok} Synced ${totalFiles} files`));
+        console.log(colors.green(`  ${icons.ok} Synced ${totalFiles} UI files`));
         for (const pkg of result.filesSynced) {
           console.log(colors.dim(`    ${pkg.package}: ${pkg.files.join(", ")}`));
         }

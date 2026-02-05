@@ -211,16 +211,15 @@ const GatewaySyncResultSchema = z.object({
   error: z.string().optional(),
 });
 
-const SyncOptionsSchema = z.object({
+const UpdateOptionsSchema = z.object({
   account: z.string().optional(),
   gateway: z.string().optional(),
   network: z.enum(["mainnet", "testnet"]).default("mainnet"),
   force: z.boolean().optional(),
-  files: z.boolean().optional(),
 });
 
-const SyncResultSchema = z.object({
-  status: z.enum(["synced", "error"]),
+const UpdateResultSchema = z.object({
+  status: z.enum(["updated", "error"]),
   account: z.string(),
   gateway: z.string(),
   socialUrl: z.string().optional(),
@@ -500,10 +499,10 @@ export const bosContract = oc.router({
     .input(GatewaySyncOptionsSchema)
     .output(GatewaySyncResultSchema),
 
-  sync: oc
-    .route({ method: "POST", path: "/sync" })
-    .input(SyncOptionsSchema)
-    .output(SyncResultSchema),
+  update: oc
+    .route({ method: "POST", path: "/update" })
+    .input(UpdateOptionsSchema)
+    .output(UpdateResultSchema),
 
   depsUpdate: oc
     .route({ method: "POST", path: "/deps/update" })
@@ -580,8 +579,8 @@ export type SecretsDeleteResult = z.infer<typeof SecretsDeleteResultSchema>;
 export type LoginOptions = z.infer<typeof LoginOptionsSchema>;
 export type LoginResult = z.infer<typeof LoginResultSchema>;
 export type LogoutResult = z.infer<typeof LogoutResultSchema>;
-export type SyncOptions = z.infer<typeof SyncOptionsSchema>;
-export type SyncResult = z.infer<typeof SyncResultSchema>;
+export type UpdateOptions = z.infer<typeof UpdateOptionsSchema>;
+export type UpdateResult = z.infer<typeof UpdateResultSchema>;
 export type DepsUpdateOptions = z.infer<typeof DepsUpdateOptionsSchema>;
 export type DepsUpdateResult = z.infer<typeof DepsUpdateResultSchema>;
 export type FilesSyncOptions = z.infer<typeof FilesSyncOptionsSchema>;

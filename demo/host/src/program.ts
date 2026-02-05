@@ -1,4 +1,3 @@
-import { createServer, type IncomingHttpHeaders } from "node:http";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
@@ -15,8 +14,7 @@ import { BaseLive, PluginsLive } from "./layers";
 import { type Auth, AuthService } from "./services/auth";
 import { ConfigService, type RuntimeConfig } from "./services/config";
 import { createRequestContext } from "./services/context";
-import type { Database } from "./services/database";
-import { closeDatabase, DatabaseService } from "./services/database";
+import { type Database, DatabaseService } from "./services/database";
 import { loadRouterModule, type RouterModule } from "./services/federation.server";
 import { PluginsService } from "./services/plugins";
 import { createRouter } from "./services/router";
@@ -73,22 +71,6 @@ function extractErrorDetails(error: unknown): { message: string; stack?: string;
   return { message: String(error) };
 }
 
-function nodeHeadersToHeaders(nodeHeaders: IncomingHttpHeaders): Headers {
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(nodeHeaders)) {
-    if (value) {
-      if (Array.isArray(value)) {
-        for (const v of value) {
-          headers.append(key, v);
-        }
-      } else {
-        headers.set(key, value);
-      }
-    }
-  }
-  return headers;
-}
-
 async function proxyRequest(req: Request, targetBase: string, rewriteCookies = false): Promise<Response> {
   const url = new URL(req.url);
   const targetUrl = `${targetBase}${url.pathname}${url.search}`;
@@ -122,17 +104,17 @@ async function proxyRequest(req: Request, targetBase: string, rewriteCookies = f
   responseHeaders.delete("content-length");
 
   if (rewriteCookies) {
-    const setCookieHeader = response.headers.get("set-cookie");
-    if (setCookieHeader) {
-      responseHeaders.delete("set-cookie");
-      const cookies = setCookieHeader.split(/,(?=\s*(?:__Secure-|__Host-)?\w+=)/);
-      for (const cookie of cookies) {
-        const rewritten = cookie
-          .replace(/^(__Secure-|__Host-)/i, "")
-          .replace(/;\s*Domain=[^;]*/gi, "")
-          .replace(/;\s*Secure/gi, "");
-        responseHeaders.append("set-cookie", rewritten);
-      }
+    responseHeaders.delete("set-cookie");
+    const setCookies =
+      typeof response.headers.getSetCookie === "function"
+        ? response.headers.getSetCookie()
+        : (response.headers.get("set-cookie")?.split(/,(?=\s*(?:__Secure-|__Host-)?\w+=)/) ?? []);
+    for (const cookie of setCookies) {
+      const rewritten = cookie
+        .replace(/^(__Secure-|__Host-)/i, "")
+        .replace(/;\s*Domain=[^;]*/gi, "")
+        .replace(/;\s*Secure/gi, "");
+      responseHeaders.append("set-cookie", rewritten);
     }
   }
 
@@ -175,8 +157,9 @@ function setupApiRoutes(
         schemaConverters: [new ZodToJsonSchemaConverter()],
         specGenerateOptions: {
           info: {
-            title: config.title,
-            version: "1.0.0",
+            title: "API", // TODO: title from api.title
+            // description, other spec gen fields
+            version: "1.0.0", // TODO: version from api.version
           },
           servers: [{ url: `${config.hostUrl}/api` }],
         },
@@ -185,31 +168,15 @@ function setupApiRoutes(
     interceptors: [onError((error: unknown) => formatORPCError(error))],
   });
 
+  const handleOrpc = async (c: Context, handler: typeof rpcHandler | typeof apiHandler, prefix: `/${string}`) => {
+    const context = await createRequestContext(c.req.raw, auth, db);
+    const result = await handler.handle(c.req.raw, { prefix, context });
+    return result.response ? c.newResponse(result.response.body, result.response) : c.text("Not Found", 404);
+  };
+
   app.on(["POST", "GET"], "/api/auth/*", (c: Context) => auth.handler(c.req.raw));
-
-  app.all("/api/rpc/*", async (c: Context) => {
-    const req = c.req.raw;
-    const context = await createRequestContext(req, auth, db);
-
-    const result = await rpcHandler.handle(req, {
-      prefix: "/api/rpc",
-      context,
-    });
-
-    return result.response ? c.newResponse(result.response.body, result.response) : c.text("Not Found", 404);
-  });
-
-  app.all("/api/*", async (c: Context) => {
-    const req = c.req.raw;
-    const context = await createRequestContext(req, auth, db);
-
-    const result = await apiHandler.handle(req, {
-      prefix: "/api",
-      context,
-    });
-
-    return result.response ? c.newResponse(result.response.body, result.response) : c.text("Not Found", 404);
-  });
+  app.all("/api/rpc/*", (c: Context) => handleOrpc(c, rpcHandler, "/api/rpc"));
+  app.all("/api/*", (c: Context) => handleOrpc(c, apiHandler, "/api"));
 }
 
 export const createStartServer = (onReady?: () => void) => Effect.gen(function* () {
@@ -260,6 +227,14 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
     logger.info(`[Config] API proxy: ${config.api.proxy}`);
   }
 
+  if (!isDev) {
+    app.use("/static/*", serveStatic({ root: "./dist" }));
+    app.use("/favicon.ico", serveStatic({ root: "./dist" }));
+    app.use("/icon.svg", serveStatic({ root: "./dist" }));
+    app.use("/manifest.json", serveStatic({ root: "./dist" }));
+    app.use("/robots.txt", serveStatic({ root: "./dist" }));
+  }
+
   let ssrRouterModule: RouterModule | null = null;
 
   app.get("*", async (c: Context) => {
@@ -284,7 +259,7 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
     }
 
     try {
-      const { env, account, title } = config;
+      const { env, account } = config;
       const assetsUrl = config.ui.url;
 
       const requestContext = await createRequestContext(c.req.raw, auth, db);
@@ -295,7 +270,7 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
 
       const result = await ssrRouterModule.renderToStream(c.req.raw, {
         assetsUrl,
-        runtimeConfig: { env, account, title, assetsUrl, apiBase: "/api", rpcBase: "/api/rpc" },
+        runtimeConfig: { env, account, assetsUrl, apiBase: "/api", rpcBase: "/api/rpc" },
       });
 
       (globalThis as Record<string, unknown>).$apiClient = undefined;
@@ -326,74 +301,16 @@ export const createStartServer = (onReady?: () => void) => Effect.gen(function* 
     }
   });
 
-  if (!isDev) {
-    app.use("/static/*", serveStatic({ root: "./dist" }));
-    app.use("/favicon.ico", serveStatic({ root: "./dist" }));
-    app.use("/icon.svg", serveStatic({ root: "./dist" }));
-    app.use("/manifest.json", serveStatic({ root: "./dist" }));
-    app.use("/robots.txt", serveStatic({ root: "./dist" }));
-  }
-
-  const startHttpServer = (): { close: (callback?: () => void) => void } => {
-    if (isDev) {
-      const server = createServer(async (req, res) => {
-        const url = req.url || "/";
-        const fetchReq = new Request(`http://localhost:${port}${url}`, {
-          method: req.method,
-          headers: nodeHeadersToHeaders(req.headers),
-          body: req.method !== "GET" && req.method !== "HEAD" ? req : undefined,
-          duplex: "half",
-        } as RequestInit);
-
-        try {
-          const response = await app.fetch(fetchReq);
-          res.statusCode = response.status;
-          response.headers.forEach((value: string, key: string) => {
-            res.setHeader(key, value);
-          });
-
-          if (response.body) {
-            const reader = response.body.getReader();
-            const pump = async () => {
-              const { done, value } = await reader.read();
-              if (done) {
-                res.end();
-                return;
-              }
-              res.write(value);
-              await pump();
-            };
-            await pump();
-          } else {
-            const body = await response.arrayBuffer();
-            res.end(Buffer.from(body));
-          }
-        } catch (err) {
-          logger.error("[Server] Error handling request:", err);
-          res.statusCode = 500;
-          res.end("Internal Server Error");
-        }
-      });
-
-      server.listen(port, () => {
-        logger.info(`Host dev server running at http://localhost:${port}`);
-        logger.info(`  http://localhost:${port}/api     → REST API (OpenAPI docs)`);
-        logger.info(`  http://localhost:${port}/api/rpc → RPC endpoint`);
-        onReady?.();
-      });
-
-      return server;
-    } else {
-      const hostname = process.env.HOST || "0.0.0.0";
-      const server = serve({ fetch: app.fetch, port, hostname }, (info: { port: number }) => {
-        logger.info(`Host production server running at http://${hostname}:${info.port}`);
-        logger.info(`  http://${hostname}:${info.port}/api     → REST API (OpenAPI docs)`);
-        logger.info(`  http://${hostname}:${info.port}/api/rpc → RPC endpoint`);
-        onReady?.();
-      });
-
-      return server;
-    }
+  const startHttpServer = () => {
+    const hostname = process.env.HOST || "0.0.0.0";
+    const mode = isDev ? "dev" : "production";
+    const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
+      logger.info(`Host ${mode} server running at http://${hostname}:${info.port}`);
+      logger.info(`  http://${hostname}:${info.port}/api     → REST API (OpenAPI docs)`);
+      logger.info(`  http://${hostname}:${info.port}/api/rpc → RPC endpoint`);
+      onReady?.();
+    });
+    return server;
   };
 
   const httpServer = startHttpServer();
@@ -473,7 +390,6 @@ export const runServer = (input: ServerInput): ServerHandle => {
       await Effect.runPromise(Fiber.interrupt(serverFiber));
     }
 
-    closeDatabase();
     await runtime.dispose();
     logger.info("[Server] Shutdown complete");
   };

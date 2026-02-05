@@ -61,6 +61,7 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "everything-dev": "catalog:",
     "every-plugin": "catalog:",
     "@module-federation/enhanced": "catalog:",
     "@module-federation/node": "catalog:",

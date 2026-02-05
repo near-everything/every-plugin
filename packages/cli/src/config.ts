@@ -132,14 +132,6 @@ export function getAccount(): string {
   return config.account;
 }
 
-export function getTitle(): string {
-  const config = loadConfig();
-  if (!config) {
-    throw new Error("No bos.config.json found");
-  }
-  return config.app.host.title;
-}
-
 export function getComponentUrl(
   component: "host" | "ui" | "api",
   source: SourceMode

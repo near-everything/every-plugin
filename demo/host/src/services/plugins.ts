@@ -1,5 +1,6 @@
-import { Context, Effect, Layer } from "every-plugin/effect";
 import { createPluginRuntime } from "every-plugin";
+import { Context, Effect, Layer } from "every-plugin/effect";
+import type { RuntimeConfig } from 'everything-dev/types';
 import { ConfigService } from "./config";
 import { PluginError } from "./errors";
 
@@ -36,7 +37,7 @@ const unavailableResult = (
 });
 
 export const initializePlugins = Effect.gen(function* () {
-  const config = yield* ConfigService;
+  const config: RuntimeConfig = yield* ConfigService;
   const pluginConfig = config.api;
   const pluginName = pluginConfig.name;
   const pluginUrl = pluginConfig.url;

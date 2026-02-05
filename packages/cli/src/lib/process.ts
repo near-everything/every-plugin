@@ -173,7 +173,6 @@ export function buildRuntimeConfig(
   return {
     env: options.env ?? "development",
     account: bosConfig.account,
-    title: bosConfig.app.host.title,
     hostUrl: options.hostUrl,
     shared: (bosConfig as { shared?: { ui?: Record<string, unknown> } }).shared as RuntimeConfig["shared"],
     ui: {
@@ -181,7 +180,6 @@ export function buildRuntimeConfig(
       url: options.uiSource === "remote" ? uiConfig.production : uiConfig.development,
       ssrUrl: options.uiSource === "remote" ? uiConfig.ssr : undefined,
       source: options.uiSource,
-      exposes: uiConfig.exposes || {},
     },
     api: {
       name: apiConfig.name,

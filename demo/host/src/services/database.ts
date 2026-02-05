@@ -1,28 +1,26 @@
 import { type Client, createClient } from "@libsql/client";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import { migrate as drizzleMigrate } from "drizzle-orm/libsql/migrator";
-import { Effect } from "every-plugin/effect";
+import { Context, Effect, Layer } from "every-plugin/effect";
 import { migrate } from "../db/migrator";
 import * as authSchema from "../db/schema/auth";
 import { DatabaseError } from "./errors";
 
 type Schema = typeof authSchema;
 
-export interface DatabaseClient {
-  db: LibSQLDatabase<Schema>;
+export type Database = LibSQLDatabase<Schema>;
+
+interface DatabaseWithClient {
+  db: Database;
   client: Client;
 }
 
-let activeClient: Client | null = null;
-
 const acquireDatabase = Effect.tryPromise({
-  try: async (): Promise<LibSQLDatabase<Schema>> => {
+  try: async (): Promise<DatabaseWithClient> => {
     const client = createClient({
       url: process.env.HOST_DATABASE_URL || "file:./database.db",
       authToken: process.env.HOST_DATABASE_AUTH_TOKEN,
     });
-
-    activeClient = client;
 
     const db = drizzle(client, {
       schema: {
@@ -32,7 +30,6 @@ const acquireDatabase = Effect.tryPromise({
 
     const isRemote = process.env.HOST_SOURCE === "remote";
     console.log("[Database] Migration mode:", isRemote ? "bundled" : "file-based");
-    console.log("[Database] HOST_SOURCE:", process.env.HOST_SOURCE);
 
     if (isRemote) {
       console.log("[Database] Loading bundled migrations...");
@@ -45,26 +42,28 @@ const acquireDatabase = Effect.tryPromise({
       await drizzleMigrate(db, { migrationsFolder: "./migrations" });
     }
 
-    return db;
+    return { db, client };
   },
   catch: (e) => new DatabaseError({ cause: e }),
 });
 
-export const closeDatabase = (): void => {
-  if (activeClient) {
+const releaseDatabase = ({ client }: DatabaseWithClient) =>
+  Effect.sync(() => {
     try {
-      activeClient.close();
+      client.close();
       console.log("[Database] Connection closed");
     } catch {
     }
-    activeClient = null;
-  }
-};
+  });
 
-export const createDatabase = acquireDatabase;
-
-export type Database = LibSQLDatabase<Schema>;
-
-export class DatabaseService extends Effect.Service<DatabaseService>()("host/DatabaseService", {
-  effect: createDatabase,
-}) {}
+export class DatabaseService extends Context.Tag("host/DatabaseService")<
+  DatabaseService,
+  Database
+>() {
+  static Default = Layer.scoped(
+    DatabaseService,
+    Effect.acquireRelease(acquireDatabase, releaseDatabase).pipe(
+      Effect.map(({ db }) => db)
+    )
+  );
+}

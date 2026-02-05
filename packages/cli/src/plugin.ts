@@ -1302,7 +1302,7 @@ export default createPlugin({
       };
     }),
 
-    sync: builder.sync.handler(async ({ input }) => {
+    update: builder.update.handler(async ({ input }) => {
       const { configDir, bosConfig } = deps;
 
       const DEFAULT_ACCOUNT = "every.near";
@@ -1476,24 +1476,20 @@ export default createPlugin({
           }
         }
 
-        let filesSynced: Array<{ package: string; files: string[] }> | undefined;
+        const results = await syncFiles({
+          configDir,
+          packages: Object.keys(updatedBosConfig.app),
+          bosConfig: updatedBosConfig,
+          catalog: rootPkg.workspaces?.catalog ?? {},
+          force: input.force,
+        });
 
-        if (input.files) {
-          const results = await syncFiles({
-            configDir,
-            packages: Object.keys(updatedBosConfig.app),
-            bosConfig: updatedBosConfig,
-            catalog: rootPkg.workspaces?.catalog ?? {},
-            force: input.force,
-          });
-
-          if (results.length > 0) {
-            filesSynced = results.map(r => ({ package: r.package, files: r.files }));
-          }
-        }
+        const filesSynced = results.length > 0 
+          ? results.map(r => ({ package: r.package, files: r.files }))
+          : undefined;
 
         return {
-          status: "synced" as const,
+          status: "updated" as const,
           account,
           gateway,
           socialUrl,
