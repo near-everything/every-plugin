@@ -22,7 +22,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     const assetsUrl = loaderData?.assetsUrl || "";
     const runtimeConfig = loaderData?.runtimeConfig;
     const siteUrl = runtimeConfig?.hostUrl || "";
-    const title = runtimeConfig?.title || "demo.everything";
+    const title = "demo.everything";
     const description =
       "Demo application showcasing Module Federation with SSR, TanStack Router, and oRPC";
     const siteName = "Every Demo";
@@ -89,6 +89,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
           type: "application/ld+json",
           children: JSON.stringify(structuredData),
         },
+        // Module Federation Remote scripts - DO NOT MODIFY unless you understand
+        // how this injects runtime config and hydration triggers
         ...getRemoteScripts({ assetsUrl, runtimeConfig }),
       ],
     };

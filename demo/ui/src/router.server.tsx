@@ -6,8 +6,8 @@ import {
 } from "@tanstack/react-router";
 import {
   createRequestHandler,
-  renderRouterToStream,
   RouterServer,
+  renderRouterToStream,
 } from "@tanstack/react-router/ssr/server";
 import { createRouter, routeTree } from "./router";
 import type {
@@ -27,7 +27,7 @@ export type {
   HeadData,
   RenderOptions,
   RenderResult,
-  RouterContext
+  RouterContext,
 } from "./types";
 
 function getMetaKey(meta: HeadMeta): string {
@@ -35,8 +35,10 @@ function getMetaKey(meta: HeadMeta): string {
   if ("title" in meta) return "title";
   if ("charSet" in meta) return "charSet";
   if ("name" in meta) return `name:${(meta as { name: string }).name}`;
-  if ("property" in meta) return `property:${(meta as { property: string }).property}`;
-  if ("httpEquiv" in meta) return `httpEquiv:${(meta as { httpEquiv: string }).httpEquiv}`;
+  if ("property" in meta)
+    return `property:${(meta as { property: string }).property}`;
+  if ("httpEquiv" in meta)
+    return `httpEquiv:${(meta as { httpEquiv: string }).httpEquiv}`;
   return JSON.stringify(meta);
 }
 
@@ -80,7 +82,7 @@ export async function getRouteHead(
     const route = router.looseRoutesById[match.routeId] as AnyRoute | undefined;
     if (!route?.options?.head) continue;
 
-    let loaderData: unknown = undefined;
+    let loaderData: unknown;
     const loaderFn = route.options.loader;
 
     if (loaderFn) {
@@ -93,7 +95,10 @@ export async function getRouteHead(
           cause: "enter",
         } as Parameters<typeof loaderFn>[0]);
       } catch (error) {
-        console.warn(`[getRouteHead] Loader failed for ${match.routeId}:`, error);
+        console.warn(
+          `[getRouteHead] Loader failed for ${match.routeId}:`,
+          error,
+        );
       }
     }
 

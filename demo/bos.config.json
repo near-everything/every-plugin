@@ -56,7 +56,7 @@
   "app": {
     "host": {
       "development": "http://localhost:3000",
-      "production": "https://elliot-braem-1997-host-every-plugin-near-everythi-2969d2094-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-2199-host-every-plugin-near-everythi-a6f6a1309-ze.zephyrcloud.app",
       "secrets": [
         "HOST_DATABASE_URL",
         "HOST_DATABASE_AUTH_TOKEN",
@@ -75,8 +75,8 @@
     "ui": {
       "name": "ui",
       "development": "http://localhost:3002",
-      "production": "https://elliot-braem-2008-ui-every-plugin-near-everything-87b9c8a68-ze.zephyrcloud.app",
-      "ssr": "https://elliot-braem-2009-ui-every-plugin-near-everything-7ca1172fc-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-2150-ui-every-plugin-near-everything-d958c5603-ze.zephyrcloud.app",
+      "ssr": "https://elliot-braem-2151-ui-every-plugin-near-everything-63f6a05f5-ze.zephyrcloud.app",
       "template": "near-everything/every-plugin/demo/ui",
       "files": [
         "rsbuild.config.ts",
@@ -100,7 +100,7 @@
     "api": {
       "name": "api",
       "development": "http://localhost:3014",
-      "production": "https://elliot-braem-2000-api-every-plugin-near-everythin-0e85feb58-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-2152-api-every-plugin-near-everythin-bcabeca4f-ze.zephyrcloud.app",
       "proxy": "https://elliot-braem-1811-api-every-plugin-near-everythin-2defcb105-ze.zephyrcloud.app",
       "variables": {},
       "secrets": [

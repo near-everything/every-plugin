@@ -4,132 +4,142 @@ export const SourceModeSchema = z.enum(["local", "remote"]);
 export type SourceMode = z.infer<typeof SourceModeSchema>;
 
 export const HostConfigSchema = z.object({
-  development: z.string(),
-  production: z.string(),
-  secrets: z.array(z.string()).optional(),
-  template: z.string().optional(),
-  files: z.array(z.string()).optional(),
-  sync: z.lazy(() => SyncConfigSchema).optional(),
+	development: z.string(),
+	production: z.string(),
+	secrets: z.array(z.string()).optional(),
+	template: z.string().optional(),
+	files: z.array(z.string()).optional(),
+	sync: z.lazy(() => SyncConfigSchema).optional(),
 });
 export type HostConfig = z.infer<typeof HostConfigSchema>;
 
 export const RemoteConfigSchema = z.object({
-  name: z.string(),
-  development: z.string(),
-  production: z.string(),
-  ssr: z.string().optional(),
-  proxy: z.string().optional(),
-  variables: z.record(z.string(), z.string()).optional(),
-  secrets: z.array(z.string()).optional(),
-  template: z.string().optional(),
-  files: z.array(z.string()).optional(),
-  sync: z.lazy(() => SyncConfigSchema).optional(),
+	name: z.string(),
+	development: z.string(),
+	production: z.string(),
+	ssr: z.string().optional(),
+	proxy: z.string().optional(),
+	variables: z.record(z.string(), z.string()).optional(),
+	secrets: z.array(z.string()).optional(),
+	template: z.string().optional(),
+	files: z.array(z.string()).optional(),
+	sync: z.lazy(() => SyncConfigSchema).optional(),
 });
 export type RemoteConfig = z.infer<typeof RemoteConfigSchema>;
 
 export const NovaConfigSchema = z.object({
-  account: z.string(),
+	account: z.string(),
 });
 export type NovaConfig = z.infer<typeof NovaConfigSchema>;
 
 export const GatewayConfigSchema = z.object({
-  development: z.string(),
-  production: z.string(),
-  account: z.string().optional(),
-  nova: NovaConfigSchema.optional(),
+	development: z.string(),
+	production: z.string(),
+	account: z.string().optional(),
+	nova: NovaConfigSchema.optional(),
 });
 export type GatewayConfig = z.infer<typeof GatewayConfigSchema>;
 
 export const SharedDepConfigSchema = z.object({
-  requiredVersion: z.string().optional(),
-  singleton: z.boolean().optional(),
-  eager: z.boolean().optional(),
-  strictVersion: z.boolean().optional(),
+	requiredVersion: z.string().optional(),
+	singleton: z.boolean().optional(),
+	eager: z.boolean().optional(),
+	strictVersion: z.boolean().optional(),
 });
 export type SharedDepConfig = z.infer<typeof SharedDepConfigSchema>;
 
 export const SyncConfigSchema = z.object({
-  scripts: z.union([z.array(z.string()), z.literal(true)]).optional(),
-  dependencies: z.boolean().default(true),
-  devDependencies: z.boolean().default(true),
+	scripts: z.union([z.array(z.string()), z.literal(true)]).optional(),
+	dependencies: z.boolean().default(true),
+	devDependencies: z.boolean().default(true),
 });
 export type SyncConfig = z.infer<typeof SyncConfigSchema>;
 
 export const BosConfigSchema = z.object({
-  account: z.string(),
-  testnet: z.string().optional(),
-  nova: NovaConfigSchema.optional(),
-  gateway: GatewayConfigSchema,
-  template: z.string().optional(),
-  cli: z.object({
-    version: z.string().optional(),
-  }).optional(),
-  shared: z.record(z.string(), z.record(z.string(), SharedDepConfigSchema)).optional(),
-  app: z.object({
-    host: HostConfigSchema,
-  }).catchall(z.union([HostConfigSchema, RemoteConfigSchema])),
+	account: z.string(),
+	testnet: z.string().optional(),
+	nova: NovaConfigSchema.optional(),
+	gateway: GatewayConfigSchema,
+	template: z.string().optional(),
+	cli: z
+		.object({
+			version: z.string().optional(),
+		})
+		.optional(),
+	shared: z
+		.record(z.string(), z.record(z.string(), SharedDepConfigSchema))
+		.optional(),
+	app: z
+		.object({
+			host: HostConfigSchema,
+		})
+		.catchall(z.union([HostConfigSchema, RemoteConfigSchema])),
 });
 export type BosConfig = z.infer<typeof BosConfigSchema>;
 
 export const AppConfigSchema = z.object({
-  host: SourceModeSchema,
-  ui: SourceModeSchema,
-  api: SourceModeSchema,
-  proxy: z.boolean().optional(),
+	host: SourceModeSchema,
+	ui: SourceModeSchema,
+	api: SourceModeSchema,
+	proxy: z.boolean().optional(),
 });
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
 export const PortConfigSchema = z.object({
-  host: z.number(),
-  ui: z.number(),
-  api: z.number(),
+	host: z.number(),
+	ui: z.number(),
+	api: z.number(),
 });
 export type PortConfig = z.infer<typeof PortConfigSchema>;
 
 export const SharedConfigSchema = z.object({
-  requiredVersion: z.string().optional(),
-  singleton: z.boolean().optional(),
-  eager: z.boolean().optional(),
-  strictVersion: z.boolean().optional(),
-  shareScope: z.string().optional(),
+	requiredVersion: z.string().optional(),
+	singleton: z.boolean().optional(),
+	eager: z.boolean().optional(),
+	strictVersion: z.boolean().optional(),
+	shareScope: z.string().optional(),
 });
 export type SharedConfig = z.infer<typeof SharedConfigSchema>;
 
 export const RuntimeConfigSchema = z.object({
-  env: z.enum(["development", "production"]),
-  account: z.string(),
-  title: z.string().optional(),
-  hostUrl: z.string(),
-  shared: z.object({
-    ui: z.record(z.string(), SharedConfigSchema).optional(),
-  }).optional(),
-  ui: z.object({
-    name: z.string(),
-    url: z.string(),
-    ssrUrl: z.string().optional(),
-    source: SourceModeSchema,
-  }),
-  api: z.object({
-    name: z.string(),
-    url: z.string(),
-    source: SourceModeSchema,
-    proxy: z.string().optional(),
-    variables: z.record(z.string(), z.string()).optional(),
-    secrets: z.array(z.string()).optional(),
-  }),
+	env: z.enum(["development", "production"]),
+	account: z.string(),
+	title: z.string().optional(),
+	hostUrl: z.string(),
+	shared: z
+		.object({
+			ui: z.record(z.string(), SharedConfigSchema).optional(),
+		})
+		.optional(),
+	ui: z.object({
+		name: z.string(),
+		url: z.string(),
+		ssrUrl: z.string().optional(),
+		source: SourceModeSchema,
+	}),
+	api: z.object({
+		name: z.string(),
+		url: z.string(),
+		source: SourceModeSchema,
+		proxy: z.string().optional(),
+		variables: z.record(z.string(), z.string()).optional(),
+		secrets: z.array(z.string()).optional(),
+	}),
 });
 export type RuntimeConfig = z.infer<typeof RuntimeConfigSchema>;
 
 export const ClientRuntimeConfigSchema = z.object({
-  env: z.enum(["development", "production"]),
-  account: z.string(),
-  hostUrl: z.string().optional(),
-  assetsUrl: z.string(),
-  apiBase: z.string(),
-  rpcBase: z.string(),
-  ui: z.object({
-    name: z.string(),
-    url: z.string(),
-  }).optional(),
+	env: z.enum(["development", "production"]),
+	account: z.string(),
+	hostUrl: z.string().optional(),
+	assetsUrl: z.string(),
+	apiBase: z.string(),
+	rpcBase: z.string(),
+	ui: z
+		.object({
+			name: z.string(),
+			url: z.string(),
+		})
+		.optional(),
 });
 export type ClientRuntimeConfig = z.infer<typeof ClientRuntimeConfigSchema>;

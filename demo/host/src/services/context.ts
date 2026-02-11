@@ -10,6 +10,8 @@ export interface RequestContext {
   session: SessionResult;
   user: User | null;
   nearAccountId: string | null;
+  reqHeaders: Headers;
+  getRawBody?: () => Promise<string>;
 }
 
 export async function createRequestContext(
@@ -31,5 +33,6 @@ export async function createRequestContext(
     session,
     user: session?.user ?? null,
     nearAccountId,
+    reqHeaders: req.headers,
   };
 }

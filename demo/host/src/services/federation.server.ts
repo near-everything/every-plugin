@@ -1,121 +1,105 @@
-import { createInstance, getInstance } from "@module-federation/enhanced/runtime";
+import {
+	createInstance,
+	getInstance,
+} from "@module-federation/enhanced/runtime";
 import { setGlobalFederationInstance } from "@module-federation/runtime-core";
-import { Context, Effect, Layer, Schedule } from "every-plugin/effect";
+import { Effect, Schedule } from "every-plugin/effect";
 import type { RouterModule } from "../types";
-import type { RuntimeConfig, SharedConfig } from "./config";
-import { ConfigService } from "./config";
+import type { RuntimeConfig } from "./config";
 import { FederationError } from "./errors";
 
 export type { RouterModule };
 
 let federationInstance: ReturnType<typeof createInstance> | null = null;
 
-function transformSharedConfig(sharedUi: Record<string, SharedConfig> | undefined) {
-  if (!sharedUi) return undefined;
-
-  return Object.fromEntries(
-    Object.entries(sharedUi).map(([name, cfg]) => [
-      name,
-      {
-        version: cfg.requiredVersion?.replace(/^[\^~>=<]+/, "") ?? "0.0.0",
-        shareConfig: {
-          singleton: cfg.singleton ?? true,
-          requiredVersion: cfg.requiredVersion || false as const,
-          eager: cfg.eager ?? false,
-          strictVersion: cfg.strictVersion ?? false,
-        },
-      },
-    ])
-  );
-}
-
+/**
+ * Creates or retrieves the Module Federation instance for loading SSR modules.
+ *
+ * In local dev mode, if ssrUrl is undefined, falls back to ui.url.
+ * In production mode, ssrUrl must be properly configured.
+ */
 function getOrCreateFederationInstance(config: RuntimeConfig) {
-  if (federationInstance) return federationInstance;
+	if (federationInstance) return federationInstance;
 
-  const existingInstance = getInstance();
+	const existingInstance = getInstance();
+	const isLocalDev = config.ui.source === "local";
+	const ssrUrl = config.ui.ssrUrl ?? (isLocalDev ? config.ui.url : undefined);
 
-  const ssrEntryUrl = config.ui.ssrUrl
-    ? `${config.ui.ssrUrl}/remoteEntry.server.js`
-    : `${config.ui.url}/remoteEntry.server.js`;
+	if (!ssrUrl) {
+		if (!isLocalDev) {
+			throw new FederationError({
+				remoteName: config.ui.name,
+				cause: new Error(
+					"SSR URL not configured in production. Set app.ui.ssr in bos.config.json to enable SSR.",
+				),
+			});
+		}
+		throw new Error(
+			"SSR URL not configured. In local dev, set app.ui.ssr or use a UI package with SSR support.",
+		);
+	}
 
-  if (!ssrEntryUrl) {
-    throw new FederationError({
-      remoteName: config.ui.name,
-      cause: new Error("SSR URL not configured. Set app.ui.ssr in bos.config.json to enable SSR."),
-    });
-  }
+	const ssrEntryUrl = `${ssrUrl}/remoteEntry.server.js`;
 
-  const shared = transformSharedConfig(config.shared?.ui);
+	if (existingInstance) {
+		existingInstance.registerRemotes([
+			{
+				name: config.ui.name,
+				entry: ssrEntryUrl,
+				alias: config.ui.name,
+			},
+		]);
+		federationInstance = existingInstance;
+		return federationInstance;
+	}
 
-  if (existingInstance) {
-    existingInstance.registerRemotes([{
-      name: config.ui.name,
-      entry: ssrEntryUrl,
-      alias: config.ui.name,
-    }]);
-    federationInstance = existingInstance;
-    return federationInstance;
-  }
+	federationInstance = createInstance({
+		name: "host",
+		remotes: [
+			{
+				name: config.ui.name,
+				entry: ssrEntryUrl,
+				alias: config.ui.name,
+			},
+		],
+		// NOTE: Shared dependency management is currently disabled due to Module Federation
+		// compatibility issues. To enable: implement proper transformation of config.shared?.ui
+		// and pass it as `shared: { shared }` to createInstance. See:
+		// https://module-federation.io/api/containers/#createInstance
+	});
 
-  federationInstance = createInstance({
-    name: "host",
-    remotes: [
-      {
-        name: config.ui.name,
-        entry: ssrEntryUrl,
-        alias: config.ui.name,
-      },
-    ],
-    // shared, DON'T UNCOMMENT
-  });
-
-  setGlobalFederationInstance(federationInstance);
-  return federationInstance;
+	setGlobalFederationInstance(federationInstance);
+	return federationInstance;
 }
 
-const isDev = process.env.NODE_ENV !== "production";
-
-const retrySchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.compose(Schedule.recurs(isDev ? 15 : 3)),
-  Schedule.tapOutput((count: number) =>
-    Effect.logInfo(`[Federation] Retry attempt ${count + 1}...`)
-  )
-);
+const retrySchedule = Schedule.addDelay(Schedule.recurs(5), () => 500);
 
 export const loadRouterModule = (config: RuntimeConfig) =>
-  Effect.tryPromise({
-    try: async () => {
-      const mf = getOrCreateFederationInstance(config);
-      const routerModule = await mf.loadRemote<RouterModule>(`${config.ui.name}/Router`);
+	Effect.tryPromise({
+		try: async () => {
+			const mf = getOrCreateFederationInstance(config);
+			const routerModule = await mf.loadRemote<RouterModule>(
+				`${config.ui.name}/Router`,
+			);
 
-      if (!routerModule) {
-        throw new Error(`Failed to load Router module from ${config.ui.name}`);
-      }
+			if (!routerModule) {
+				throw new Error(`Module not found: ${config.ui.name}/Router`);
+			}
 
-      return routerModule;
-    },
-    catch: (e) =>
-      new FederationError({
-        remoteName: config.ui.name,
-        remoteUrl: config.ui.ssrUrl,
-        cause: e,
-      }),
-  }).pipe(
-    Effect.retry(retrySchedule),
-    Effect.tapError((e) =>
-      Effect.logError(`[Federation] Failed to load Router module after retries: ${e.message}`)
-    )
-  );
-
-export class FederationServerService extends Context.Tag("host/FederationServerService")<
-  FederationServerService,
-  RouterModule
->() {
-  static Live = Layer.effect(
-    FederationServerService,
-    Effect.gen(function* () {
-      const config = yield* ConfigService;
-      return yield* loadRouterModule(config);
-    })
-  ).pipe(Layer.provide(ConfigService.Default));
-}
+			return routerModule;
+		},
+		catch: (e) =>
+			new FederationError({
+				remoteName: config.ui.name,
+				remoteUrl: config.ui.ssrUrl,
+				cause: e,
+			}),
+	}).pipe(
+		Effect.retry(retrySchedule),
+		Effect.timeout("30 seconds"),
+		Effect.tapBoth({
+			onSuccess: () => Effect.logInfo("[SSR] Router module ready"),
+			onFailure: (error: Error) =>
+				Effect.logError(`[SSR] Failed: ${error.message}`),
+		}),
+	);
