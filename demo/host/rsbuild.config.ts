@@ -29,14 +29,6 @@ const mfShared = {
 	"@tanstack/react-router": { singleton: true, requiredVersion: false },
 };
 
-// Get UI remote URL from config (allow override for tests/CI)
-const uiUrl =
-	process.env.BOS_UI_URL ??
-	bosConfig.app?.ui?.development ??
-	"http://localhost:3002";
-const uiSsrUrl =
-	process.env.BOS_UI_SSR_URL ?? `${uiUrl.replace(/\/+$/, "")}/ssr`;
-
 function updateBosConfig(url: string) {
 	try {
 		const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -51,13 +43,15 @@ function updateBosConfig(url: string) {
 	}
 }
 
+// Host exposes ./Server for remote loading, but does NOT bake UI remotes
+// UI is loaded at runtime from runtimeConfig.ui.url
 const plugins = [
 	pluginReact(),
 	pluginModuleFederation(
 		{
 			name: "host",
-			remotes: {
-				ui: `ui@${uiUrl}/remoteEntry.js`,
+			exposes: {
+				"./Server": "./src/program.ts",
 			},
 			dts: false,
 			experiments: {
@@ -125,10 +119,12 @@ export default defineConfig({
 					],
 					plugins: [
 						DrizzleORMMigrations(),
+						// Host SSR exposes ./Server but does NOT declare UI remotes
+						// UI is registered at runtime from runtimeConfig.ui.url
 						new ModuleFederationPlugin({
 							name: "host_ssr",
-							remotes: {
-								ui: `ui@${uiSsrUrl}/remoteEntry.js`,
+							exposes: {
+								"./Server": "./src/program.ts",
 							},
 							dts: false,
 							experiments: {

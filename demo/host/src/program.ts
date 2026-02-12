@@ -469,6 +469,14 @@ export interface ServerHandle {
 }
 
 export const runServer = (input: ServerInput): ServerHandle => {
+	// Ensure runtime config is available for SSR and MF runtime initialization
+	process.env.BOS_RUNTIME_CONFIG = JSON.stringify(input.config);
+
+	// Polyfill for MF runtime in Node.js environment
+	if (!globalThis.self) {
+		(globalThis as any).self = globalThis;
+	}
+
 	const ConfigLive = Layer.succeed(ConfigService, input.config);
 	const ServerLive = Layer.provideMerge(
 		Layer.mergeAll(BaseLive, PluginsLive),

@@ -6,8 +6,8 @@ export default defineConfig({
 		environment: "node",
 		testTimeout: 30000,
 		include: ["tests/**/*.test.ts"],
-		globalSetup: ["./tests/global-setup.ts"],
-		setupFiles: ["./tests/vitest.setup.ts"],
+		// No global setup - tests run in isolation with mocked configs
+		setupFiles: [],
 	},
 	plugins: [
 		tsconfigPaths({

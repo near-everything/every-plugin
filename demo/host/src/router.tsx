@@ -1,10 +1,10 @@
 // ============================================================================
-// Router - Standard TanStack Start Pattern
+// Router - Runtime Module Federation Pattern
+// Loads UI routeTree at runtime from config.ui.url
 // ============================================================================
 import { QueryClient } from "@tanstack/react-query";
-import { createRouter } from "@tanstack/react-router";
+import { type AnyRoute, createRouter } from "@tanstack/react-router";
 import type { ClientRuntimeConfig, RuntimeConfig } from "everything-dev/types";
-import { routeTree } from "ui/Routes";
 
 declare global {
 	interface Window {
@@ -57,7 +57,65 @@ function getClientRuntimeConfig(): ClientRuntimeConfig {
 	};
 }
 
-export function getRouter() {
+// Store the loaded routeTree
+let cachedRouteTree: AnyRoute | null = null;
+
+async function loadUIRouteTree(): Promise<AnyRoute> {
+	if (cachedRouteTree) {
+		return cachedRouteTree;
+	}
+
+	const config = getClientRuntimeConfig();
+	const isServer = typeof window === "undefined";
+
+	// Import MF runtime
+	const { createInstance, getInstance } = await import(
+		"@module-federation/enhanced/runtime"
+	);
+	const { setGlobalFederationInstance } = await import(
+		"@module-federation/runtime-core"
+	);
+
+	// Get or create MF instance
+	let mf = getInstance();
+	if (!mf) {
+		mf = createInstance({
+			name: "host",
+			remotes: [],
+		});
+		setGlobalFederationInstance(mf);
+	}
+
+	// Register UI remote at runtime from config
+	const uiUrl = config.assetsUrl || config.ui?.url || "";
+	if (!uiUrl) {
+		throw new Error("UI URL not configured in runtime config");
+	}
+
+	const remoteEntryUrl = isServer
+		? `${uiUrl.replace(/\/+$/, "")}/ssr/remoteEntry.js`
+		: `${uiUrl.replace(/\/+$/, "")}/remoteEntry.js`;
+
+	mf.registerRemotes([
+		{
+			name: "ui",
+			entry: remoteEntryUrl,
+			type: "script",
+		},
+	]);
+
+	// Load the UI Routes module
+	const uiModule = await mf.loadRemote<{ routeTree: AnyRoute }>("ui/Routes");
+
+	if (!uiModule?.routeTree) {
+		throw new Error("UI remote does not export routeTree");
+	}
+
+	cachedRouteTree = uiModule.routeTree;
+	return cachedRouteTree;
+}
+
+export async function getRouter() {
 	const runtimeConfig = getClientRuntimeConfig();
 	const queryClient = new QueryClient({
 		defaultOptions: {
@@ -69,6 +127,9 @@ export function getRouter() {
 			},
 		},
 	});
+
+	// Load routeTree from remote UI at runtime
+	const routeTree = await loadUIRouteTree();
 
 	return createRouter({
 		routeTree,
