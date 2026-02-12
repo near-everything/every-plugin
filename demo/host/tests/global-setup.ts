@@ -62,18 +62,7 @@ function safeResolve(distDir: string, urlPath: string): string {
 }
 
 function ensureUiBuild(uiDir: string) {
-	const distDir = path.join(uiDir, "dist");
-	mkdirSync(distDir, { recursive: true });
-
-	const clientEntry = path.join(distDir, "remoteEntry.js");
-	const ssrEntry = path.join(distDir, "remoteEntry.server.js");
-
-	const hasClient = existsSync(clientEntry) && statSync(clientEntry).size > 0;
-	const hasSsr = existsSync(ssrEntry) && statSync(ssrEntry).size > 0;
-
-	if (hasClient && hasSsr) return;
-
-	// Build both client + server so both remoteEntry files exist.
+	// Always rebuild so assetPrefix matches this run.
 	const result = spawnSync("bun", ["run", "build"], {
 		cwd: uiDir,
 		stdio: "inherit",
@@ -81,6 +70,18 @@ function ensureUiBuild(uiDir: string) {
 	});
 	if (result.status !== 0) {
 		throw new Error(`UI build failed (exit ${result.status ?? "unknown"})`);
+	}
+}
+
+function ensureHostBuild(hostDir: string) {
+	// Always rebuild so federation entry URLs match this run.
+	const result = spawnSync("bun", ["run", "build"], {
+		cwd: hostDir,
+		stdio: "inherit",
+		env: { ...process.env },
+	});
+	if (result.status !== 0) {
+		throw new Error(`Host build failed (exit ${result.status ?? "unknown"})`);
 	}
 }
 
@@ -118,9 +119,8 @@ function handlerFactory(distDir: string) {
 export default async function globalSetup() {
 	const repoRoot = path.resolve(__dirname, "../../..");
 	const uiDir = path.join(repoRoot, "demo", "ui");
+	const hostDir = path.join(repoRoot, "demo", "host");
 	const distDir = path.join(uiDir, "dist");
-
-	ensureUiBuild(uiDir);
 
 	const server = createServer(handlerFactory(distDir));
 
@@ -137,7 +137,13 @@ export default async function globalSetup() {
 
 	// Point both the client assets and SSR remoteEntry at the same local server.
 	process.env.BOS_UI_URL = baseUrl;
-	process.env.BOS_UI_SSR_URL = baseUrl;
+	process.env.BOS_UI_SSR_URL = `${baseUrl}/ssr`;
+
+	ensureUiBuild(uiDir);
+
+	// Build host after BOS_UI_URL/BOS_UI_SSR_URL are set so the SSR
+	// federation entry points at the correct test server.
+	ensureHostBuild(hostDir);
 
 	// Communicate the chosen URL to worker threads.
 	// Vitest worker threads may not observe process.env mutations from globalSetup.

@@ -1,107 +1,158 @@
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { ModuleFederationPlugin } from "@module-federation/enhanced/rspack";
+import { pluginModuleFederation } from "@module-federation/rsbuild-plugin";
+import DrizzleORMMigrations from "@proj-airi/unplugin-drizzle-orm-migrations/rspack";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
-import DrizzleORMMigrations from "@proj-airi/unplugin-drizzle-orm-migrations/rspack";
+import { tanstackStart } from "@tanstack/react-start/plugin/rsbuild";
 import { withZephyr } from "zephyr-rsbuild-plugin";
 
+const require = createRequire(import.meta.url);
 const __dirname = import.meta.dirname;
 const shouldDeploy = process.env.DEPLOY === "true";
 
 const configPath =
-  process.env.BOS_CONFIG_PATH ?? path.resolve(__dirname, "../bos.config.json");
+	process.env.BOS_CONFIG_PATH ?? path.resolve(__dirname, "../bos.config.json");
 
 const bosConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
 const sharedUi = bosConfig.shared?.ui ?? {};
 
+// Prefer MF shared settings that avoid strict version lockstep.
+// TanStack Start + MF + workspaces can easily pull multiple copies otherwise.
+const mfShared = {
+	...sharedUi,
+	react: { singleton: true, requiredVersion: false },
+	"react-dom": { singleton: true, requiredVersion: false },
+	"@tanstack/react-query": { singleton: true, requiredVersion: false },
+	"@tanstack/react-router": { singleton: true, requiredVersion: false },
+};
+
+// Get UI remote URL from config (allow override for tests/CI)
+const uiUrl =
+	process.env.BOS_UI_URL ??
+	bosConfig.app?.ui?.development ??
+	"http://localhost:3002";
+const uiSsrUrl =
+	process.env.BOS_UI_SSR_URL ?? `${uiUrl.replace(/\/+$/, "")}/ssr`;
+
 function updateBosConfig(url: string) {
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    config.app.host.production = url;
-    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-    console.log(`   ✅ Updated bos.config.json: app.host.production`);
-  } catch (err) {
-    console.error(
-      "   ❌ Failed to update bos.config.json:",
-      (err as Error).message
-    );
-  }
+	try {
+		const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+		config.app.host.production = url;
+		fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+		console.log(`   ✅ Updated bos.config.json: app.host.production`);
+	} catch (err) {
+		console.error(
+			"   ❌ Failed to update bos.config.json:",
+			(err as Error).message,
+		);
+	}
 }
 
-const plugins = [pluginReact()];
+const plugins = [
+	pluginReact(),
+	pluginModuleFederation(
+		{
+			name: "host",
+			remotes: {
+				ui: `ui@${uiUrl}/remoteEntry.js`,
+			},
+			dts: false,
+			experiments: {
+				asyncStartup: true,
+			},
+			runtimePlugins: [
+				require.resolve("@module-federation/node/runtimePlugin"),
+			],
+			shared: mfShared,
+		},
+		{
+			environment: "client",
+		},
+	),
+	...tanstackStart(),
+];
 
 if (shouldDeploy) {
-  plugins.push(
-    withZephyr({
-      hooks: {
-        onDeployComplete: (info: { url: string }) => {
-          console.log("🚀 Host Deployed:", info.url);
-          updateBosConfig(info.url);
-        },
-      },
-    })
-  );
+	plugins.push(
+		withZephyr({
+			hooks: {
+				onDeployComplete: (info: { url: string }) => {
+					console.log("🚀 Host Deployed:", info.url);
+					updateBosConfig(info.url);
+				},
+			},
+		}),
+	);
 }
 
 export default defineConfig({
-  plugins,
-  source: {
-    entry: {
-      index: "./src/program.ts",
-    },
-  },
-  resolve: {
-    alias: {
-      "@": "./src",
-    },
-  },
-  dev: {
-    progressBar: false,
-  },
-  tools: {
-    rspack: {
-      target: "async-node",
-      optimization: {
-        nodeEnv: false,
-      },
-      output: {
-        uniqueName: "host",
-        library: { type: "commonjs-module" },
-      },
-      externals: [
-        /^node:/,
-        /^bun:/,
-        "@libsql/client",
-      ],
-      infrastructureLogging: {
-        level: "error",
-      },
-      stats: "errors-warnings",
-      plugins: [
-        DrizzleORMMigrations(),
-        new ModuleFederationPlugin({
-          name: "host",
-          filename: "remoteEntry.js",
-          dts: false,
-          runtimePlugins: [require.resolve("@module-federation/node/runtimePlugin")],
-          library: { type: "commonjs-module" },
-          exposes: {
-            "./Server": "./src/program.ts",
-          },
-          shared: sharedUi,
-        }),
-      ],
-    },
-  },
-  output: {
-    minify: false,
-    distPath: {
-      root: "dist",
-    },
-    assetPrefix: "/",
-    filename: {
-      js: "[name].js",
-    },
-  },
+	plugins,
+	resolve: {
+		alias: {
+			"@": "./src",
+			"~/": "./app/",
+		},
+	},
+	dev: {
+		progressBar: false,
+	},
+	environments: {
+		ssr: {
+			tools: {
+				rspack: {
+					target: "async-node",
+					output: {
+						chunkFormat: "commonjs",
+						chunkLoading: "async-node",
+						library: {
+							type: "commonjs-module",
+						},
+					},
+					infrastructureLogging: {
+						level: "error",
+					},
+					stats: "errors-warnings",
+					externals: [
+						/^node:/,
+						/^bun:/,
+						"@libsql/client",
+						/^react$/,
+						/^react-dom$/,
+						/^react-dom\/.*/,
+					],
+					plugins: [
+						DrizzleORMMigrations(),
+						new ModuleFederationPlugin({
+							name: "host_ssr",
+							remotes: {
+								ui: `ui@${uiSsrUrl}/remoteEntry.js`,
+							},
+							dts: false,
+							experiments: {
+								asyncStartup: true,
+							},
+							remoteType: "script",
+							runtimePlugins: [
+								require.resolve("@module-federation/node/runtimePlugin"),
+							],
+							shared: mfShared,
+						}),
+					],
+				},
+			},
+		},
+	},
+	output: {
+		minify: false,
+		distPath: {
+			root: "dist",
+		},
+		assetPrefix: "/",
+		filename: {
+			js: "[name].js",
+		},
+	},
 });

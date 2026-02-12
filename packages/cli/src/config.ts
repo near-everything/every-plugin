@@ -20,7 +20,7 @@ export type {
 	PortConfig,
 	RemoteConfig,
 	RuntimeConfig,
-	SourceMode
+	SourceMode,
 };
 
 export const DEFAULT_DEV_CONFIG: AppConfig = {
@@ -293,8 +293,6 @@ export async function loadBosConfig(
 	// stand up a local static server and redirect the remotes without editing
 	// bos.config.json.
 	const uiUrlOverride = process.env.BOS_UI_URL;
-	const uiSsrUrlOverride = process.env.BOS_UI_SSR_URL;
-
 	return {
 		env,
 		account: bosConfig.account,
@@ -304,7 +302,6 @@ export async function loadBosConfig(
 		ui: {
 			name: uiConfig.name,
 			url: uiUrlOverride ?? uiConfig[env],
-			ssrUrl: uiSsrUrlOverride ?? uiConfig.ssr,
 			source: "remote",
 		},
 		api: {

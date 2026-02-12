@@ -1,0 +1,9 @@
+{
+  "version": "v1",
+  "packages": {
+    "@tanstack/react-start": {
+      "signature": "0c5f7d500c0365923963f93b60050549",
+      "file": true
+    }
+  }
+}

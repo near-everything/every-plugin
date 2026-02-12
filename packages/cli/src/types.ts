@@ -17,7 +17,6 @@ export const RemoteConfigSchema = z.object({
 	name: z.string(),
 	development: z.string(),
 	production: z.string(),
-	ssr: z.string().optional(),
 	proxy: z.string().optional(),
 	variables: z.record(z.string(), z.string()).optional(),
 	secrets: z.array(z.string()).optional(),
@@ -114,7 +113,6 @@ export const RuntimeConfigSchema = z.object({
 	ui: z.object({
 		name: z.string(),
 		url: z.string(),
-		ssrUrl: z.string().optional(),
 		source: SourceModeSchema,
 	}),
 	api: z.object({

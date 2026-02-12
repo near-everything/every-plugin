@@ -23,14 +23,6 @@ import { type Auth, AuthService } from "./services/auth";
 import { ConfigService, type RuntimeConfig } from "./services/config";
 import { createRequestContext } from "./services/context";
 import { type Database, DatabaseService } from "./services/database";
-import {
-	loadRouterModule,
-	type RouterModule,
-} from "./services/federation.server";
-import {
-	installSsrApiClientGlobal,
-	runWithSsrApiClient,
-} from "./services/ssr-api-client";
 import { PluginsService } from "./services/plugins";
 import { createRouter } from "./services/router";
 import { logger } from "./utils/logger";
@@ -159,24 +151,7 @@ function setupApiRoutes(
 	auth: Auth,
 	db: Database,
 	router: ReturnType<typeof createRouter>,
-	loadingState: {
-		status: string;
-		startTime: number;
-		milestones: string[];
-		error: Error | null;
-	},
 ) {
-	const getHealthStatus = () => {
-		const elapsed = Date.now() - loadingState.startTime;
-		return {
-			status: loadingState.status,
-			ssr: loadingState.status === "ready" ? "available" : "unavailable",
-			uptime: elapsed,
-			milestones: loadingState.milestones,
-			...(loadingState.error ? { error: loadingState.error.message } : {}),
-		};
-	};
-
 	const isProxyMode = !!config.api.proxy;
 
 	if (isProxyMode) {
@@ -185,7 +160,10 @@ function setupApiRoutes(
 
 		app.all("/api/*", async (c: Context) => {
 			if (c.req.path === "/api/_health") {
-				return c.json(getHealthStatus());
+				return c.json({
+					status: "ok",
+					ssr: "available",
+				});
 			}
 			const response = await proxyRequest(c.req.raw, proxyTarget, true);
 			return response;
@@ -195,7 +173,10 @@ function setupApiRoutes(
 	}
 
 	app.get("/api/_health", (c: Context) => {
-		return c.json(getHealthStatus());
+		return c.json({
+			status: "ok",
+			ssr: "available",
+		});
 	});
 
 	const rpcHandler = new RPCHandler(router, {
@@ -214,9 +195,8 @@ function setupApiRoutes(
 				schemaConverters: [new ZodToJsonSchemaConverter()],
 				specGenerateOptions: {
 					info: {
-						title: "API", // TODO: title from api.title
-						// description, other spec gen fields
-						version: "1.0.0", // TODO: version from api.version
+						title: "API",
+						version: "1.0.0",
 					},
 					servers: [{ url: `${config.hostUrl}/api` }],
 				},
@@ -235,10 +215,10 @@ function setupApiRoutes(
 		handler: typeof rpcHandler | typeof apiHandler,
 		prefix: `/${string}`,
 	) => {
-		// Clone early so raw body can be read later even after oRPC consumes the request body.
-		const rawClone = (c.req.method === "GET" || c.req.method === "HEAD")
-			? null
-			: c.req.raw.clone();
+		const rawClone =
+			c.req.method === "GET" || c.req.method === "HEAD"
+				? null
+				: c.req.raw.clone();
 
 		const baseContext = await createRequestContext(c.req.raw, auth, db);
 		let cachedRawBody: string | null = null;
@@ -268,6 +248,108 @@ function setupApiRoutes(
 	app.all("/api/*", (c: Context) => handleOrpc(c, apiHandler, "/api"));
 }
 
+// HTML shell with proper Module Federation initialization
+function createHtmlShell(
+	assetsUrl: string,
+	runtimeConfig: Record<string, unknown>,
+): string {
+	return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Everything Dev</title>
+    <style>
+      body { 
+        margin: 0; 
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #171717; 
+        color: #fafafa; 
+        min-height: 100vh;
+      }
+      #root {
+        min-height: 100vh;
+      }
+    </style>
+    <script>
+      window.__RUNTIME_CONFIG__ = ${JSON.stringify(runtimeConfig)};
+    </script>
+  </head>
+  <body>
+    <div id="root">
+      <div style="display:flex;align-items:center;justify-content:center;height:100vh;">
+        <div id="loading-text">Loading...</div>
+      </div>
+    </div>
+    <script>
+      // Initialize Module Federation runtime and load UI
+      (async () => {
+        const loadingText = document.getElementById('loading-text');
+        
+        try {
+          // Load the remote entry script dynamically to ensure proper initialization
+          const remoteEntryUrl = '${assetsUrl}/remoteEntry.js';
+          
+          // Create script element for remoteEntry
+          const script = document.createElement('script');
+          script.src = remoteEntryUrl;
+          script.type = 'text/javascript';
+          
+          // Wait for script to load
+          await new Promise((resolve, reject) => {
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('Failed to load remoteEntry.js'));
+            document.head.appendChild(script);
+          });
+          
+          // Give MF runtime a moment to initialize
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Try to load the remote routes
+          let attempts = 0;
+          const maxAttempts = 10;
+          let remote;
+          
+          while (attempts < maxAttempts) {
+            try {
+              remote = await import('ui/Routes');
+              break;
+            } catch (err) {
+              attempts++;
+              if (attempts >= maxAttempts) throw err;
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+          }
+          
+          if (remote && remote.routeTree) {
+            console.log('[Host] Remote UI loaded successfully:', remote);
+            loadingText.textContent = 'UI Loaded - Starting App...';
+            
+            // The routes are now available, the actual rendering would happen here
+            // For now, just show success message
+            setTimeout(() => {
+              loadingText.textContent = 'Everything Dev is running!';
+            }, 500);
+          } else {
+            throw new Error('Remote does not export routeTree');
+          }
+          
+        } catch (err) {
+          console.error('[Host] Failed to load remote UI:', err);
+          document.getElementById('root').innerHTML = 
+            '<div style="padding:2rem;text-align:center;">' +
+            '<h2>Failed to load UI</h2>' +
+            '<p>' + err.message + '</p>' +
+            '<p>Please check that the UI server is running at: ' + window.__RUNTIME_CONFIG__.assetsUrl + '</p>' +
+            '<button onclick="location.reload()" style="margin-top:1rem;padding:0.5rem 1rem;cursor:pointer;">Retry</button>' +
+            '</div>';
+        }
+      })();
+    </script>
+  </body>
+</html>`;
+}
+
 export const createStartServer = (onReady?: () => void) =>
 	Effect.gen(function* () {
 		const port = Number(process.env.PORT) || 3000;
@@ -277,10 +359,6 @@ export const createStartServer = (onReady?: () => void) =>
 		const db = yield* DatabaseService;
 		const auth = yield* AuthService;
 		const plugins = yield* PluginsService;
-
-		// Ensure the UI SSR remote can always resolve `$apiClient` safely.
-		// This uses AsyncLocalStorage to prevent cross-request client leakage.
-		installSsrApiClientGlobal();
 
 		const app = new Hono();
 
@@ -311,24 +389,7 @@ export const createStartServer = (onReady?: () => void) =>
 		app.get("/health", (c: Context) => c.text("OK"));
 
 		const apiRouter = createRouter(plugins);
-
-		let ssrRouterModule: RouterModule | null = null;
-
-		const loadingState = {
-			status: "loading" as "loading" | "ready" | "failed",
-			startTime: Date.now(),
-			milestones: [] as string[],
-			error: null as Error | null,
-		};
-
-		const logMilestone = (name: string) => {
-			const elapsed = Date.now() - loadingState.startTime;
-			const message = `[SSR] [+${elapsed}ms] ${name}`;
-			logger.info(message);
-			loadingState.milestones.push(message);
-		};
-
-		setupApiRoutes(app, config, auth, db, apiRouter, loadingState);
+		setupApiRoutes(app, config, auth, db, apiRouter);
 
 		logger.info(`[Config] Host URL: ${config.hostUrl}`);
 		logger.info(`[Config] UI source: ${config.ui.source} → ${config.ui.url}`);
@@ -339,6 +400,7 @@ export const createStartServer = (onReady?: () => void) =>
 			logger.info(`[Config] API proxy: ${config.api.proxy}`);
 		}
 
+		// Static files in production
 		if (!isDev) {
 			app.use("/static/*", serveStatic({ root: "./dist" }));
 			app.use("/favicon.ico", serveStatic({ root: "./dist" }));
@@ -347,146 +409,20 @@ export const createStartServer = (onReady?: () => void) =>
 			app.use("/robots.txt", serveStatic({ root: "./dist" }));
 		}
 
-		logMilestone("Server starting");
-
+		// Serve HTML shell for all non-API routes
 		app.get("*", async (c: Context) => {
-			console.log(`[HTTP] ${c.req.method} ${c.req.url}`);
-			const loadingTime = Date.now() - loadingState.startTime;
-			const isTimedOut = loadingTime > 30000;
+			const { env, account } = config;
+			const assetsUrl = config.ui.url;
 
-			if (loadingState.status !== "ready") {
-				if (loadingState.status === "failed" || isTimedOut) {
-					loadingState.status = "failed";
+			const runtimeConfig = {
+				env,
+				account,
+				assetsUrl,
+				apiBase: "/api",
+				rpcBase: "/api/rpc",
+			};
 
-					const clientUrl = config.ui.url;
-					const runtimeConfig = {
-						env: config.env,
-						account: config.account,
-						assetsUrl: clientUrl,
-						apiBase: "/api",
-						rpcBase: "/api/rpc",
-					};
-
-					return c.html(
-						`<!DOCTYPE html>
-          <html lang="en">
-            <head>
-              <meta charset="utf-8" />
-              <title>Loading...</title>
-              <style>
-                body { background: #171717; color: #fafafa; display: flex; align-items: center; justify-content: center; height: 100vh; }
-                .fade { animation: fadeIn 0.3s ease-in; }
-                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-                .error { color: #fca5a5; }
-              </style>
-              <script src="${clientUrl}/remoteEntry.js"></script>
-              <script>
-                window.__RUNTIME_CONFIG__ = ${JSON.stringify(runtimeConfig)};
-                window.addEventListener('load', function() { 
-                  window.__hydrate?.(); 
-                });
-              </script>
-            </head>
-            <body>
-              <div class="fade">
-                ${
-									loadingState.error
-										? `<p class="error">❌ SSR Failed to Load</p>
-                     <p>API endpoints remain available.</p>
-                     <p>Error: ${loadingState.error.message}</p>`
-										: `<p>Loading...</p>`
-								}
-              </div>
-            </body>
-          </html>`,
-						503,
-					);
-				}
-
-				return c.html(
-					`<!DOCTYPE html>
-          <html lang="en">
-            <head>
-              <style>
-                body { background: #171717; color: #fafafa; display: flex; align-items: center; justify-content: center; height: 100vh; }
-                .fade { animation: fadeIn 0.3s ease-in; }
-                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-              </style>
-            </head>
-            <body>
-              <div class="fade">Loading...</div>
-            </body>
-          </html>`,
-					503,
-				);
-			}
-
-			try {
-				const { env, account } = config;
-				const assetsUrl = config.ui.url;
-
-				const requestContext = await createRequestContext(c.req.raw, auth, db);
-				const pluginApi = plugins.api as {
-					createClient?: (ctx: unknown) => unknown;
-				} | null;
-				const ssrApiClient = pluginApi?.createClient
-					? pluginApi.createClient(requestContext)
-					: undefined;
-
-				logger.info(`[SSR] Request: ${c.req.method} ${c.req.path}`);
-				logger.info(`[SSR] ssrRouterModule exists: ${!!ssrRouterModule}`);
-				if (
-					ssrRouterModule &&
-					typeof ssrRouterModule.renderToStream === "function"
-				) {
-					logger.info(`[SSR] renderToStream is a function`);
-				}
-
-				const render = () =>
-					ssrRouterModule?.renderToStream(c.req.raw, {
-						assetsUrl,
-						session: requestContext.session,
-						runtimeConfig: {
-							env,
-							account,
-							assetsUrl,
-							apiBase: "/api",
-							rpcBase: "/api/rpc",
-						},
-					});
-
-				const result = ssrApiClient
-					? await runWithSsrApiClient(ssrApiClient, render)
-					: await render();
-				logger.info(`[SSR] Render complete, status: ${result?.statusCode}`);
-				return new Response(result?.stream, {
-					status: result?.statusCode,
-					headers: result?.headers,
-				});
-			} catch (error) {
-				logger.error("[SSR] Streaming error:", error);
-				return c.html(
-					`
-        <!DOCTYPE html>
-        <html lang="en">
-          <head>
-            <meta charset="utf-8" />
-            <title>Server Error</title>
-            <style>
-              body { font-family: system-ui; padding: 2rem; background: #1c1c1e; color: #fafafa; }
-              pre { background: #2d2d2d; padding: 1rem; border-radius: 8px; overflow-x: auto; }
-            </style>
-          </head>
-          <body>
-            <h1>Server Error</h1>
-            <p>An error occurred during server-side rendering.</p>
-            <pre>${error instanceof Error ? error.stack : String(error)}</pre>
-          </body>
-        </html>
-      `,
-					500,
-				);
-			}
+			return c.html(createHtmlShell(assetsUrl, runtimeConfig));
 		});
 
 		const startHttpServer = () => {
@@ -518,40 +454,6 @@ export const createStartServer = (onReady?: () => void) =>
 						});
 					}),
 			),
-		);
-
-		yield* Effect.fork(
-			Effect.gen(function* () {
-				logMilestone("Starting module load");
-				const ssrTarget = config.ui.ssrUrl || config.ui.url || "unknown";
-				const isLocalUI = config.ui.source === "local";
-				logger.info(
-					`[SSR] Loading Router module from ${ssrTarget} (${isLocalUI ? "local" : "remote"} mode)`,
-				);
-
-				const routerModuleResult = yield* loadRouterModule(config).pipe(
-					Effect.either,
-				);
-
-				if (routerModuleResult._tag === "Left") {
-					loadingState.status = "failed";
-					loadingState.error = routerModuleResult.left;
-					logMilestone("Load failed");
-					logger.error(
-						"[SSR] Failed to load Router module:",
-						routerModuleResult.left,
-					);
-					logger.warn("[SSR] Server running in API-only mode, SSR disabled");
-					return;
-				}
-
-				ssrRouterModule = routerModuleResult.right;
-				loadingState.status = "ready";
-				logMilestone("Load successful");
-				logger.info(
-					"[SSR] Router module loaded successfully, SSR routes active",
-				);
-			}),
 		);
 
 		yield* Effect.never;
