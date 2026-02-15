@@ -177,7 +177,7 @@ describe("Create Project Integration", () => {
 	}, 120000);
 
 	it("can run bos sync after creation", async () => {
-		const projectName = "synctest";
+		const projectName = "everytest";
 		const projectDir = join(tempDir, projectName);
 
 		// Create project
@@ -190,7 +190,7 @@ describe("Create Project Integration", () => {
 				"project",
 				projectName,
 				"--account",
-				"synctest.near",
+				"every.near",
 			],
 			{
 				cwd: tempDir,

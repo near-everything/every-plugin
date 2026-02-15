@@ -12,3 +12,6 @@ dist
 .cache
 *.tsbuildinfo
 .bos
+
+# Database files
+*.db

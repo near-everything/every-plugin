@@ -41,7 +41,16 @@ const spawnBosStart = (): StartProcess => {
 
 	const proc = spawn(
 		"bun",
-		["run", "src/cli.ts", "start", "--no-interactive"],
+		[
+			"run",
+			"src/cli.ts",
+			"start",
+			"--account",
+			"every.near",
+			"--domain",
+			"everything.dev",
+			"--no-interactive",
+		],
 		{
 			cwd: CLI_DIR,
 			stdio: ["ignore", "pipe", "pipe"],
