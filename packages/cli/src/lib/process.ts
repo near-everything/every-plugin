@@ -1,5 +1,4 @@
-import { Command } from "@effect/platform";
-import { Deferred, Effect, Fiber, Ref, Stream } from "every-plugin/effect";
+import { Deferred, Effect, Fiber, Ref } from "every-plugin/effect";
 import type { ProcessStatus } from "../components/dev-view";
 import {
 	type BosConfig,
@@ -36,12 +35,7 @@ const processConfigBases: Record<string, ProcessConfigBase> = {
 		command: "bun",
 		args: ["run", "dev"],
 		cwd: "host",
-		readyPatterns: [
-			/listening on/i,
-			/server started/i,
-			/ready/i,
-			/running at/i,
-		],
+		readyPatterns: [/Host (dev|production) server running at/i],
 		errorPatterns: [/error:/i, /failed/i, /exception/i],
 	},
 	ui: {
@@ -57,7 +51,7 @@ const processConfigBases: Record<string, ProcessConfigBase> = {
 		command: "bun",
 		args: ["run", "dev"],
 		cwd: "api",
-		readyPatterns: [/compiled.*successfully/i, /listening/i, /started/i],
+		readyPatterns: [/Plugin dev server ready/i, /listening/i, /started/i],
 		errorPatterns: [/error/i, /failed/i],
 	},
 };
@@ -221,12 +215,13 @@ export const spawnDevProcess = (
 			envVars.BOS_RUNTIME_CONFIG = JSON.stringify(runtimeConfig);
 		}
 
-		const cmd = Command.make(config.command, ...config.args).pipe(
-			Command.workingDirectory(fullCwd),
-			Command.env(envVars),
-		);
-
-		const proc = yield* Command.start(cmd);
+		// Spawn process using Bun
+		const proc = Bun.spawn({
+			cmd: [config.command, ...config.args],
+			cwd: fullCwd,
+			env: envVars,
+			stdio: ["inherit", "pipe", "pipe"],
+		});
 
 		const handleLine = (line: string, isStderr: boolean) =>
 			Effect.gen(function* () {
@@ -247,20 +242,67 @@ export const spawnDevProcess = (
 				}
 			});
 
+		// Read stdout and stderr using raw stream readers
+		const decoder = new TextDecoder();
+
 		const stdoutFiber = yield* Effect.fork(
-			proc.stdout.pipe(
-				Stream.decodeText(),
-				Stream.splitLines,
-				Stream.runForEach((line) => handleLine(line, false)),
-			),
+			Effect.async<void>((resume) => {
+				if (!proc.stdout) {
+					resume(Effect.void);
+					return;
+				}
+				const reader = proc.stdout.getReader();
+				let buffer = "";
+
+				const pump = (): Promise<void> =>
+					reader.read().then(({ done, value }) => {
+						if (done) {
+							if (buffer) {
+								Effect.runSync(handleLine(buffer, false));
+							}
+							return;
+						}
+						buffer += decoder.decode(value, { stream: true });
+						const lines = buffer.split("\n");
+						buffer = lines.pop() ?? "";
+						for (const line of lines) {
+							Effect.runSync(handleLine(line, false));
+						}
+						return pump();
+					});
+
+				pump().then(() => resume(Effect.void));
+			}),
 		);
 
 		const stderrFiber = yield* Effect.fork(
-			proc.stderr.pipe(
-				Stream.decodeText(),
-				Stream.splitLines,
-				Stream.runForEach((line) => handleLine(line, true)),
-			),
+			Effect.async<void>((resume) => {
+				if (!proc.stderr) {
+					resume(Effect.void);
+					return;
+				}
+				const reader = proc.stderr.getReader();
+				let buffer = "";
+
+				const pump = (): Promise<void> =>
+					reader.read().then(({ done, value }) => {
+						if (done) {
+							if (buffer) {
+								Effect.runSync(handleLine(buffer, true));
+							}
+							return;
+						}
+						buffer += decoder.decode(value, { stream: true });
+						const lines = buffer.split("\n");
+						buffer = lines.pop() ?? "";
+						for (const line of lines) {
+							Effect.runSync(handleLine(line, true));
+						}
+						return pump();
+					});
+
+				pump().then(() => resume(Effect.void));
+			}),
 		);
 
 		const handle: ProcessHandle = {
@@ -281,7 +323,7 @@ export const spawnDevProcess = (
 			waitForReady: Deferred.await(readyDeferred),
 			waitForExit: Effect.gen(function* () {
 				yield* Fiber.joinAll([stdoutFiber, stderrFiber]);
-				return yield* proc.exitCode;
+				return yield* Effect.promise(() => proc.exited);
 			}),
 		};
 

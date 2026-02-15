@@ -1,2 +1,3 @@
 [install]
-  linker = "isolated"
+# Using default linker for proper workspace dependency resolution
+# linker = "isolated"

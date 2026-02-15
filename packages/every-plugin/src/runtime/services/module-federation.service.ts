@@ -1,20 +1,25 @@
+import { createRequire } from "node:module";
 import {
 	createInstance,
 	getInstance,
 } from "@module-federation/enhanced/runtime";
-import { setGlobalFederationInstance } from "@module-federation/runtime-core";
 import { Effect } from "effect";
 import { getMajorMinorVersion } from "../../build/shared-deps";
 import type { AnyPlugin } from "../../types";
 import { ModuleFederationError } from "../errors";
 import { getNormalizedRemoteName } from "./normalize";
 
-type RemoteModule =
-	| (new () => AnyPlugin)
-	| { default: new () => AnyPlugin };
+type RemoteModule = (new () => AnyPlugin) | { default: new () => AnyPlugin };
 
 import pkg from "../../../package.json";
 
+const require = createRequire(import.meta.url);
+
+/**
+ * Internal singleton MF instance for plugin loading.
+ * createInstance() already calls setGlobalFederationInstance internally,
+ * so we don't need to call it explicitly.
+ */
 const createModuleFederationInstance = Effect.cached(
 	Effect.sync(() => {
 		try {
@@ -22,12 +27,15 @@ const createModuleFederationInstance = Effect.cached(
 
 			if (!instance) {
 				instance = createInstance({
-					name: "host",
+					name: "every-plugin-runtime",
 					remotes: [],
+					runtimePlugins: [
+						require.resolve("@module-federation/node/runtimePlugin"),
+					],
 					shared: {
 						"every-plugin": {
 							version: pkg.version,
-							get: () => import("every-plugin").then(mod => () => mod),
+							get: () => import("every-plugin").then((mod) => () => mod),
 							shareConfig: {
 								singleton: true,
 								requiredVersion: getMajorMinorVersion(pkg.version),
@@ -37,17 +45,19 @@ const createModuleFederationInstance = Effect.cached(
 						},
 						effect: {
 							version: pkg.peerDependencies.effect,
-							get: () => import("effect").then(mod => () => mod),
+							get: () => import("effect").then((mod) => () => mod),
 							shareConfig: {
 								singleton: true,
-								requiredVersion: getMajorMinorVersion(pkg.peerDependencies.effect),
+								requiredVersion: getMajorMinorVersion(
+									pkg.peerDependencies.effect,
+								),
 								eager: false,
 								strictVersion: false,
 							},
 						},
 						zod: {
 							version: pkg.peerDependencies.zod,
-							get: () => import("zod").then(mod => () => mod),
+							get: () => import("zod").then((mod) => () => mod),
 							shareConfig: {
 								singleton: true,
 								requiredVersion: getMajorMinorVersion(pkg.peerDependencies.zod),
@@ -57,28 +67,31 @@ const createModuleFederationInstance = Effect.cached(
 						},
 						"@orpc/contract": {
 							version: pkg.dependencies["@orpc/contract"],
-							get: () => import("@orpc/contract").then(mod => () => mod),
+							get: () => import("@orpc/contract").then((mod) => () => mod),
 							shareConfig: {
 								singleton: true,
-								requiredVersion: getMajorMinorVersion(pkg.dependencies["@orpc/contract"]),
+								requiredVersion: getMajorMinorVersion(
+									pkg.dependencies["@orpc/contract"],
+								),
 								eager: false,
 								strictVersion: false,
 							},
 						},
 						"@orpc/server": {
 							version: pkg.dependencies["@orpc/server"],
-							get: () => import("@orpc/server").then(mod => () => mod),
+							get: () => import("@orpc/server").then((mod) => () => mod),
 							shareConfig: {
 								singleton: true,
-								requiredVersion: getMajorMinorVersion(pkg.dependencies["@orpc/server"]),
+								requiredVersion: getMajorMinorVersion(
+									pkg.dependencies["@orpc/server"],
+								),
 								eager: false,
 								strictVersion: false,
 							},
-						}
+						},
 					},
 				});
-
-				setGlobalFederationInstance(instance);
+				// createInstance already sets global instance internally
 			}
 
 			return instance;
@@ -88,111 +101,127 @@ const createModuleFederationInstance = Effect.cached(
 	}),
 );
 
-export class ModuleFederationService extends Effect.Service<ModuleFederationService>()("ModuleFederationService", {
-	effect: Effect.gen(function* () {
-		const mf = yield* Effect.flatten(createModuleFederationInstance);
+export class ModuleFederationService extends Effect.Service<ModuleFederationService>()(
+	"ModuleFederationService",
+	{
+		effect: Effect.gen(function* () {
+			const mf = yield* Effect.flatten(createModuleFederationInstance);
 
-		return {
-			registerRemote: (pluginId: string, url: string) =>
-				Effect.gen(function* () {
-					console.log(`[MF] Registering ${pluginId}`);
+			return {
+				registerRemote: (pluginId: string, url: string) =>
+					Effect.gen(function* () {
+						console.log(`[MF] Registering ${pluginId}`);
 
-					const remoteName = getNormalizedRemoteName(pluginId);
+						const remoteName = getNormalizedRemoteName(pluginId);
 
-					yield* Effect.try({
-						try: () => mf.registerRemotes([{
-							name: remoteName,
-							entry: url,
-						}]),
-						catch: (error): ModuleFederationError =>
-							new ModuleFederationError({
-								pluginId,
-								remoteUrl: url,
-								cause:
-									error instanceof Error ? error : new Error(String(error)),
-							}),
-					});
+						// Auto-detect entry type: manifest.json vs script
+						const entryType = url.endsWith(".json") ? "manifest" : "script";
+						console.log(`[MF] Using ${entryType} entry: ${url}`);
 
-					console.log(`[MF] ✅ Registered ${pluginId}`);
-				}),
+						yield* Effect.try({
+							try: () =>
+								mf.registerRemotes([
+									{
+										name: remoteName,
+										entry: url,
+										type: entryType,
+									},
+								]),
+							catch: (error): ModuleFederationError =>
+								new ModuleFederationError({
+									pluginId,
+									remoteUrl: url,
+									cause:
+										error instanceof Error ? error : new Error(String(error)),
+								}),
+						});
 
-			loadRemoteConstructor: (pluginId: string, url: string) =>
-				Effect.gen(function* () {
-					const remoteName = getNormalizedRemoteName(pluginId);
-					console.log(`[MF] Loading remote ${remoteName}`);
-					const modulePath = `${remoteName}/plugin`;
+						console.log(`[MF] ✅ Registered ${pluginId}`);
+					}),
 
-					return yield* Effect.tryPromise({
-						try: async () => {
+				loadRemoteConstructor: (pluginId: string, url: string) =>
+					Effect.gen(function* () {
+						const remoteName = getNormalizedRemoteName(pluginId);
+						console.log(`[MF] Loading remote ${remoteName}`);
+						const modulePath = `${remoteName}/plugin`;
 
-							const container = await mf.loadRemote<RemoteModule>(modulePath);
-							if (!container) {
-								throw new Error(`No container returned for ${modulePath}`);
-							}
+						return yield* Effect.tryPromise({
+							try: async () => {
+								const container = await mf.loadRemote<RemoteModule>(modulePath);
+								if (!container) {
+									throw new Error(`No container returned for ${modulePath}`);
+								}
 
-							// Support multiple export patterns: direct function, default export, named exports
-							let Constructor: any;
+								// Support multiple export patterns: direct function, default export, named exports
+								let Constructor: any;
 
-							if (typeof container === "function") {
-								// Direct function export
-								Constructor = container;
-							} else if (container.default) {
-								// Default export
-								Constructor = container.default;
-							} else {
-								// Named export fallback - prioritize exports with 'binding' property (plugin classes)
-								Constructor = Object.values(container).find(
-									(exp) => typeof exp === "function" && (exp as any).binding !== undefined
-								);
-
-								// Fallback to any function export if no binding found
-								if (!Constructor) {
+								if (typeof container === "function") {
+									// Direct function export
+									Constructor = container;
+								} else if (container.default) {
+									// Default export
+									Constructor = container.default;
+								} else {
+									// Named export fallback - prioritize exports with 'binding' property (plugin classes)
 									Constructor = Object.values(container).find(
-										(exp) => typeof exp === "function" && exp.prototype?.constructor === exp
+										(exp) =>
+											typeof exp === "function" &&
+											(exp as any).binding !== undefined,
+									);
+
+									// Fallback to any function export if no binding found
+									if (!Constructor) {
+										Constructor = Object.values(container).find(
+											(exp) =>
+												typeof exp === "function" &&
+												exp.prototype?.constructor === exp,
+										);
+									}
+								}
+
+								if (!Constructor || typeof Constructor !== "function") {
+									const containerInfo =
+										typeof container === "object"
+											? `Available exports: ${Object.keys(container).join(", ")}`
+											: `Container type: ${typeof container}`;
+
+									throw new Error(
+										`No valid plugin constructor found for '${pluginId}'.\n` +
+											`Supported patterns:\n` +
+											`  - export const YourPlugin = createPlugin({...})\n` +
+											`  - export default createPlugin({...})\n` +
+											`${containerInfo}`,
 									);
 								}
-							}
 
-							if (!Constructor || typeof Constructor !== "function") {
-								const containerInfo = typeof container === "object"
-									? `Available exports: ${Object.keys(container).join(', ')}`
-									: `Container type: ${typeof container}`;
+								// Validate it looks like a plugin constructor (has binding property)
+								if (!(Constructor as any).binding) {
+									const containerInfo =
+										typeof container === "object"
+											? `Found exports: ${Object.keys(container).join(", ")}`
+											: `Container type: ${typeof container}`;
 
-								throw new Error(
-									`No valid plugin constructor found for '${pluginId}'.\n` +
-									`Supported patterns:\n` +
-									`  - export const YourPlugin = createPlugin({...})\n` +
-									`  - export default createPlugin({...})\n` +
-									`${containerInfo}`,
-								);
-							}
+									throw new Error(
+										`Invalid plugin constructor for '${pluginId}'. ` +
+											`The exported value must be created with createPlugin(). ` +
+											`Found a function but it's missing the required 'binding' property.\n` +
+											`${containerInfo}`,
+									);
+								}
 
-							// Validate it looks like a plugin constructor (has binding property)
-							if (!(Constructor as any).binding) {
-								const containerInfo = typeof container === "object"
-									? `Found exports: ${Object.keys(container).join(', ')}`
-									: `Container type: ${typeof container}`;
-
-								throw new Error(
-									`Invalid plugin constructor for '${pluginId}'. ` +
-									`The exported value must be created with createPlugin(). ` +
-									`Found a function but it's missing the required 'binding' property.\n` +
-									`${containerInfo}`,
-								);
-							}
-
-							console.log(`[MF] ✅ Loaded constructor for ${pluginId}`);
-							return Constructor;
-						},
-						catch: (error): ModuleFederationError =>
-							new ModuleFederationError({
-								pluginId,
-								remoteUrl: url,
-								cause:
-									error instanceof Error ? error : new Error(String(error)),
-							}),
-					});
-				}),
-		};
-	}),
-}) { }
+								console.log(`[MF] ✅ Loaded constructor for ${pluginId}`);
+								return Constructor;
+							},
+							catch: (error): ModuleFederationError =>
+								new ModuleFederationError({
+									pluginId,
+									remoteUrl: url,
+									cause:
+										error instanceof Error ? error : new Error(String(error)),
+								}),
+						});
+					}),
+			};
+		}),
+	},
+) {}

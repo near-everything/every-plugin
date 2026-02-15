@@ -43,23 +43,17 @@ function updateBosConfig(url: string) {
 	}
 }
 
-// Host exposes ./Server for remote loading, but does NOT bake UI remotes
+// Host build configuration
+// Client: Shared deps only (no exposes - host is the consumer, not a remote)
+// SSR: Exposes ./Server for CLI to load
 // UI is loaded at runtime from runtimeConfig.ui.url
 const plugins = [
 	pluginReact(),
+	// Client: MF plugin for shared deps (ensures React/etc deduplication with UI)
 	pluginModuleFederation(
 		{
 			name: "host",
-			exposes: {
-				"./Server": "./src/program.ts",
-			},
 			dts: false,
-			experiments: {
-				asyncStartup: true,
-			},
-			runtimePlugins: [
-				require.resolve("@module-federation/node/runtimePlugin"),
-			],
 			shared: mfShared,
 		},
 		{
@@ -87,7 +81,6 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@": "./src",
-			"~/": "./app/",
 		},
 	},
 	dev: {

@@ -1,5 +1,4 @@
 import { appendFile } from "node:fs/promises";
-import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect } from "every-plugin/effect";
 import path from "path";
 import {
@@ -229,7 +228,6 @@ export const runDevServers = (orchestrator: AppOrchestrator) =>
 
 export const startApp = (orchestrator: AppOrchestrator) => {
 	const program = Effect.scoped(runDevServers(orchestrator)).pipe(
-		Effect.provide(BunContext.layer),
 		Effect.catchAll((e) =>
 			Effect.sync(() => {
 				if (e instanceof Error) {
@@ -260,5 +258,9 @@ export const startApp = (orchestrator: AppOrchestrator) => {
 		handleSignal().finally(() => process.exit(0));
 	});
 
-	BunRuntime.runMain(program);
+	// Run the Effect program directly without BunRuntime wrapper
+	Effect.runPromise(program).catch((error) => {
+		console.error("Fatal error:", error);
+		process.exit(1);
+	});
 };

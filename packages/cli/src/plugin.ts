@@ -1,8 +1,8 @@
+import path from "node:path";
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
 import { z } from "every-plugin/zod";
 import { calculateRequiredDeposit, Graph } from "near-social-js";
-
 import { runMonitorCli } from "./components/monitor-view";
 import {
 	type AppConfig,
@@ -245,6 +245,56 @@ function buildEnvVars(
 	return env;
 }
 
+async function maybeBuildEveryPlugin(configDir: string) {
+	// In this monorepo, demo apps depend on `every-plugin` via link/workspace,
+	// but the package exports `dist/*`. If `every-plugin` source changed without
+	// rebuilding, `bos dev` can appear to ignore fixes (stale dist).
+	const candidate = path.resolve(configDir, "..", "packages", "every-plugin");
+	const pkgPath = path.join(candidate, "package.json");
+	const pkgFile = Bun.file(pkgPath);
+	if (!(await pkgFile.exists())) return;
+
+	// Only do this if the demo apps actually link to every-plugin.
+	const hostPkgPath = path.join(configDir, "host", "package.json");
+	const apiPkgPath = path.join(configDir, "api", "package.json");
+	const uiPkgPath = path.join(configDir, "ui", "package.json");
+	const linked = await Promise.all([
+		Bun.file(hostPkgPath)
+			.exists()
+			.then(async (ok) =>
+				ok ? ((await Bun.file(hostPkgPath).json()) as any) : null,
+			),
+		Bun.file(apiPkgPath)
+			.exists()
+			.then(async (ok) =>
+				ok ? ((await Bun.file(apiPkgPath).json()) as any) : null,
+			),
+		Bun.file(uiPkgPath)
+			.exists()
+			.then(async (ok) =>
+				ok ? ((await Bun.file(uiPkgPath).json()) as any) : null,
+			),
+	]);
+
+	const usesLinkedEveryPlugin = linked.some((pkg) => {
+		const v = pkg?.dependencies?.["every-plugin"];
+		return (
+			typeof v === "string" &&
+			(v.startsWith("link:") || v.startsWith("workspace:"))
+		);
+	});
+
+	if (!usesLinkedEveryPlugin) return;
+
+	console.log();
+	console.log(
+		colors.dim(
+			`  ${icons.config} Building every-plugin (workspace link detected)...`,
+		),
+	);
+	await run("bun", ["run", "build"], { cwd: candidate });
+}
+
 const buildCommands: Record<string, { cmd: string; args: string[] }> = {
 	host: { cmd: "rsbuild", args: ["build"] },
 	ui: { cmd: "build", args: [] },
@@ -348,6 +398,10 @@ export default createPlugin({
 			const processes = determineProcesses(appConfig);
 			const env = buildEnvVars(appConfig, deps.bosConfig);
 			const description = buildDescription(appConfig);
+
+			// Prevent "false positives" when running in the monorepo: ensure
+			// the linked `every-plugin` package is rebuilt before starting dev servers.
+			await maybeBuildEveryPlugin(deps.configDir);
 
 			const orchestrator: AppOrchestrator = {
 				packages: processes,

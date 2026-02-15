@@ -26,6 +26,23 @@ export const RemoteConfigSchema = z.object({
 });
 export type RemoteConfig = z.infer<typeof RemoteConfigSchema>;
 
+/**
+ * Partial RemoteConfig for input configs (child configs that extend a base).
+ * Only 'name' is required; development/production can be inherited.
+ */
+export const PartialRemoteConfigSchema = z.object({
+	name: z.string(),
+	development: z.string().optional(),
+	production: z.string().optional(),
+	proxy: z.string().optional(),
+	variables: z.record(z.string(), z.string()).optional(),
+	secrets: z.array(z.string()).optional(),
+	template: z.string().optional(),
+	files: z.array(z.string()).optional(),
+	sync: z.lazy(() => SyncConfigSchema).optional(),
+});
+export type PartialRemoteConfig = z.infer<typeof PartialRemoteConfigSchema>;
+
 export const NovaConfigSchema = z.object({
 	account: z.string(),
 });
@@ -55,6 +72,7 @@ export const SyncConfigSchema = z.object({
 export type SyncConfig = z.infer<typeof SyncConfigSchema>;
 
 export const BosConfigSchema = z.object({
+	extends: z.string().optional(),
 	account: z.string(),
 	testnet: z.string().optional(),
 	nova: NovaConfigSchema.optional(),
@@ -72,9 +90,40 @@ export const BosConfigSchema = z.object({
 		.object({
 			host: HostConfigSchema,
 		})
-		.catchall(z.union([HostConfigSchema, RemoteConfigSchema])),
+		.catchall(z.union([RemoteConfigSchema, HostConfigSchema])),
 });
 export type BosConfig = z.infer<typeof BosConfigSchema>;
+
+/**
+ * BosConfigInputSchema - permissive schema for parsing input configs.
+ * Supports extends and allows partial app configs (child overrides only what it needs).
+ * After resolving extends, the result must be validated against the strict BosConfigSchema.
+ */
+export const BosConfigInputSchema = z.object({
+	extends: z.string().optional(),
+	account: z.string().optional(),
+	testnet: z.string().optional(),
+	nova: NovaConfigSchema.optional(),
+	gateway: GatewayConfigSchema.optional(),
+	template: z.string().optional(),
+	cli: z
+		.object({
+			version: z.string().optional(),
+		})
+		.optional(),
+	shared: z
+		.record(z.string(), z.record(z.string(), SharedDepConfigSchema))
+		.optional(),
+	app: z
+		.object({
+			host: HostConfigSchema.optional(),
+			ui: PartialRemoteConfigSchema.optional(),
+			api: PartialRemoteConfigSchema.optional(),
+		})
+		.partial()
+		.catchall(z.union([HostConfigSchema, PartialRemoteConfigSchema])),
+});
+export type BosConfigInput = z.infer<typeof BosConfigInputSchema>;
 
 export const AppConfigSchema = z.object({
 	host: SourceModeSchema,
@@ -100,6 +149,17 @@ export const SharedConfigSchema = z.object({
 });
 export type SharedConfig = z.infer<typeof SharedConfigSchema>;
 
+/**
+ * Federation entry info - both base URL and computed manifest entry
+ */
+export const FederationEntrySchema = z.object({
+	name: z.string(),
+	url: z.string(), // Base/assets URL
+	entry: z.string(), // Computed federation entry (mf-manifest.json or remoteEntry.js)
+	source: SourceModeSchema,
+});
+export type FederationEntry = z.infer<typeof FederationEntrySchema>;
+
 export const RuntimeConfigSchema = z.object({
 	env: z.enum(["development", "production"]),
 	account: z.string(),
@@ -110,15 +170,8 @@ export const RuntimeConfigSchema = z.object({
 			ui: z.record(z.string(), SharedConfigSchema).optional(),
 		})
 		.optional(),
-	ui: z.object({
-		name: z.string(),
-		url: z.string(),
-		source: SourceModeSchema,
-	}),
-	api: z.object({
-		name: z.string(),
-		url: z.string(),
-		source: SourceModeSchema,
+	ui: FederationEntrySchema,
+	api: FederationEntrySchema.extend({
 		proxy: z.string().optional(),
 		variables: z.record(z.string(), z.string()).optional(),
 		secrets: z.array(z.string()).optional(),
@@ -126,17 +179,22 @@ export const RuntimeConfigSchema = z.object({
 });
 export type RuntimeConfig = z.infer<typeof RuntimeConfigSchema>;
 
+/**
+ * Client-side runtime config (injected via window.__RUNTIME_CONFIG__)
+ * Contains federation entry info so browser can load remotes via manifest
+ */
 export const ClientRuntimeConfigSchema = z.object({
 	env: z.enum(["development", "production"]),
 	account: z.string(),
 	hostUrl: z.string().optional(),
-	assetsUrl: z.string(),
+	assetsUrl: z.string(), // Legacy: use ui.entry for MF loading
 	apiBase: z.string(),
 	rpcBase: z.string(),
 	ui: z
 		.object({
 			name: z.string(),
-			url: z.string(),
+			url: z.string(), // Base URL for assets
+			entry: z.string(), // Federation entry (mf-manifest.json)
 		})
 		.optional(),
 });

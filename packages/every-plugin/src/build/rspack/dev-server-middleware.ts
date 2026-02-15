@@ -1,219 +1,254 @@
-import type { PluginInfo } from './utils';
+import fs from "node:fs";
+import path from "node:path";
+import type { PluginInfo } from "./utils";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-  'Access-Control-Allow-Headers': 'X-Requested-With, content-type, Authorization'
+	"Access-Control-Allow-Origin": "*",
+	"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+	"Access-Control-Allow-Headers":
+		"X-Requested-With, content-type, Authorization",
 };
 
 const applyCorsHeaders = (res: any) => {
-  Object.entries(corsHeaders).forEach(([key, value]) => {
-    res.setHeader(key, value);
-  });
+	Object.entries(corsHeaders).forEach(([key, value]) => {
+		res.setHeader(key, value);
+	});
 };
 
 const normalizePrefix = (prefix?: string): string => {
-  if (!prefix) return '';
-  const cleaned = prefix.replace(/^\/+|\/+$/g, '');
-  return cleaned ? `/${cleaned}` : '';
+	if (!prefix) return "";
+	const cleaned = prefix.replace(/^\/+|\/+$/g, "");
+	return cleaned ? `/${cleaned}` : "";
 };
 
-export function setupPluginMiddleware(devServer: any, pluginInfo: PluginInfo, devConfig: any, port: number) {
-  const rpcPrefix = normalizePrefix(devConfig?.prefix);
-  let handlers: { rpc: any, api: any } = { rpc: null, api: null };
-  let cleanup: (() => Promise<void>) | null = null;
+export function setupPluginMiddleware(
+	devServer: any,
+	pluginInfo: PluginInfo,
+	devConfig: any,
+	port: number,
+) {
+	const rpcPrefix = normalizePrefix(devConfig?.prefix);
+	const handlers: { rpc: any; api: any } = { rpc: null, api: null };
+	let cleanup: (() => Promise<void>) | null = null;
 
-  const performCleanup = async () => {
-    if (cleanup) {
-      await cleanup();
-      cleanup = null;
-    }
-  };
+	const performCleanup = async () => {
+		if (cleanup) {
+			await cleanup();
+			cleanup = null;
+		}
+	};
 
-  (async () => {
-    await performCleanup();
+	// Apply CORS headers to ALL responses (including static files)
+	devServer.app.use((req: any, res: any, next: any) => {
+		applyCorsHeaders(res);
+		next();
+	});
 
-    try {
-      const { createPluginRuntime } = await import('every-plugin');
-      const { RPCHandler } = await import('@orpc/server/fetch');
-      const { OpenAPIHandler } = await import('@orpc/openapi/fetch');
-      const { OpenAPIReferencePlugin } = await import('@orpc/openapi/plugins');
-      const { ZodToJsonSchemaConverter } = await import('@orpc/zod/zod4');
-      const { onError } = await import('every-plugin/orpc');
-      const { formatORPCError } = await import('every-plugin/errors');
+	// Serve mf-manifest.json immediately (don't wait for async plugin init)
+	devServer.app.get("/mf-manifest.json", (req: any, res: any) => {
+		applyCorsHeaders(res);
+		const context = devServer.compiler?.options?.context || process.cwd();
+		const manifestPath = path.join(context, "dist", "mf-manifest.json");
 
+		try {
+			const manifest = fs.readFileSync(manifestPath, "utf-8");
+			res.setHeader("Content-Type", "application/json");
+			res.send(manifest);
+		} catch (err: any) {
+			console.error("[MF Manifest] Error serving manifest:", err.message);
+			res.status(404).json({
+				error: "Manifest not found",
+				path: manifestPath,
+				context: context,
+			});
+		}
+	});
 
-      const pluginId = devConfig?.pluginId || pluginInfo.normalizedName;
+	(async () => {
+		await performCleanup();
 
-      const runtime = createPluginRuntime({
-        registry: {
-          [pluginId]: {
-            remote: `http://localhost:${port}/remoteEntry.js`
-          }
-        }
-      });
+		try {
+			const { createPluginRuntime } = await import("every-plugin");
+			const { RPCHandler } = await import("@orpc/server/fetch");
+			const { OpenAPIHandler } = await import("@orpc/openapi/fetch");
+			const { OpenAPIReferencePlugin } = await import("@orpc/openapi/plugins");
+			const { ZodToJsonSchemaConverter } = await import("@orpc/zod/zod4");
+			const { onError } = await import("every-plugin/orpc");
+			const { formatORPCError } = await import("every-plugin/errors");
 
-      // @ts-expect-error we don't know the plugin id
-      const loaded = await runtime.usePlugin(pluginId, devConfig?.config);
+			const pluginId = devConfig?.pluginId || pluginInfo.normalizedName;
 
-      cleanup = async () => {
-        if (loaded && typeof (loaded as any).dispose === 'function') {
-          await (loaded as any).dispose();
-        }
-        if (runtime && typeof (runtime as any).cleanup === 'function') {
-          await (runtime as any).cleanup();
-        }
-        handlers.rpc = null;
-        handlers.api = null;
-        if (devServer.app.locals.handlers) {
-          devServer.app.locals.handlers = null;
-        }
-      };
+			const runtime = createPluginRuntime({
+				registry: {
+					[pluginId]: {
+						remote: `http://localhost:${port}/remoteEntry.js`,
+					},
+				},
+			});
 
-      handlers.rpc = new RPCHandler(loaded.router, {
-        interceptors: [
-          onError((error: any) => {
-            formatORPCError(error);
-          }),
-        ]
-      });
+			// @ts-expect-error we don't know the plugin id
+			const loaded = await runtime.usePlugin(pluginId, devConfig?.config);
 
-      handlers.api = new OpenAPIHandler(loaded.router, {
-        plugins: [
-          new OpenAPIReferencePlugin({
-            schemaConverters: [new ZodToJsonSchemaConverter()],
-          }),
-        ],
-        interceptors: [
-          onError((error: any) => {
-            formatORPCError(error);
-          }),
-        ]
-      });
+			cleanup = async () => {
+				if (loaded && typeof (loaded as any).dispose === "function") {
+					await (loaded as any).dispose();
+				}
+				if (runtime && typeof (runtime as any).cleanup === "function") {
+					await (runtime as any).cleanup();
+				}
+				handlers.rpc = null;
+				handlers.api = null;
+				if (devServer.app.locals.handlers) {
+					devServer.app.locals.handlers = null;
+				}
+			};
 
-      console.log(`╭─────────────────────────────────────────────`);
-      console.log(`│  ✅ Plugin dev server ready: `);
-      console.log(`├─────────────────────────────────────────────`);
-      console.log(`│  📡 RPC:    http://localhost:${port}/api/rpc${rpcPrefix}`);
-      console.log(`│  📖 Docs:   http://localhost:${port}/api`);
-      console.log(`│  💚 Health: http://localhost:${port}/`);
-      console.log(`╰─────────────────────────────────────────────`);
+			handlers.rpc = new RPCHandler(loaded.router, {
+				interceptors: [
+					onError((error: any) => {
+						formatORPCError(error);
+					}),
+				],
+			});
 
-      devServer.app.locals.handlers = handlers;
+			handlers.api = new OpenAPIHandler(loaded.router, {
+				plugins: [
+					new OpenAPIReferencePlugin({
+						schemaConverters: [new ZodToJsonSchemaConverter()],
+					}),
+				],
+				interceptors: [
+					onError((error: any) => {
+						formatORPCError(error);
+					}),
+				],
+			});
 
-      if (devServer.server) {
-        devServer.server.once('close', async () => {
-          await performCleanup();
-        });
-      }
-    } catch (error) {
-      console.error('❌ Failed to load plugin:', error);
-      await performCleanup();
-    }
-  })();
+			console.log(`╭─────────────────────────────────────────────`);
+			console.log(`│  ✅ Plugin dev server ready: `);
+			console.log(`├─────────────────────────────────────────────`);
+			console.log(`│  📡 RPC:    http://localhost:${port}/api/rpc${rpcPrefix}`);
+			console.log(`│  📖 Docs:   http://localhost:${port}/api`);
+			console.log(`│  💚 Health: http://localhost:${port}/`);
+			console.log(`╰─────────────────────────────────────────────`);
 
-  process.once('SIGINT', async () => {
-    await performCleanup();
-  });
-  process.once('SIGTERM', async () => {
-    await performCleanup();
-  });
+			devServer.app.locals.handlers = handlers;
 
-  devServer.app.options('*', (req: any, res: any) => {
-    applyCorsHeaders(res);
-    res.status(200).end();
-  });
+			if (devServer.server) {
+				devServer.server.once("close", async () => {
+					await performCleanup();
+				});
+			}
+		} catch (error) {
+			console.error("❌ Failed to load plugin:", error);
+			await performCleanup();
+		}
+	})();
 
-  devServer.app.get('/', (req: any, res: any) => {
-    applyCorsHeaders(res);
-    res.json({
-      ok: true,
-      plugin: pluginInfo.normalizedName,
-      version: pluginInfo.version,
-      status: devServer.app.locals.handlers?.rpc ? 'ready' : 'loading',
-      endpoints: {
-        health: '/',
-        docs: '/api',
-        rpc: `/api/rpc${rpcPrefix}`
-      }
-    });
-  });
+	process.once("SIGINT", async () => {
+		await performCleanup();
+	});
+	process.once("SIGTERM", async () => {
+		await performCleanup();
+	});
 
-  // OpenAPI documentation and REST endpoints at /api and /api/*
-  const handleApiRequest = async (req: any, res: any) => {
-    applyCorsHeaders(res);
-    const apiHandler = devServer.app.locals.handlers?.api;
-    if (!apiHandler) {
-      return res.status(503).json({ error: 'Plugin still loading...' });
-    }
+	devServer.app.options("*", (req: any, res: any) => {
+		applyCorsHeaders(res);
+		res.status(200).end();
+	});
 
-    try {
-      const url = `http://${req.headers.host}${req.url}`;
-      const webRequest = new Request(url, {
-        method: req.method,
-        headers: req.headers,
-        body: req.method !== 'GET' && req.method !== 'HEAD' ? req : undefined,
-        duplex: req.method !== 'GET' && req.method !== 'HEAD' ? 'half' : undefined
-      } as RequestInit);
+	devServer.app.get("/", (req: any, res: any) => {
+		applyCorsHeaders(res);
+		res.json({
+			ok: true,
+			plugin: pluginInfo.normalizedName,
+			version: pluginInfo.version,
+			status: devServer.app.locals.handlers?.rpc ? "ready" : "loading",
+			endpoints: {
+				health: "/",
+				docs: "/api",
+				rpc: `/api/rpc${rpcPrefix}`,
+			},
+		});
+	});
 
-      const result = await apiHandler.handle(webRequest, {
-        prefix: '/api',
-        context: {}
-      });
+	// OpenAPI documentation and REST endpoints at /api and /api/*
+	const handleApiRequest = async (req: any, res: any) => {
+		applyCorsHeaders(res);
+		const apiHandler = devServer.app.locals.handlers?.api;
+		if (!apiHandler) {
+			return res.status(503).json({ error: "Plugin still loading..." });
+		}
 
-      if (result.response) {
-        res.status(result.response.status);
-        result.response.headers.forEach((value: string, key: string) => {
-          res.setHeader(key, value);
-        });
-        const text = await result.response.text();
-        res.send(text);
-      } else {
-        res.status(404).send('Not Found');
-      }
-    } catch (error) {
-      console.error('OpenAPI error:', error);
-      res.status(500).json({ error: (error as Error).message });
-    }
-  };
+		try {
+			const url = `http://${req.headers.host}${req.url}`;
+			const webRequest = new Request(url, {
+				method: req.method,
+				headers: req.headers,
+				body: req.method !== "GET" && req.method !== "HEAD" ? req : undefined,
+				duplex:
+					req.method !== "GET" && req.method !== "HEAD" ? "half" : undefined,
+			} as RequestInit);
 
-  devServer.app.all(`/api/rpc${rpcPrefix}/*`, async (req: any, res: any) => {
-    applyCorsHeaders(res);
-    const rpcHandler = devServer.app.locals.handlers?.rpc;
-    if (!rpcHandler) {
-      return res.status(503).json({ error: 'Plugin still loading...' });
-    }
+			const result = await apiHandler.handle(webRequest, {
+				prefix: "/api",
+				context: {},
+			});
 
-    try {
-      const url = `http://${req.headers.host}${req.url}`;
-      const webRequest = new Request(url, {
-        method: req.method,
-        headers: req.headers,
-        body: req.method !== 'GET' && req.method !== 'HEAD' ? req : undefined,
-        duplex: req.method !== 'GET' && req.method !== 'HEAD' ? 'half' : undefined
-      } as RequestInit);
+			if (result.response) {
+				res.status(result.response.status);
+				result.response.headers.forEach((value: string, key: string) => {
+					res.setHeader(key, value);
+				});
+				const text = await result.response.text();
+				res.send(text);
+			} else {
+				res.status(404).send("Not Found");
+			}
+		} catch (error) {
+			console.error("OpenAPI error:", error);
+			res.status(500).json({ error: (error as Error).message });
+		}
+	};
 
-      const result = await rpcHandler.handle(webRequest, {
-        prefix: `/api/rpc${rpcPrefix}`,
-        context: {}
-      });
+	devServer.app.all(`/api/rpc${rpcPrefix}/*`, async (req: any, res: any) => {
+		applyCorsHeaders(res);
+		const rpcHandler = devServer.app.locals.handlers?.rpc;
+		if (!rpcHandler) {
+			return res.status(503).json({ error: "Plugin still loading..." });
+		}
 
-      if (result.response) {
-        res.status(result.response.status);
-        result.response.headers.forEach((value: string, key: string) => {
-          res.setHeader(key, value);
-        });
-        const text = await result.response.text();
-        res.send(text);
-      } else {
-        res.status(404).send('Not Found');
-      }
-    } catch (error) {
-      console.error('RPC error:', error);
-      res.status(500).json({ error: (error as Error).message });
-    }
-  });
+		try {
+			const url = `http://${req.headers.host}${req.url}`;
+			const webRequest = new Request(url, {
+				method: req.method,
+				headers: req.headers,
+				body: req.method !== "GET" && req.method !== "HEAD" ? req : undefined,
+				duplex:
+					req.method !== "GET" && req.method !== "HEAD" ? "half" : undefined,
+			} as RequestInit);
 
-  devServer.app.all('/api', handleApiRequest);
-  devServer.app.all('/api/*', handleApiRequest);
+			const result = await rpcHandler.handle(webRequest, {
+				prefix: `/api/rpc${rpcPrefix}`,
+				context: {},
+			});
+
+			if (result.response) {
+				res.status(result.response.status);
+				result.response.headers.forEach((value: string, key: string) => {
+					res.setHeader(key, value);
+				});
+				const text = await result.response.text();
+				res.send(text);
+			} else {
+				res.status(404).send("Not Found");
+			}
+		} catch (error) {
+			console.error("RPC error:", error);
+			res.status(500).json({ error: (error as Error).message });
+		}
+	});
+
+	devServer.app.all("/api", handleApiRequest);
+	devServer.app.all("/api/*", handleApiRequest);
 }

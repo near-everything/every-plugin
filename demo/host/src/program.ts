@@ -27,6 +27,39 @@ import { PluginsService } from "./services/plugins";
 import { createRouter } from "./services/router";
 import { logger } from "./utils/logger";
 
+type StartFetch = (req: Request) => Promise<Response>;
+
+let startFetchPromise: Promise<StartFetch> | null = null;
+
+async function getStartFetch(): Promise<StartFetch> {
+	if (startFetchPromise) return startFetchPromise;
+	startFetchPromise = (async () => {
+		// The TanStack Start SSR entry is emitted by rsbuild into dist/server/server.js.
+		// We load it dynamically so `bos dev` can run `rsbuild build && tsx server.ts`.
+		const url = new URL("../dist/server/server.js", import.meta.url);
+		const mod: any = await import(url.href);
+
+		// CJS interop: importing module.exports yields `default`.
+		const exported: any = mod?.default ?? mod;
+		// Rspack SSR bundle exports { default: { fetch }, createServerEntry }.
+		const entry: any = exported?.fetch
+			? exported
+			: (exported?.default ?? exported);
+		const fetchFn: any = entry?.fetch;
+		if (typeof fetchFn !== "function") {
+			throw new Error(
+				"TanStack Start SSR entry did not export a fetch handler (expected default.fetch)",
+			);
+		}
+		return fetchFn as StartFetch;
+	})();
+	return startFetchPromise;
+}
+
+// ============================================================================
+// Error Handling
+// ============================================================================
+
 function extractErrorDetails(error: unknown): {
 	message: string;
 	stack?: string;
@@ -84,6 +117,10 @@ function extractErrorDetails(error: unknown): {
 
 	return { message: String(error) };
 }
+
+// ============================================================================
+// API Routes
+// ============================================================================
 
 export async function proxyRequest(
 	req: Request,
@@ -248,109 +285,11 @@ function setupApiRoutes(
 	app.all("/api/*", (c: Context) => handleOrpc(c, apiHandler, "/api"));
 }
 
-// HTML shell with proper Module Federation initialization
-function createHtmlShell(
-	assetsUrl: string,
-	runtimeConfig: Record<string, unknown>,
-): string {
-	return `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Everything Dev</title>
-    <style>
-      body { 
-        margin: 0; 
-        font-family: system-ui, -apple-system, sans-serif;
-        background: #171717; 
-        color: #fafafa; 
-        min-height: 100vh;
-      }
-      #root {
-        min-height: 100vh;
-      }
-    </style>
-    <script>
-      window.__RUNTIME_CONFIG__ = ${JSON.stringify(runtimeConfig)};
-    </script>
-  </head>
-  <body>
-    <div id="root">
-      <div style="display:flex;align-items:center;justify-content:center;height:100vh;">
-        <div id="loading-text">Loading...</div>
-      </div>
-    </div>
-    <script>
-      // Initialize Module Federation runtime and load UI
-      (async () => {
-        const loadingText = document.getElementById('loading-text');
-        
-        try {
-          // Load the remote entry script dynamically to ensure proper initialization
-          const remoteEntryUrl = '${assetsUrl}/remoteEntry.js';
-          
-          // Create script element for remoteEntry
-          const script = document.createElement('script');
-          script.src = remoteEntryUrl;
-          script.type = 'text/javascript';
-          
-          // Wait for script to load
-          await new Promise((resolve, reject) => {
-            script.onload = resolve;
-            script.onerror = () => reject(new Error('Failed to load remoteEntry.js'));
-            document.head.appendChild(script);
-          });
-          
-          // Give MF runtime a moment to initialize
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Try to load the remote routes
-          let attempts = 0;
-          const maxAttempts = 10;
-          let remote;
-          
-          while (attempts < maxAttempts) {
-            try {
-              remote = await import('ui/Routes');
-              break;
-            } catch (err) {
-              attempts++;
-              if (attempts >= maxAttempts) throw err;
-              await new Promise(resolve => setTimeout(resolve, 200));
-            }
-          }
-          
-          if (remote && remote.routeTree) {
-            console.log('[Host] Remote UI loaded successfully:', remote);
-            loadingText.textContent = 'UI Loaded - Starting App...';
-            
-            // The routes are now available, the actual rendering would happen here
-            // For now, just show success message
-            setTimeout(() => {
-              loadingText.textContent = 'Everything Dev is running!';
-            }, 500);
-          } else {
-            throw new Error('Remote does not export routeTree');
-          }
-          
-        } catch (err) {
-          console.error('[Host] Failed to load remote UI:', err);
-          document.getElementById('root').innerHTML = 
-            '<div style="padding:2rem;text-align:center;">' +
-            '<h2>Failed to load UI</h2>' +
-            '<p>' + err.message + '</p>' +
-            '<p>Please check that the UI server is running at: ' + window.__RUNTIME_CONFIG__.assetsUrl + '</p>' +
-            '<button onclick="location.reload()" style="margin-top:1rem;padding:0.5rem 1rem;cursor:pointer;">Retry</button>' +
-            '</div>';
-        }
-      })();
-    </script>
-  </body>
-</html>`;
-}
+// ============================================================================
+// Server Creation
+// ============================================================================
 
-export const createStartServer = (onReady?: () => void) =>
+export const createApiServer = (onReady?: () => void) =>
 	Effect.gen(function* () {
 		const port = Number(process.env.PORT) || 3000;
 		const isDev = process.env.NODE_ENV !== "production";
@@ -401,28 +340,36 @@ export const createStartServer = (onReady?: () => void) =>
 		}
 
 		// Static files in production
-		if (!isDev) {
-			app.use("/static/*", serveStatic({ root: "./dist" }));
-			app.use("/favicon.ico", serveStatic({ root: "./dist" }));
-			app.use("/icon.svg", serveStatic({ root: "./dist" }));
-			app.use("/manifest.json", serveStatic({ root: "./dist" }));
-			app.use("/robots.txt", serveStatic({ root: "./dist" }));
-		}
+		// Serve TanStack Start client assets (dev + prod)
+		// rsbuild output layout is dist/client/*
+		app.use("/static/*", serveStatic({ root: "./dist/client" }));
+		app.use("/favicon.ico", serveStatic({ root: "./dist/client" }));
+		app.use("/icon.svg", serveStatic({ root: "./dist/client" }));
+		app.use("/manifest.json", serveStatic({ root: "./dist/client" }));
+		app.use("/robots.txt", serveStatic({ root: "./dist/client" }));
+		app.use(
+			"/tanstack-start-manifest.json",
+			serveStatic({ root: "./dist/client" }),
+		);
 
-		// Serve HTML shell for all non-API routes
-		app.get("*", async (c: Context) => {
-			const { env, account } = config;
-			const assetsUrl = config.ui.url;
-
-			const runtimeConfig = {
-				env,
-				account,
-				assetsUrl,
-				apiBase: "/api",
-				rpcBase: "/api/rpc",
-			};
-
-			return c.html(createHtmlShell(assetsUrl, runtimeConfig));
+		// Mount TanStack Start SSR handler for all non-API routes.
+		// This makes http://localhost:3000/ render HTML in dev.
+		app.notFound(async (c: Context) => {
+			// Be defensive in case any routing changes.
+			if (c.req.path.startsWith("/api") || c.req.path === "/health") {
+				return c.text("Not Found", 404);
+			}
+			try {
+				const startFetch = await getStartFetch();
+				const res = await startFetch(c.req.raw);
+				return c.newResponse(res.body, res);
+			} catch (err) {
+				const details = extractErrorDetails(err);
+				logger.error(`[SSR] Failed to render ${c.req.method} ${c.req.path}`);
+				logger.error(`[SSR] ${details.message}`);
+				if (details.stack) logger.error(details.stack);
+				return c.json({ error: "SSR failed", message: details.message }, 500);
+			}
 		});
 
 		const startHttpServer = () => {
@@ -459,6 +406,10 @@ export const createStartServer = (onReady?: () => void) =>
 		yield* Effect.never;
 	});
 
+// ============================================================================
+// Server Lifecycle
+// ============================================================================
+
 export interface ServerInput {
 	config: RuntimeConfig;
 }
@@ -491,7 +442,7 @@ export const runServer = (input: ServerInput): ServerHandle => {
 
 		const fiber = yield* Effect.forkDaemon(
 			Effect.scoped(
-				createStartServer(() => Deferred.unsafeDone(readyDeferred, Exit.void)),
+				createApiServer(() => Deferred.unsafeDone(readyDeferred, Exit.void)),
 			),
 		);
 
