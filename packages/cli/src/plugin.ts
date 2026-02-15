@@ -681,96 +681,360 @@ export default createPlugin({
 			}
 		}),
 
-		create: builder.create.handler(async (input) => {
-			const { execa } = await import("execa");
+		create: builder.create.handler(async ({ input }) => {
 			const { join } = await import("path");
+			const { mkdir, stat, rm, writeFile } = await import("fs/promises");
+			const { Graph } = await import("near-social-js");
 
-			// Use config ports if available, otherwise defaults
-			const ports = deps.bosConfig?.app
-				? {
-						host: parsePort(deps.bosConfig.app.host.development),
-						ui: deps.bosConfig.app.ui
-							? parsePort((deps.bosConfig.app.ui as RemoteConfig).development)
-							: 3002,
-						api: deps.bosConfig.app.api
-							? parsePort((deps.bosConfig.app.api as RemoteConfig).development)
-							: 3014,
-					}
-				: { host: 3000, ui: 3002, api: 3014 };
-
-			const DEFAULT_TEMPLATES: Record<string, string> = {
-				project: "near-everything/every-plugin/demo",
-				ui: "near-everything/every-plugin/demo/ui",
-				api: "near-everything/every-plugin/demo/api",
-				host: "near-everything/every-plugin/demo/host",
-				gateway: "near-everything/every-plugin/demo/gateway",
-			};
-
-			const getTemplate = (): string => {
-				if (input.template) return input.template;
-				if (input.type === "project") {
-					return deps.bosConfig?.template || DEFAULT_TEMPLATES.project;
+			// Parse GitHub template format: owner/repo/subdir or owner/repo
+			function parseTemplate(template: string): {
+				owner: string;
+				repo: string;
+				subdir: string;
+			} {
+				const parts = template.split("/");
+				if (parts.length < 2) {
+					throw new Error(
+						`Invalid template format: ${template}. Expected: owner/repo or owner/repo/subdir`,
+					);
 				}
-				const appConfig = deps.bosConfig?.app[input.type] as
-					| { template?: string }
-					| undefined;
-				return appConfig?.template || DEFAULT_TEMPLATES[input.type];
-			};
+				const owner = parts[0];
+				const repo = parts[1];
+				const subdir = parts.slice(2).join("/");
+				return { owner, repo, subdir };
+			}
 
-			const template = getTemplate();
-			const dest = input.type === "project" ? input.name! : input.type;
+			// Fetch parent BOS config from Near Social
+			async function fetchParentConfig(templateUrl: string) {
+				const match = templateUrl.match(/^bos:\/\/([^/]+)\/(.+)$/);
+				if (!match) throw new Error("Invalid template URL format");
+				const [, account, gateway] = match;
+
+				const graph = new Graph();
+				const configPath = `${account}/bos/gateways/${gateway}/bos.config.json`;
+				const data = await graph.get({ keys: [configPath] });
+
+				if (!data) return null;
+
+				const parts = configPath.split("/");
+				let current: unknown = data;
+				for (const part of parts) {
+					if (current && typeof current === "object" && part in current) {
+						current = (current as Record<string, unknown>)[part];
+					} else {
+						return null;
+					}
+				}
+
+				return typeof current === "string" ? JSON.parse(current) : null;
+			}
+
+			// Generate .env.example with secrets from parent config
+			async function generateEnvExample(parentConfig: any): Promise<string> {
+				const lines: string[] = [
+					"# Environment Variables",
+					"# Copy this file to .env and fill in your values",
+					"",
+				];
+
+				// Add host secrets
+				if (parentConfig?.app?.host?.secrets?.length > 0) {
+					lines.push("# Host Secrets (from template)");
+					for (const secret of parentConfig.app.host.secrets) {
+						lines.push(`${secret}=`);
+					}
+					lines.push("");
+				}
+
+				// Add API secrets
+				if (parentConfig?.app?.api?.secrets?.length > 0) {
+					lines.push("# API Secrets (from template)");
+					for (const secret of parentConfig.app.api.secrets) {
+						lines.push(`${secret}=`);
+					}
+					lines.push("");
+				}
+
+				lines.push("# Zephyr Cloud (for deployment)");
+				lines.push("ZE_SERVER_TOKEN=");
+				lines.push("ZE_USER_EMAIL=");
+				lines.push("");
+				lines.push("# NEAR (optional - for automated publishing)");
+				lines.push("# NEAR_PRIVATE_KEY=ed25519:...");
+
+				return lines.join("\n");
+			}
+
+			// Clone template using degit
+			async function cloneTemplate(
+				gitTemplate: string,
+				destDir: string,
+				packages: string[],
+			): Promise<void> {
+				const { owner, repo, subdir } = parseTemplate(gitTemplate);
+				const baseTemplate = subdir
+					? `${owner}/${repo}/${subdir}`
+					: `${owner}/${repo}`;
+
+				// Import degit
+				const { default: degit } = await import("degit");
+
+				// Clone packages
+				for (const pkg of packages) {
+					const pkgTemplate = `${baseTemplate}/${pkg}`;
+					const pkgDest = join(destDir, pkg);
+
+					const emitter = degit(pkgTemplate, {
+						cache: false,
+						force: true,
+						verbose: false,
+					});
+
+					await emitter.clone(pkgDest);
+				}
+
+				// Clone root files (using demo directory or root)
+				const rootTemplate = baseTemplate;
+				const rootEmitter = degit(rootTemplate, {
+					cache: false,
+					force: true,
+					verbose: false,
+				});
+
+				await rootEmitter.clone(destDir);
+			}
+
+			// Verify template exists on GitHub
+			async function verifyTemplate(gitTemplate: string): Promise<boolean> {
+				try {
+					const { owner, repo } = parseTemplate(gitTemplate);
+					const { execa } = await import("execa");
+					await execa(
+						"git",
+						["ls-remote", `https://github.com/${owner}/${repo}.git`, "HEAD"],
+						{
+							timeout: 10000,
+						},
+					);
+					return true;
+				} catch {
+					return false;
+				}
+			}
+
+			// Default template URL
+			const DEFAULT_TEMPLATE = "bos://every.near/everything.dev";
+			const templateUrl = input.template || DEFAULT_TEMPLATE;
+
+			// Get project name
+			let projectName = input.name || "";
+
+			// Interactive prompts if needed
+			const hasAllRequiredArgs = input.account && projectName;
+			const usePrompts = !hasAllRequiredArgs;
+
+			let account = input.account || "";
+			let testnet = input.testnet || "";
+			let includeHost = input.includeHost || false;
+			let includeGateway = input.includeGateway || false;
+
+			if (usePrompts) {
+				// Import prompts dynamically
+				const { input: inquirerInput, confirm } = await import(
+					"@inquirer/prompts"
+				);
+
+				if (!projectName) {
+					projectName = await inquirerInput({
+						message: "Project name:",
+						validate: (val) => val.length > 0 || "Project name is required",
+					});
+				}
+
+				if (!account) {
+					account = await inquirerInput({
+						message: "NEAR account (e.g., myname.near):",
+						default: `${projectName}.near`,
+						validate: (val) =>
+							val.includes(".near") || "Must be a valid NEAR account",
+					});
+				}
+
+				const testnetInput = await inquirerInput({
+					message: "Testnet account (optional, press Enter to skip):",
+					default: "",
+				});
+				testnet = testnetInput || "";
+
+				includeHost = await confirm({
+					message:
+						"Include host package locally? (No = use remote from everything.dev)",
+					default: false,
+				});
+
+				includeGateway = await confirm({
+					message:
+						"Include gateway package locally? (No = use remote from everything.dev)",
+					default: false,
+				});
+			}
+
+			const destDir = join(process.cwd(), projectName);
 
 			try {
-				await execa("npx", ["degit", template, dest], { stdio: "inherit" });
-
-				if (input.type === "project" && input.name) {
-					const newConfig = {
-						account: `${input.name}.near`,
-						template: DEFAULT_TEMPLATES.project,
-						gateway: {
-							development: "http://localhost:8787",
-							production: `https://gateway.${input.name}.example.com`,
-						},
-						app: {
-							host: {
-								title: input.name,
-								description: `${input.name} BOS application`,
-								development: `http://localhost:${ports.host}`,
-								production: `https://${input.name}.example.com`,
-							},
-							ui: {
-								name: "ui",
-								development: `http://localhost:${ports.ui}`,
-								production: "",
-								exposes: {
-									App: "./App",
-									components: "./components",
-									providers: "./providers",
-									types: "./types",
-								},
-							},
-							api: {
-								name: "api",
-								development: `http://localhost:${ports.api}`,
-								production: "",
-								variables: {},
-								secrets: [],
-							},
-						},
+				// Check if directory already exists
+				try {
+					await stat(destDir);
+					return {
+						status: "error" as const,
+						path: projectName,
+						error: `Directory ${projectName} already exists`,
 					};
+				} catch {
+					// Directory doesn't exist, continue
+				}
 
-					const configPath = join(dest, "bos.config.json");
-					await Bun.write(configPath, JSON.stringify(newConfig, null, 2));
+				// Fetch parent BOS config to get templates
+				const parentConfig = await fetchParentConfig(templateUrl);
+				if (!parentConfig) {
+					return {
+						status: "error" as const,
+						path: projectName,
+						error: `Failed to fetch parent config from ${templateUrl}`,
+					};
+				}
+
+				// Get GitHub template from parent config
+				const gitTemplate =
+					parentConfig.template || "near-everything/every-plugin/demo";
+
+				// Verify template exists
+				const templateExists = await verifyTemplate(gitTemplate);
+				if (!templateExists) {
+					return {
+						status: "error" as const,
+						path: projectName,
+						error: `Template not found: ${gitTemplate}`,
+					};
+				}
+
+				// Determine which packages to clone
+				const packagesToClone = ["api", "ui"];
+				if (includeHost) packagesToClone.push("host");
+				if (includeGateway) packagesToClone.push("gateway");
+
+				// Clone template using sparse checkout
+				await cloneTemplate(gitTemplate, destDir, packagesToClone);
+
+				// Remove excluded files/directories
+				const excludedPaths = [
+					"database.db",
+					".bos",
+					".turbo",
+					".env",
+					".env.bos",
+					".env.bos.example",
+				];
+
+				// Add host/gateway to exclusions if not requested
+				if (!includeHost) excludedPaths.push("host");
+				if (!includeGateway) excludedPaths.push("gateway");
+
+				for (const excluded of excludedPaths) {
+					try {
+						await rm(join(destDir, excluded), { recursive: true, force: true });
+					} catch {
+						// Ignore errors
+					}
+				}
+
+				// Generate bos.config.json
+				const bosConfig: Record<string, unknown> = {
+					extends: templateUrl,
+					account: account,
+					app: {
+						ui: {
+							name: "ui",
+							development: "http://localhost:3002",
+						},
+						api: {
+							name: "api",
+							development: "http://localhost:3014",
+							variables: {},
+							secrets: [],
+						},
+					},
+				};
+
+				// Only add testnet if provided
+				if (testnet) {
+					bosConfig.testnet = testnet;
+				}
+
+				await writeFile(
+					join(destDir, "bos.config.json"),
+					JSON.stringify(bosConfig, null, 2),
+				);
+
+				// Generate .env.example with secrets from parent config
+				const envExample = await generateEnvExample(parentConfig);
+				await writeFile(join(destDir, ".env.example"), envExample);
+
+				// Modify package.json to update workspaces
+				try {
+					const pkgJsonPath = join(destDir, "package.json");
+					const pkgJsonContent = await Bun.file(pkgJsonPath).text();
+					const pkgJson = JSON.parse(pkgJsonContent);
+
+					// Update workspaces to only include cloned packages
+					pkgJson.workspaces.packages = packagesToClone;
+
+					// Remove host/gateway scripts if not included
+					if (!includeHost) {
+						delete pkgJson.scripts["dev:host"];
+						delete pkgJson.scripts["build:host"];
+					}
+					if (!includeGateway) {
+						delete pkgJson.scripts["docker:build"];
+						delete pkgJson.scripts["docker:run"];
+						delete pkgJson.scripts["docker:stop"];
+					}
+
+					await writeFile(pkgJsonPath, JSON.stringify(pkgJson, null, 2));
+				} catch {
+					// Package.json might not exist, skip
+				}
+
+				// Run sync to update dependencies
+				try {
+					const { syncFiles } = await import("./lib/sync");
+					const catalog = parentConfig.shared?.ui || {};
+					await syncFiles({
+						configDir: destDir,
+						packages: packagesToClone,
+						bosConfig: parentConfig,
+						catalog,
+					});
+				} catch {
+					// Sync might fail, continue anyway
 				}
 
 				return {
 					status: "created" as const,
-					path: dest,
+					path: projectName,
 				};
-			} catch {
+			} catch (error) {
+				// Cleanup on error
+				try {
+					await rm(destDir, { recursive: true, force: true });
+				} catch {
+					// Ignore cleanup errors
+				}
+
 				return {
 					status: "error" as const,
-					path: dest,
+					path: projectName,
+					error: error instanceof Error ? error.message : "Unknown error",
 				};
 			}
 		}),

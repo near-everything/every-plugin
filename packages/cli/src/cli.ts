@@ -15,7 +15,7 @@ function getHelpHeader(config: BosConfig | null, configPath: string): string {
 	lines.push("");
 	lines.push(colors.cyan(frames.top(52)));
 	lines.push(
-		`  ${icons.config} ${gradients.cyber("BOS CLI")} ${colors.dim(`v${version}`)}`,
+		`  ${icons.config} ${gradients.cyber("everything-dev")} ${colors.dim(`v${version}`)}`,
 	);
 	lines.push(colors.cyan(frames.bottom(52)));
 	lines.push("");
@@ -78,7 +78,7 @@ async function main() {
 		}
 	}
 
-	printBanner("BOS CLI");
+	printBanner("everything-dev", version);
 
 	const runtime = createPluginRuntime({
 		registry: {
@@ -510,30 +510,59 @@ Zephyr Configuration:
 		.command("project")
 		.description("Create a new BOS project")
 		.argument("<name>", "Project name")
-		.option("-t, --template <url>", "Template URL")
-		.action(async (name: string, options: { template?: string }) => {
-			const result = await client.create({
-				type: "project",
-				name,
-				template: options.template,
-			});
+		.option(
+			"-a, --account <account>",
+			"NEAR mainnet account (e.g., myname.near)",
+		)
+		.option("--testnet <account>", "NEAR testnet account (optional)")
+		.option(
+			"-t, --template <url>",
+			"Template BOS URL (default: bos://every.near/everything.dev)",
+		)
+		.option("--include-host", "Include host package locally")
+		.option("--include-gateway", "Include gateway package locally")
+		.action(
+			async (
+				name: string,
+				options: {
+					account?: string;
+					testnet?: string;
+					template?: string;
+					includeHost?: boolean;
+					includeGateway?: boolean;
+				},
+			) => {
+				const result = await client.create({
+					type: "project",
+					name,
+					account: options.account,
+					testnet: options.testnet,
+					template: options.template,
+					includeHost: options.includeHost,
+					includeGateway: options.includeGateway,
+				});
 
-			if (result.status === "error") {
-				console.error(colors.error(`${icons.err} Failed to create project`));
-				process.exit(1);
-			}
+				if (result.status === "error") {
+					console.error(colors.error(`${icons.err} Failed to create project`));
+					if (result.error) {
+						console.error(colors.dim(`  ${result.error}`));
+					}
+					process.exit(1);
+				}
 
-			console.log();
-			console.log(
-				colors.green(`${icons.ok} Created project at ${result.path}`),
-			);
-			console.log();
-			console.log(colors.dim("  Next steps:"));
-			console.log(`  ${colors.dim("1.")} cd ${result.path}`);
-			console.log(`  ${colors.dim("2.")} bun install`);
-			console.log(`  ${colors.dim("3.")} bun bos dev`);
-			console.log();
-		});
+				console.log();
+				console.log(
+					colors.green(`${icons.ok} Created project at ${result.path}`),
+				);
+				console.log();
+				console.log(colors.dim("  Next steps:"));
+				console.log(`  ${colors.dim("1.")} cd ${result.path}`);
+				console.log(`  ${colors.dim("2.")} bun install`);
+				console.log(`  ${colors.dim("3.")} cp .env.example .env`);
+				console.log(`  ${colors.dim("4.")} bos dev`);
+				console.log();
+			},
+		);
 
 	create
 		.command("ui")
@@ -562,21 +591,6 @@ Zephyr Configuration:
 
 			if (result.status === "created") {
 				console.log(colors.green(`${icons.ok} Created API at ${result.path}`));
-			}
-		});
-
-	create
-		.command("host")
-		.description("Scaffold a new host")
-		.option("-t, --template <url>", "Template URL")
-		.action(async (options: { template?: string }) => {
-			const result = await client.create({
-				type: "host",
-				template: options.template,
-			});
-
-			if (result.status === "created") {
-				console.log(colors.green(`${icons.ok} Created host at ${result.path}`));
 			}
 		});
 
