@@ -1,47 +1,47 @@
 {
-	"name": "api",
-	"version": "0.0.1",
-	"type": "module",
-	"exports": {
-		".": {
-			"types": "./src/index.ts",
-			"default": "./src/index.ts"
-		}
-	},
-	"peerDependencies": {
-		"typescript": "catalog:"
-	},
-	"dependencies": {
-		"@libsql/client": "catalog:",
-		"@orpc/contract": "^1.13.4",
-		"@orpc/server": "^1.13.4",
-		"drizzle-kit": "catalog:",
-		"drizzle-orm": "catalog:",
-		"near-kit": "catalog:"
-	},
-	"devDependencies": {
-		"@effect/language-service": "^0.41.1",
-		"@module-federation/node": "catalog:",
-		"@rspack/cli": "^1.6.8",
-		"@rspack/core": "^1.6.8",
-		"@types/node": "catalog:",
-		"dotenv": "^17.2.3",
-		"every-plugin": "link:every-plugin",
-		"vite-tsconfig-paths": "^5.1.4",
-		"vitest": "catalog:",
-		"zephyr-rspack-plugin": "^0.1.2"
-	},
-	"scripts": {
-		"build": "rspack build",
-		"deploy": "DEPLOY=true rspack build",
-		"dev": "rspack serve",
-		"test": "vitest run",
-		"test:watch": "vitest",
-		"coverage": "vitest run --coverage",
-		"typecheck": "tsc --noEmit",
-		"db:generate": "drizzle-kit generate",
-		"db:migrate": "drizzle-kit migrate",
-		"db:push": "drizzle-kit push",
-		"db:studio": "drizzle-kit studio"
-	}
+  "name": "api",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "peerDependencies": {
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@libsql/client": "catalog:",
+    "@orpc/contract": "^1.13.4",
+    "@orpc/server": "^1.13.4",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
+    "near-kit": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.41.1",
+    "@module-federation/node": "catalog:",
+    "@rspack/cli": "^1.6.8",
+    "@rspack/core": "^1.6.8",
+    "@types/node": "catalog:",
+    "dotenv": "^17.2.3",
+    "every-plugin": "0.9.0",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "catalog:",
+    "zephyr-rspack-plugin": "^0.1.2"
+  },
+  "scripts": {
+    "build": "rspack build",
+    "deploy": "DEPLOY=true rspack build",
+    "dev": "rspack serve",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  }
 }
