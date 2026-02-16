@@ -3,7 +3,7 @@ name: bos
 description: CLI for everything-dev Module Federation projects. Use when creating new BOS projects, publishing bos.config.json to Near Social, syncing with remote configs (every.near/everything.dev), running development servers (bos dev), or building/deploying federated apps. Deploy → publish → sync workflow for shared configuration.
 ---
 
-# BOS CLI
+# everything-dev CLI
 
 CLI for **everything-dev** Module Federation projects with runtime-loaded configuration.
 
@@ -12,6 +12,12 @@ CLI for **everything-dev** Module Federation projects with runtime-loaded config
 ```bash
 # Create new project (defaults to every.near/everything.dev template)
 bos create project my-app
+
+# Or with all arguments (no prompts)
+bos create project my-app \
+  --account myname.near \
+  --testnet myname.testnet \
+  --template bos://every.near/everything.dev
 
 # Or sync an existing project with the root template
 bos sync
@@ -65,7 +71,7 @@ bos sync --account your.near --gateway your-gateway.com
 
 | Command | Description |
 |---------|-------------|
-| `bos create project <name>` | Scaffold new project |
+| `bos create project <name>` | Scaffold new project (interactive or with args) |
 | `bos sync` | Sync from every.near/everything.dev |
 | `bos dev` | Development (auto-detects missing packages) |
 | `bos start --no-interactive` | Production mode |
@@ -74,6 +80,31 @@ bos sync --account your.near --gateway your-gateway.com
 | `bos publish` | Publish config to Near Social |
 | `bos info` | Show current configuration |
 | `bos status` | Check remote health |
+
+### Create Project Options
+
+Create a new project with interactive prompts or skip prompts using arguments:
+
+```bash
+# Interactive (prompts for account, testnet, etc.)
+bos create project my-app
+
+# Skip all prompts with arguments
+bos create project my-app \
+  --account myname.near \
+  --testnet myname.testnet \
+  --template bos://every.near/everything.dev \
+  --include-host \
+  --include-gateway
+```
+
+| Option | Description |
+|--------|-------------|
+| `-a, --account <account>` | NEAR mainnet account (e.g., myname.near) |
+| `--testnet <account>` | NEAR testnet account (optional) |
+| `-t, --template <url>` | Template BOS URL (default: bos://every.near/everything.dev) |
+| `--include-host` | Include host package locally (default: false, uses remote) |
+| `--include-gateway` | Include gateway package locally (default: false, uses remote) |
 
 ### Auto-Detection Behavior
 

@@ -27,12 +27,12 @@ import {
 	loadRouterModule,
 	type RouterModule,
 } from "./services/federation.server";
+import { PluginsService } from "./services/plugins";
+import { createRouter } from "./services/router";
 import {
 	installSsrApiClientGlobal,
 	runWithSsrApiClient,
 } from "./services/ssr-api-client";
-import { PluginsService } from "./services/plugins";
-import { createRouter } from "./services/router";
 import { logger } from "./utils/logger";
 
 function extractErrorDetails(error: unknown): {
@@ -236,9 +236,10 @@ function setupApiRoutes(
 		prefix: `/${string}`,
 	) => {
 		// Clone early so raw body can be read later even after oRPC consumes the request body.
-		const rawClone = (c.req.method === "GET" || c.req.method === "HEAD")
-			? null
-			: c.req.raw.clone();
+		const rawClone =
+			c.req.method === "GET" || c.req.method === "HEAD"
+				? null
+				: c.req.raw.clone();
 
 		const baseContext = await createRequestContext(c.req.raw, auth, db);
 		let cachedRawBody: string | null = null;
@@ -434,13 +435,6 @@ export const createStartServer = (onReady?: () => void) =>
 					: undefined;
 
 				logger.info(`[SSR] Request: ${c.req.method} ${c.req.path}`);
-				logger.info(`[SSR] ssrRouterModule exists: ${!!ssrRouterModule}`);
-				if (
-					ssrRouterModule &&
-					typeof ssrRouterModule.renderToStream === "function"
-				) {
-					logger.info(`[SSR] renderToStream is a function`);
-				}
 
 				const render = () =>
 					ssrRouterModule?.renderToStream(c.req.raw, {
@@ -458,7 +452,6 @@ export const createStartServer = (onReady?: () => void) =>
 				const result = ssrApiClient
 					? await runWithSsrApiClient(ssrApiClient, render)
 					: await render();
-				logger.info(`[SSR] Render complete, status: ${result?.statusCode}`);
 				return new Response(result?.stream, {
 					status: result?.statusCode,
 					headers: result?.headers,
