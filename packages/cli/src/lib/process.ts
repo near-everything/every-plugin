@@ -202,6 +202,7 @@ export function buildRuntimeConfig(
 					: uiConfig.development
 			}/remoteEntry.js`,
 			source: options.uiSource,
+			ssrUrl: uiConfig.ssr,
 		},
 		api: {
 			name: apiConfig.name,

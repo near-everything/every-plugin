@@ -7,32 +7,34 @@ type SessionResult = Awaited<ReturnType<Auth["api"]["getSession"]>>;
 type User = NonNullable<SessionResult>["user"];
 
 export interface RequestContext {
-  session: SessionResult;
-  user: User | null;
-  nearAccountId: string | null;
-  reqHeaders: Headers;
-  getRawBody?: () => Promise<string>;
+	session: SessionResult;
+	user: User | null;
+	nearAccountId: string | null;
+	role: string | null;
+	reqHeaders: Headers;
+	getRawBody?: () => Promise<string>;
 }
 
 export async function createRequestContext(
-  req: Request,
-  auth: Auth,
-  db: Database
+	req: Request,
+	auth: Auth,
+	db: Database,
 ): Promise<RequestContext> {
-  const session = await auth.api.getSession({ headers: req.headers });
+	const session = await auth.api.getSession({ headers: req.headers });
 
-  let nearAccountId: string | null = null;
-  if (session?.user?.id) {
-    const nearAccount = await db.query.nearAccount.findFirst({
-      where: eq(schema.nearAccount.userId, session.user.id),
-    });
-    nearAccountId = nearAccount?.accountId ?? null;
-  }
+	let nearAccountId: string | null = null;
+	if (session?.user?.id) {
+		const nearAccount = await db.query.nearAccount.findFirst({
+			where: eq(schema.nearAccount.userId, session.user.id),
+		});
+		nearAccountId = nearAccount?.accountId ?? null;
+	}
 
-  return {
-    session,
-    user: session?.user ?? null,
-    nearAccountId,
-    reqHeaders: req.headers,
-  };
+	return {
+		session,
+		user: session?.user ?? null,
+		nearAccountId,
+		role: (session?.user as { role?: string } | undefined)?.role ?? null,
+		reqHeaders: req.headers,
+	};
 }

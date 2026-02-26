@@ -6,279 +6,290 @@ import { colors, divider, frames, gradients, icons } from "../utils/theme";
 export type ProcessStatus = "pending" | "starting" | "ready" | "error";
 
 export interface ProcessState {
-  name: string;
-  status: ProcessStatus;
-  port: number;
-  message?: string;
-  source?: "local" | "remote";
-  proxyTarget?: string;
+	name: string;
+	status: ProcessStatus;
+	port: number;
+	message?: string;
+	source?: "local" | "remote";
+	proxyTarget?: string;
 }
 
 export interface LogEntry {
-  source: string;
-  line: string;
-  timestamp: number;
-  isError?: boolean;
+	source: string;
+	line: string;
+	timestamp: number;
+	isError?: boolean;
 }
 
 interface DevViewProps {
-  processes: ProcessState[];
-  logs: LogEntry[];
-  description: string;
-  proxyTarget?: string;
-  onExit?: () => void;
-  onExportLogs?: () => void;
+	processes: ProcessState[];
+	logs: LogEntry[];
+	description: string;
+	proxyTarget?: string;
+	onExit?: () => Promise<void> | void;
+	onExportLogs?: () => Promise<void> | void;
 }
 
 function StatusIcon({ status }: { status: ProcessStatus }) {
-  switch (status) {
-    case "pending":
-      return <Text color="gray">{icons.pending}</Text>;
-    case "starting":
-      return <Text color="#00ffff">{icons.scan}</Text>;
-    case "ready":
-      return <Text color="#00ff41">{icons.ok}</Text>;
-    case "error":
-      return <Text color="#ff3366">{icons.err}</Text>;
-  }
+	switch (status) {
+		case "pending":
+			return <Text color="gray">{icons.pending}</Text>;
+		case "starting":
+			return <Text color="#00ffff">{icons.scan}</Text>;
+		case "ready":
+			return <Text color="#00ff41">{icons.ok}</Text>;
+		case "error":
+			return <Text color="#ff3366">{icons.err}</Text>;
+	}
 }
 
 function getServiceColor(name: string): string {
-  return name === "host" ? "#00ffff" : name === "ui" ? "#ff00ff" : "#0080ff";
+	return name === "host" ? "#00ffff" : name === "ui" ? "#ff00ff" : "#0080ff";
 }
 
 function ProcessRow({ proc }: { proc: ProcessState }) {
-  const color = getServiceColor(proc.name);
-  const portStr = proc.port > 0 ? `:${proc.port}` : "";
-  const sourceLabel = proc.source ? ` (${proc.source})` : "";
+	const color = getServiceColor(proc.name);
+	const portStr = proc.port > 0 ? `:${proc.port}` : "";
+	const sourceLabel = proc.source ? ` (${proc.source})` : "";
 
-  const statusText =
-    proc.status === "pending"
-      ? "waiting"
-      : proc.status === "starting"
-        ? "starting"
-        : proc.status === "ready"
-          ? "running"
-          : "failed";
+	const statusText =
+		proc.status === "pending"
+			? "waiting"
+			: proc.status === "starting"
+				? "starting"
+				: proc.status === "ready"
+					? "running"
+					: "failed";
 
-  return (
-    <Box>
-      <Text>{"  "}</Text>
-      <StatusIcon status={proc.status} />
-      <Text> </Text>
-      <Text color={color} bold>
-        {proc.name.toUpperCase().padEnd(6)}
-      </Text>
-      <Text color="gray">{sourceLabel.padEnd(10)}</Text>
-      <Text color={proc.status === "ready" ? "#00ff41" : "gray"}>
-        {statusText}
-      </Text>
-      {proc.port > 0 && <Text color="#00ffff"> {portStr}</Text>}
-    </Box>
-  );
+	return (
+		<Box>
+			<Text>{"  "}</Text>
+			<StatusIcon status={proc.status} />
+			<Text> </Text>
+			<Text color={color} bold>
+				{proc.name.toUpperCase().padEnd(6)}
+			</Text>
+			<Text color="gray">{sourceLabel.padEnd(10)}</Text>
+			<Text color={proc.status === "ready" ? "#00ff41" : "gray"}>
+				{statusText}
+			</Text>
+			{proc.port > 0 && <Text color="#00ffff"> {portStr}</Text>}
+		</Box>
+	);
 }
 
 function LogLine({ entry }: { entry: LogEntry }) {
-  const color = getServiceColor(entry.source);
+	const color = getServiceColor(entry.source);
 
-  return (
-    <Box>
-      <Text color={color}>[{entry.source}]</Text>
-      <Text color={entry.isError ? "#ff3366" : undefined}>
-        {" "}
-        {linkify(entry.line)}
-      </Text>
-    </Box>
-  );
+	return (
+		<Box>
+			<Text color={color}>[{entry.source}]</Text>
+			<Text color={entry.isError ? "#ff3366" : undefined}>
+				{" "}
+				{linkify(entry.line)}
+			</Text>
+		</Box>
+	);
 }
 
 function truncateUrl(url: string, maxLen: number): string {
-  if (url.length <= maxLen) return url;
-  try {
-    const parsed = new URL(url);
-    const host = parsed.host;
-    if (host.length > maxLen - 10) {
-      return `${host.slice(0, maxLen - 13)}...`;
-    }
-    return host;
-  } catch {
-    return `${url.slice(0, maxLen - 3)}...`;
-  }
+	if (url.length <= maxLen) return url;
+	try {
+		const parsed = new URL(url);
+		const host = parsed.host;
+		if (host.length > maxLen - 10) {
+			return `${host.slice(0, maxLen - 13)}...`;
+		}
+		return host;
+	} catch {
+		return `${url.slice(0, maxLen - 3)}...`;
+	}
 }
 
 function DevView({
-  processes,
-  logs,
-  description,
-  proxyTarget,
-  onExit,
-  onExportLogs,
+	processes,
+	logs,
+	description,
+	proxyTarget,
+	onExit,
+	onExportLogs,
 }: DevViewProps) {
-  const { exit } = useApp();
+	const { exit } = useApp();
+	const [isShuttingDown, setIsShuttingDown] = useState(false);
 
-  useInput((input, key) => {
-    if (input === "q" || (key.ctrl && input === "c")) {
-      onExit?.();
-      exit();
-    }
-    if (input === "l") {
-      onExportLogs?.();
-      exit();
-    }
-  });
+	useInput((input, key) => {
+		if (isShuttingDown) return;
 
-  const readyCount = processes.filter((p) => p.status === "ready").length;
-  const total = processes.length;
-  const allReady = readyCount === total;
-  const hostProcess = processes.find((p) => p.name === "host");
-  const hostPort = hostProcess?.port || 3000;
+		if (input === "q" || (key.ctrl && input === "c")) {
+			setIsShuttingDown(true);
+			// Run cleanup async, then force exit
+			Promise.resolve(onExit?.()).then(() => {
+				exit();
+				process.exit(0);
+			});
+		}
+		if (input === "l") {
+			setIsShuttingDown(true);
+			// Run export logs async, then force exit
+			Promise.resolve(onExportLogs?.()).then(() => {
+				exit();
+				process.exit(0);
+			});
+		}
+	});
 
-  const recentLogs = logs.slice(-12);
+	const readyCount = processes.filter((p) => p.status === "ready").length;
+	const total = processes.length;
+	const allReady = readyCount === total;
+	const hostProcess = processes.find((p) => p.name === "host");
+	const hostPort = hostProcess?.port || 3000;
 
-  return (
-    <Box flexDirection="column">
-      <Box marginBottom={0}>
-        <Text color="#00ffff">{frames.top(52)}</Text>
-      </Box>
-      <Box>
-        <Text>
-          {"  "}
-          {icons.run} {gradients.cyber(description.toUpperCase())}
-        </Text>
-      </Box>
-      <Box marginBottom={1}>
-        <Text color="#00ffff">{frames.bottom(52)}</Text>
-      </Box>
+	const recentLogs = logs.slice(-12);
 
-      {allReady && (
-        <Box marginBottom={1} flexDirection="column">
-          <Box>
-            <Text color="#00ff41">
-              {"  "}
-              {icons.app} APP READY
-            </Text>
-          </Box>
-          <Box>
-            <Text color="#00ff41" bold>
-              {"  "}
-              {icons.arrow} http://localhost:{hostPort}
-            </Text>
-          </Box>
-        </Box>
-      )}
+	return (
+		<Box flexDirection="column">
+			<Box marginBottom={0}>
+				<Text color="#00ffff">{frames.top(52)}</Text>
+			</Box>
+			<Box>
+				<Text>
+					{"  "}
+					{icons.run} {gradients.cyber(description.toUpperCase())}
+				</Text>
+			</Box>
+			<Box marginBottom={1}>
+				<Text color="#00ffff">{frames.bottom(52)}</Text>
+			</Box>
 
-      {proxyTarget && (
-        <Box marginBottom={1}>
-          <Text color="#ffaa00">
-            {"  "}
-            {icons.arrow} API PROXY → {truncateUrl(proxyTarget, 38)}
-          </Text>
-        </Box>
-      )}
+			{allReady && (
+				<Box marginBottom={1} flexDirection="column">
+					<Box>
+						<Text color="#00ff41">
+							{"  "}
+							{icons.app} APP READY
+						</Text>
+					</Box>
+					<Box>
+						<Text color="#00ff41" bold>
+							{"  "}
+							{icons.arrow} http://localhost:{hostPort}
+						</Text>
+					</Box>
+				</Box>
+			)}
 
-      <Box marginTop={0} marginBottom={0}>
-        <Text>{colors.dim(divider(52))}</Text>
-      </Box>
+			{proxyTarget && (
+				<Box marginBottom={1}>
+					<Text color="#ffaa00">
+						{"  "}
+						{icons.arrow} API PROXY → {truncateUrl(proxyTarget, 38)}
+					</Text>
+				</Box>
+			)}
 
-      {processes.map((proc) => (
-        <ProcessRow key={proc.name} proc={proc} />
-      ))}
+			<Box marginTop={0} marginBottom={0}>
+				<Text>{colors.dim(divider(52))}</Text>
+			</Box>
 
-      <Box marginTop={1} marginBottom={0}>
-        <Text>{colors.dim(divider(52))}</Text>
-      </Box>
+			{processes.map((proc) => (
+				<ProcessRow key={proc.name} proc={proc} />
+			))}
 
-      <Box marginTop={0}>
-        <Text color={allReady ? "#00ff41" : "#00ffff"}>
-          {"  "}
-          {allReady
-            ? `${icons.ok} All ${total} services running`
-            : `${icons.scan} ${readyCount}/${total} ready`}
-        </Text>
-        <Text color="gray">
-          {" "}
-          {icons.dot} q quit {icons.dot} l logs
-        </Text>
-      </Box>
+			<Box marginTop={1} marginBottom={0}>
+				<Text>{colors.dim(divider(52))}</Text>
+			</Box>
 
-      {recentLogs.length > 0 && (
-        <>
-          <Box marginTop={1} marginBottom={0}>
-            <Text>{colors.dim(divider(52))}</Text>
-          </Box>
-          <Box flexDirection="column" marginTop={0}>
-            {recentLogs.map((entry, i) => (
-              <LogLine key={`${entry.timestamp}-${i}`} entry={entry} />
-            ))}
-          </Box>
-        </>
-      )}
-    </Box>
-  );
+			<Box marginTop={0}>
+				<Text color={allReady ? "#00ff41" : "#00ffff"}>
+					{"  "}
+					{allReady
+						? `${icons.ok} All ${total} services running`
+						: `${icons.scan} ${readyCount}/${total} ready`}
+				</Text>
+				<Text color="gray">
+					{" "}
+					{icons.dot} q quit {icons.dot} l logs
+				</Text>
+			</Box>
+
+			{recentLogs.length > 0 && (
+				<>
+					<Box marginTop={1} marginBottom={0}>
+						<Text>{colors.dim(divider(52))}</Text>
+					</Box>
+					<Box flexDirection="column" marginTop={0}>
+						{recentLogs.map((entry, i) => (
+							<LogLine key={`${entry.timestamp}-${i}`} entry={entry} />
+						))}
+					</Box>
+				</>
+			)}
+		</Box>
+	);
 }
 
 export interface DevViewHandle {
-  updateProcess: (
-    name: string,
-    status: ProcessStatus,
-    message?: string,
-  ) => void;
-  addLog: (source: string, line: string, isError?: boolean) => void;
-  unmount: () => void;
+	updateProcess: (
+		name: string,
+		status: ProcessStatus,
+		message?: string,
+	) => void;
+	addLog: (source: string, line: string, isError?: boolean) => void;
+	unmount: () => void;
 }
 
 export function renderDevView(
-  initialProcesses: ProcessState[],
-  description: string,
-  env: Record<string, string>,
-  onExit?: () => void,
-  onExportLogs?: () => void,
+	initialProcesses: ProcessState[],
+	description: string,
+	env: Record<string, string>,
+	onExit?: () => Promise<void> | void,
+	onExportLogs?: () => Promise<void> | void,
 ): DevViewHandle {
-  let processes = [...initialProcesses];
-  let logs: LogEntry[] = [];
-  let rerender: (() => void) | null = null;
-  const proxyTarget = env.API_PROXY;
+	let processes = [...initialProcesses];
+	let logs: LogEntry[] = [];
+	let rerender: (() => void) | null = null;
+	const proxyTarget = env.API_PROXY;
 
-  const updateProcess = (
-    name: string,
-    status: ProcessStatus,
-    message?: string,
-  ) => {
-    processes = processes.map((p) =>
-      p.name === name ? { ...p, status, message } : p,
-    );
-    rerender?.();
-  };
+	const updateProcess = (
+		name: string,
+		status: ProcessStatus,
+		message?: string,
+	) => {
+		processes = processes.map((p) =>
+			p.name === name ? { ...p, status, message } : p,
+		);
+		rerender?.();
+	};
 
-  const addLog = (source: string, line: string, isError = false) => {
-    logs = [...logs, { source, line, timestamp: Date.now(), isError }];
-    if (logs.length > 100) logs = logs.slice(-100);
-    rerender?.();
-  };
+	const addLog = (source: string, line: string, isError = false) => {
+		logs = [...logs, { source, line, timestamp: Date.now(), isError }];
+		if (logs.length > 100) logs = logs.slice(-100);
+		rerender?.();
+	};
 
-  function DevViewWrapper() {
-    const [, forceUpdate] = useState(0);
+	function DevViewWrapper() {
+		const [, forceUpdate] = useState(0);
 
-    useEffect(() => {
-      rerender = () => forceUpdate((n) => n + 1);
-      return () => {
-        rerender = null;
-      };
-    }, []);
+		useEffect(() => {
+			rerender = () => forceUpdate((n) => n + 1);
+			return () => {
+				rerender = null;
+			};
+		}, []);
 
-    return (
-      <DevView
-        processes={processes}
-        logs={logs}
-        description={description}
-        proxyTarget={proxyTarget}
-        onExit={onExit}
-        onExportLogs={onExportLogs}
-      />
-    );
-  }
+		return (
+			<DevView
+				processes={processes}
+				logs={logs}
+				description={description}
+				proxyTarget={proxyTarget}
+				onExit={onExit}
+				onExportLogs={onExportLogs}
+			/>
+		);
+	}
 
-  const { unmount } = render(<DevViewWrapper />);
+	const { unmount } = render(<DevViewWrapper />);
 
-  return { updateProcess, addLog, unmount };
+	return { updateProcess, addLog, unmount };
 }

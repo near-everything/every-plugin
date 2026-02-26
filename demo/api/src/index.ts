@@ -16,6 +16,7 @@ export default createPlugin({
 
 	context: z.object({
 		nearAccountId: z.string().optional(),
+		role: z.enum(["user", "admin"]).optional(),
 	}),
 
 	contract,
@@ -42,7 +43,17 @@ export default createPlugin({
 			if (!context.nearAccountId) {
 				throw new ORPCError("UNAUTHORIZED", { message: "Auth required" });
 			}
-			return next({ context: { owner: context.nearAccountId } });
+			return next({ context: { ...context, owner: context.nearAccountId } });
+		});
+
+		const adminOnly = builder.middleware(({ context, next }) => {
+			if (!context.nearAccountId) {
+				throw new ORPCError("UNAUTHORIZED", { message: "Auth required" });
+			}
+			if (context.role !== "admin") {
+				throw new ORPCError("FORBIDDEN", { message: "Admin required" });
+			}
+			return next({ context });
 		});
 
 		return {
@@ -158,6 +169,7 @@ export default createPlugin({
 
 			deleteKey: builder.deleteKey
 				.use(authed)
+				.use(adminOnly)
 				.handler(async ({ input, context, errors }) => {
 					const exit = await Effect.runPromiseExit(
 						services.deleteKey(input.key, context.owner),

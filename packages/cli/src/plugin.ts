@@ -15,7 +15,11 @@ import {
 	resolvePackages,
 	type SourceMode,
 } from "./config";
-import { bosContract } from "./contract";
+import {
+	type BuildOptions,
+	bosContract,
+	type PublishOptions,
+} from "./contract";
 import {
 	getBuildEnv,
 	hasZephyrConfig,
@@ -370,7 +374,7 @@ export default createPlugin({
 			};
 		}),
 
-		start: builder.start.handler(async (input) => {
+		start: builder.start.handler(async ({ input }) => {
 			let remoteConfig: BosConfigType | null = null;
 
 			if (input.account && input.domain) {
@@ -469,7 +473,7 @@ export default createPlugin({
 			};
 		}),
 
-		serve: builder.serve.handler(async (input) => {
+		serve: builder.serve.handler(async ({ input }) => {
 			const port = input.port;
 
 			return {
@@ -482,14 +486,14 @@ export default createPlugin({
 			};
 		}),
 
-		build: builder.build.handler(async (input: buildInput) => {
+		build: builder.build.handler(async ({ input }: { input: BuildOptions }) => {
 			const allPackages = deps.bosConfig ? Object.keys(deps.bosConfig.app) : [];
 			const { configDir } = deps;
 
 			const targets =
-				buildInput.packages === "all"
+				input.packages === "all"
 					? allPackages
-					: buildInput.packages
+					: input.packages
 							.split(",")
 							.map((p) => p.trim())
 							.filter((p) => allPackages.includes(p));
@@ -542,7 +546,7 @@ export default createPlugin({
 				const bosEnv = yield* loadBosEnv;
 				const env = getBuildEnv(bosEnv);
 
-				if (!buildInput.deploy) {
+				if (!input.deploy) {
 					env.NODE_ENV = "development";
 				} else {
 					env.NODE_ENV = "production";
@@ -580,106 +584,109 @@ export default createPlugin({
 				status: "success" as const,
 				built,
 				skipped: missing,
-				deployed: buildInput.deploy,
+				deployed: input.deploy,
 			};
 		}),
 
-		publish: builder.publish.handler(async (input: publishInput) => {
-			const { bosConfig, nearPrivateKey } = deps;
+		publish: builder.publish.handler(
+			async ({ input }: { input: PublishOptions }) => {
+				const { bosConfig, nearPrivateKey } = deps;
 
-			if (!bosConfig) {
-				return {
-					status: "error" as const,
-					txHash: "",
-					registryUrl: "",
-					error: "No bos.config.json found. Run from a BOS project directory.",
-				};
-			}
-
-			const network = publishInput.network;
-
-			try {
-				const account = getAccountForNetwork(bosConfig, network);
-				const gatewayDomain = getGatewayDomain(bosConfig);
-				const socialContract = getSocialContract(network);
-				const socialPath = `${account}/bos/gateways/${gatewayDomain}/bos.config.json`;
-
-				const publishEffect = Effect.gen(function* () {
-					yield* ensureNearCli;
-
-					const bosEnv = yield* loadBosEnv;
-					const privateKey = nearPrivateKey || bosEnv.NEAR_PRIVATE_KEY;
-
-					const socialArgs = buildSocialSetArgs(
-						account,
-						gatewayDomain,
-						bosConfig,
-					) as {
-						data: Record<string, Record<string, unknown>>;
+				if (!bosConfig) {
+					return {
+						status: "error" as const,
+						txHash: "",
+						registryUrl: "",
+						error:
+							"No bos.config.json found. Run from a BOS project directory.",
 					};
-					const argsBase64 = Buffer.from(JSON.stringify(socialArgs)).toString(
-						"base64",
-					);
+				}
 
-					const graph = new Graph({
-						network,
-						contractId: socialContract,
-					});
-					const storageBalance = yield* Effect.tryPromise({
-						try: () => graph.storageBalanceOf(account),
-						catch: () => new Error("Failed to fetch storage balance"),
-					});
+				const network = input.network;
 
-					const requiredDeposit = calculateRequiredDeposit({
-						data: socialArgs.data,
-						storageBalance: storageBalance
-							? {
-									available: BigInt(storageBalance.available),
-									total: BigInt(storageBalance.total),
-								}
-							: null,
-					});
-					const depositAmount = requiredDeposit.toFixed();
+				try {
+					const account = getAccountForNetwork(bosConfig, network);
+					const gatewayDomain = getGatewayDomain(bosConfig);
+					const socialContract = getSocialContract(network);
+					const socialPath = `${account}/bos/gateways/${gatewayDomain}/bos.config.json`;
 
-					if (publishInput.dryRun) {
+					const publishEffect = Effect.gen(function* () {
+						yield* ensureNearCli;
+
+						const bosEnv = yield* loadBosEnv;
+						const privateKey = nearPrivateKey || bosEnv.NEAR_PRIVATE_KEY;
+
+						const socialArgs = buildSocialSetArgs(
+							account,
+							gatewayDomain,
+							bosConfig,
+						) as {
+							data: Record<string, Record<string, unknown>>;
+						};
+						const argsBase64 = Buffer.from(JSON.stringify(socialArgs)).toString(
+							"base64",
+						);
+
+						const graph = new Graph({
+							network,
+							contractId: socialContract,
+						});
+						const storageBalance = yield* Effect.tryPromise({
+							try: () => graph.storageBalanceOf(account),
+							catch: () => new Error("Failed to fetch storage balance"),
+						});
+
+						const requiredDeposit = calculateRequiredDeposit({
+							data: socialArgs.data,
+							storageBalance: storageBalance
+								? {
+										available: BigInt(storageBalance.available),
+										total: BigInt(storageBalance.total),
+									}
+								: null,
+						});
+						const depositAmount = requiredDeposit.toFixed();
+
+						if (input.dryRun) {
+							return {
+								status: "dry-run" as const,
+								txHash: "",
+								registryUrl: getSocialExplorerUrl(network, socialPath),
+							};
+						}
+
+						const result = yield* executeTransaction({
+							account,
+							contract: socialContract,
+							method: "set",
+							argsBase64,
+							network,
+							privateKey,
+							gas: "300Tgas",
+							deposit:
+								depositAmount === "0"
+									? "1yoctoNEAR"
+									: `${depositAmount}yoctoNEAR`,
+						});
+
 						return {
-							status: "dry-run" as const,
-							txHash: "",
+							status: "published" as const,
+							txHash: result.txHash || "unknown",
 							registryUrl: getSocialExplorerUrl(network, socialPath),
 						};
-					}
-
-					const result = yield* executeTransaction({
-						account,
-						contract: socialContract,
-						method: "set",
-						argsBase64,
-						network,
-						privateKey,
-						gas: "300Tgas",
-						deposit:
-							depositAmount === "0"
-								? "1yoctoNEAR"
-								: `${depositAmount}yoctoNEAR`,
 					});
 
+					return await Effect.runPromise(publishEffect);
+				} catch (error) {
 					return {
-						status: "published" as const,
-						txHash: result.txHash || "unknown",
-						registryUrl: getSocialExplorerUrl(network, socialPath),
+						status: "error" as const,
+						txHash: "",
+						registryUrl: "",
+						error: error instanceof Error ? error.message : "Unknown error",
 					};
-				});
-
-				return await Effect.runPromise(publishEffect);
-			} catch (error) {
-				return {
-					status: "error" as const,
-					txHash: "",
-					registryUrl: "",
-					error: error instanceof Error ? error.message : "Unknown error",
-				};
-			}
-		}),
+				}
+			},
+		),
 
 		create: builder.create.handler(async ({ input }) => {
 			const { join } = await import("path");
@@ -1051,7 +1058,7 @@ export default createPlugin({
 			};
 		}),
 
-		status: builder.status.handler(async (input) => {
+		status: builder.status.handler(async ({ input }) => {
 			const config = deps.bosConfig;
 
 			if (!config) {
@@ -1146,7 +1153,7 @@ export default createPlugin({
 			};
 		}),
 
-		register: builder.register.handler(async (input) => {
+		register: builder.register.handler(async ({ input }) => {
 			const { bosConfig } = deps;
 
 			if (!bosConfig) {
@@ -1210,7 +1217,7 @@ export default createPlugin({
 			}
 		}),
 
-		secretsSync: builder.secretsSync.handler(async (input) => {
+		secretsSync: builder.secretsSync.handler(async ({ input }) => {
 			const { bosConfig } = deps;
 
 			if (!bosConfig) {
@@ -1252,7 +1259,7 @@ export default createPlugin({
 			}
 		}),
 
-		secretsSet: builder.secretsSet.handler(async (input) => {
+		secretsSet: builder.secretsSet.handler(async ({ input }) => {
 			const { bosConfig } = deps;
 
 			if (!bosConfig) {
@@ -1332,7 +1339,7 @@ export default createPlugin({
 			}
 		}),
 
-		secretsDelete: builder.secretsDelete.handler(async (input) => {
+		secretsDelete: builder.secretsDelete.handler(async ({ input }) => {
 			const { bosConfig } = deps;
 
 			if (!bosConfig) {
@@ -1377,7 +1384,7 @@ export default createPlugin({
 			}
 		}),
 
-		login: builder.login.handler(async (input) => {
+		login: builder.login.handler(async ({ input }) => {
 			const loginEffect = Effect.gen(function* () {
 				const { token, accountId } = input;
 
@@ -1475,7 +1482,7 @@ export default createPlugin({
 			}
 		}),
 
-		gatewayDeploy: builder.gatewayDeploy.handler(async (input) => {
+		gatewayDeploy: builder.gatewayDeploy.handler(async ({ input }) => {
 			const { configDir, bosConfig } = deps;
 
 			if (!bosConfig) {
@@ -1571,7 +1578,7 @@ export default createPlugin({
 			}
 		}),
 
-		depsUpdate: builder.depsUpdate.handler(async (input) => {
+		depsUpdate: builder.depsUpdate.handler(async ({ input }) => {
 			const { configDir, bosConfig } = deps;
 
 			if (!bosConfig) {
@@ -1706,7 +1713,7 @@ export default createPlugin({
 			}
 		}),
 
-		filesSync: builder.filesSync.handler(async (input) => {
+		filesSync: builder.filesSync.handler(async ({ input }) => {
 			const { configDir, bosConfig } = deps;
 
 			if (!bosConfig) {
@@ -1739,7 +1746,7 @@ export default createPlugin({
 			};
 		}),
 
-		update: builder.update.handler(async (input) => {
+		update: builder.update.handler(async ({ input }) => {
 			const { configDir, bosConfig } = deps;
 
 			const DEFAULT_ACCOUNT = "every.near";
@@ -1969,7 +1976,7 @@ export default createPlugin({
 			}
 		}),
 
-		kill: builder.kill.handler(async (input) => {
+		kill: builder.kill.handler(async ({ input }) => {
 			const killEffect = Effect.gen(function* () {
 				const registry = yield* createProcessRegistry();
 				const result = yield* registry.killAll(input.force);
@@ -2013,7 +2020,7 @@ export default createPlugin({
 			}
 		}),
 
-		dockerBuild: builder.dockerBuild.handler(async (input) => {
+		dockerBuild: builder.dockerBuild.handler(async ({ input }) => {
 			const { configDir, bosConfig } = deps;
 
 			const dockerEffect = Effect.gen(function* () {
@@ -2063,7 +2070,7 @@ export default createPlugin({
 			}
 		}),
 
-		dockerRun: builder.dockerRun.handler(async (input) => {
+		dockerRun: builder.dockerRun.handler(async ({ input }) => {
 			const { bosConfig } = deps;
 
 			const dockerEffect = Effect.gen(function* () {
@@ -2148,7 +2155,7 @@ export default createPlugin({
 			}
 		}),
 
-		dockerStop: builder.dockerStop.handler(async (input) => {
+		dockerStop: builder.dockerStop.handler(async ({ input }) => {
 			const { bosConfig } = deps;
 
 			const dockerEffect = Effect.gen(function* () {
@@ -2211,7 +2218,7 @@ export default createPlugin({
 			}
 		}),
 
-		monitor: builder.monitor.handler(async (input) => {
+		monitor: builder.monitor.handler(async ({ input }) => {
 			try {
 				if (input.json) {
 					const snapshot = await runWithInfo(
@@ -2251,7 +2258,7 @@ export default createPlugin({
 			}
 		}),
 
-		session: builder.session.handler(async (input) => {
+		session: builder.session.handler(async ({ input }) => {
 			const sessionEffect = Effect.gen(function* () {
 				const recorder = yield* SessionRecorder.create({
 					ports: [3000],

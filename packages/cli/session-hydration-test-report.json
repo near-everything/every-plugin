@@ -1,0 +1,843 @@
+{
+  "sessionId": "sess_1771269850133_wy40y9",
+  "config": {
+    "ports": [
+      3000
+    ],
+    "snapshotIntervalMs": 2000,
+    "headless": true,
+    "baseUrl": "http://localhost:3000",
+    "timeout": 120000,
+    "devMode": "remote"
+  },
+  "startTime": 1771269850133,
+  "endTime": 1771269883220,
+  "events": [
+    {
+      "id": "evt_1771269850290_1",
+      "timestamp": 1771269850290,
+      "type": "baseline",
+      "label": "session_start",
+      "snapshot": {
+        "timestamp": 1771269850290,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 301002752,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17124577280,
+          "free": 53301248,
+          "processRss": 301002752
+        },
+        "platform": "darwin"
+      }
+    },
+    {
+      "id": "evt_1771269852457_2",
+      "timestamp": 1771269852457,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269852456,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 301010944,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17105395712,
+          "free": 71204864,
+          "processRss": 301010944
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269854442_3",
+      "timestamp": 1771269854442,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269854442,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 301019136,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17056993280,
+          "free": 120926208,
+          "processRss": 301019136
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269856459_4",
+      "timestamp": 1771269856459,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269856458,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 301019136,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17059762176,
+          "free": 117415936,
+          "processRss": 301019136
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269858460_5",
+      "timestamp": 1771269858460,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269858459,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300732416,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17059233792,
+          "free": 118923264,
+          "processRss": 300732416
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269860461_6",
+      "timestamp": 1771269860461,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269860460,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17062371328,
+          "free": 116084736,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269862466_7",
+      "timestamp": 1771269862466,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269862466,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17024708608,
+          "free": 153214976,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269864456_8",
+      "timestamp": 1771269864456,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269864456,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17026936832,
+          "free": 150343680,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269866464_9",
+      "timestamp": 1771269866464,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269866464,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17007661056,
+          "free": 170295296,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269868468_10",
+      "timestamp": 1771269868468,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269868467,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17010253824,
+          "free": 167718912,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269870462_11",
+      "timestamp": 1771269870462,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269870462,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17009676288,
+          "free": 167731200,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269872464_12",
+      "timestamp": 1771269872464,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269872464,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17011798016,
+          "free": 165642240,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269874469_13",
+      "timestamp": 1771269874469,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269874468,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17012154368,
+          "free": 165105664,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269876468_14",
+      "timestamp": 1771269876468,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269876468,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17012117504,
+          "free": 165601280,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269878470_15",
+      "timestamp": 1771269878470,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269878469,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17011634176,
+          "free": 165928960,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269880470_16",
+      "timestamp": 1771269880470,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269880470,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17013129216,
+          "free": 165208064,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269882470_17",
+      "timestamp": 1771269882470,
+      "type": "interval",
+      "label": "auto_snapshot",
+      "snapshot": {
+        "timestamp": 1771269882470,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 17014652928,
+          "free": 162766848,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    },
+    {
+      "id": "evt_1771269883220_18",
+      "timestamp": 1771269883220,
+      "type": "custom",
+      "label": "session_end",
+      "snapshot": {
+        "timestamp": 1771269883220,
+        "configPath": null,
+        "ports": {
+          "3000": {
+            "port": 3000,
+            "pid": 6358,
+            "command": "bun",
+            "state": "LISTEN"
+          }
+        },
+        "processes": [
+          {
+            "pid": 6358,
+            "ppid": 6334,
+            "command": "bun",
+            "args": [
+              "bun",
+              "src/cli.ts",
+              "start",
+              "--account",
+              "every.near",
+              "--domain",
+              "everything.dev",
+              "--no-interactive"
+            ],
+            "rss": 300531712,
+            "children": []
+          }
+        ],
+        "memory": {
+          "total": 17179869184,
+          "used": 16945664000,
+          "free": 232366080,
+          "processRss": 300531712
+        },
+        "platform": "darwin"
+      },
+      "url": "about:blank"
+    }
+  ],
+  "summary": {
+    "totalMemoryDeltaMb": -0.44921875,
+    "peakMemoryMb": 287.07421875,
+    "averageMemoryMb": 286.7220052083333,
+    "processesSpawned": 1,
+    "processesKilled": 0,
+    "orphanedProcesses": 0,
+    "portsUsed": [
+      3000
+    ],
+    "portsLeaked": 1,
+    "hasLeaks": true,
+    "eventCount": 18,
+    "duration": 32930
+  },
+  "platform": "darwin",
+  "nodeVersion": "v22.18.0"
+}

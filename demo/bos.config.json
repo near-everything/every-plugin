@@ -56,7 +56,7 @@
   "app": {
     "host": {
       "development": "http://localhost:3000",
-      "production": "https://elliot-braem-2244-host-every-plugin-near-everythi-ca1ac551a-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-2248-host-every-plugin-near-everythi-9ad5dc476-ze.zephyrcloud.app",
       "secrets": [
         "HOST_DATABASE_URL",
         "HOST_DATABASE_AUTH_TOKEN",

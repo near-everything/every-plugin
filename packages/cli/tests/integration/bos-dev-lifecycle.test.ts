@@ -19,7 +19,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI_DIR = resolve(__dirname, "../..");
-const DEMO_DIR = resolve(__dirname, "../../../demo");
+const DEMO_DIR = resolve(__dirname, "../../../../demo");
 
 const IS_WINDOWS = process.platform === "win32";
 const DEV_PORT = 3000;
@@ -39,7 +39,7 @@ interface DevProcess {
 const spawnBosDev = (): DevProcess => {
 	const proc = spawn(
 		"bun",
-		["run", `${CLI_DIR}/src/cli.ts`, "dev", "--no-interactive"],
+		[`${CLI_DIR}/src/cli.ts`, "dev", "--no-interactive"],
 		{
 			cwd: DEMO_DIR,
 			stdio: ["ignore", "pipe", "pipe"],
@@ -57,6 +57,10 @@ const spawnBosDev = (): DevProcess => {
 
 	proc.stderr?.on("data", (data: Buffer) => {
 		stderr += data.toString();
+	});
+
+	proc.on("error", (error) => {
+		console.error("[spawnBosDev] Process error:", error.message);
 	});
 
 	return {

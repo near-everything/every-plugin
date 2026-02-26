@@ -42,7 +42,6 @@ const spawnBosStart = (): StartProcess => {
 	const proc = spawn(
 		"bun",
 		[
-			"run",
 			"src/cli.ts",
 			"start",
 			"--account",
@@ -56,7 +55,6 @@ const spawnBosStart = (): StartProcess => {
 			stdio: ["ignore", "pipe", "pipe"],
 			detached: false,
 			env,
-			shell: true,
 		},
 	);
 
@@ -69,6 +67,10 @@ const spawnBosStart = (): StartProcess => {
 
 	proc.stderr?.on("data", (data: Buffer) => {
 		stderr += data.toString();
+	});
+
+	proc.on("error", (error) => {
+		console.error("[spawnBosStart] Process error:", error.message);
 	});
 
 	return {
