@@ -185,6 +185,9 @@ function determineProcesses(config: AppConfig): string[] {
 		processes.push("api");
 	}
 
+	if (config.host === "local") {
+		processes.push("host-build");
+	}
 	processes.push("host");
 
 	return processes;

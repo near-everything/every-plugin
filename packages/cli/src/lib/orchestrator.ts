@@ -48,7 +48,7 @@ const isInteractiveSupported = (): boolean => {
 	return process.stdin.isTTY === true && process.stdout.isTTY === true;
 };
 
-const STARTUP_ORDER = ["ui-ssr", "ui", "api", "host"];
+const STARTUP_ORDER = ["ui-ssr", "ui", "api", "host-build", "host"];
 
 const sortByOrder = (packages: string[]): string[] => {
 	return [...packages].sort((a, b) => {

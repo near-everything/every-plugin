@@ -1,30 +1,31 @@
 # host
 
-Server host with authentication, Module Federation orchestration, and every-plugin runtime.
+Server host with authentication, oRPC API, and Module Federation orchestration.
 
 ## Architecture
 
-The host orchestrates both UI and API federation:
+The host runs the API + auth and loads the UI app as a Module Federation remote:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                        host                             │
 │                                                         │
 │  ┌────────────────────────────────────────────────┐     │
-│  │                  server.ts                     │     │
-│  │  Hono.js + oRPC handlers                       │     │
+│  │                src/program.ts                  │     │
+│  │  Hono.js + oRPC + SSR renderer                 │     │
 │  └────────────────────────────────────────────────┘     │
 │           ↑                         ↑                   │
 │           │      bos.config.json    │                   │
 │           │    (single source)      │                   │
 │  ┌────────┴────────┐       ┌────────┴────────┐          │
-│  │ UI Federation   │       │ API Plugins     │          │
-│  │ (remoteEntry)   │       │ (every-plugin)  │          │
+│  │ UI Remote       │       │ API Plugins     │          │
+│  │ (MF remote)     │       │ (every-plugin)  │          │
 │  └────────┬────────┘       └────────┬────────┘          │
 │           ↓                         ↓                   │
 │  ┌─────────────────┐       ┌─────────────────┐          │
-│  │ React app       │       │ oRPC router     │          │
-│  │ (SSR/CSR)       │       │ (merged)        │          │
+│  │ UI app          │       │ oRPC router     │          │
+│  │ (remote-owned   │       │ (merged)        │          │
+│  │ __root + routes) │      │                 │          │
 │  └─────────────────┘       └─────────────────┘          │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -35,6 +36,14 @@ The host orchestrates both UI and API federation:
 bos dev --host remote   # Remote host, local UI + API (typical)
 bos dev                 # Full local development
 ```
+
+## Module Federation mount points
+
+The host provides stable, same-origin URLs for UI federation assets and proxies
+to the URLs in `bos.config.json` at runtime:
+
+- `/__mf/ui/*` -> UI browser build (`app.ui.*`)
+- `/__mf/ui/ssr/*` -> UI SSR build (`app.ui.ssr`)
 
 ## Production
 
@@ -107,8 +116,8 @@ API_PROXY=https://production.example.com bos dev
 
 ## Scripts
 
-- `bun dev` - Start dev server (port 3000)
-- `bun build` - Build MF bundle for production
+- `bun dev` - Run built server bundle (started by BOS)
+- `bun build` - Build host client + server bundles
 - `bun bootstrap` - Run host from remote MF URL
 - `bun preview` - Run production server locally
 - `bun db:migrate` - Run migrations

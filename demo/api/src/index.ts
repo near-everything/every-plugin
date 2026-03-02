@@ -231,3 +231,6 @@ export default createPlugin({
 		};
 	},
 });
+
+export type { ContractType } from "./contract";
+export { contract } from "./contract";

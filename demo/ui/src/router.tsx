@@ -13,13 +13,13 @@ import {
 } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
+import type { AuthSnapshot } from "everything-dev/runtime";
 import type { CreateRouterOptions } from "./types";
 
 export type {
 	ClientRuntimeConfig,
 	CreateRouterOptions,
 	RouterContext,
-	RouterModule,
 } from "./types";
 
 function ErrorComponent({ error }: { error: Error }) {
@@ -66,13 +66,28 @@ export function createRouter(opts: CreateRouterOptions = {}) {
 
 	const history = opts.history ?? createBrowserHistory();
 
+	if (!opts.context?.runtimeConfig) {
+		throw new Error("createRouter: missing context.runtimeConfig");
+	}
+	if (!opts.context?.apiClient) {
+		throw new Error("createRouter: missing context.apiClient");
+	}
+	if (!opts.context?.auth) {
+		throw new Error("createRouter: missing context.auth");
+	}
+
+	const assetsUrl = opts.context?.assetsUrl ?? "/__mf/ui";
+	const auth = opts.context.auth as AuthSnapshot;
+
 	const router = createTanStackRouter({
 		routeTree,
 		history,
 		context: {
 			queryClient,
-			assetsUrl: opts.context?.assetsUrl ?? "",
-			runtimeConfig: opts.context?.runtimeConfig,
+			assetsUrl,
+			runtimeConfig: opts.context.runtimeConfig,
+			apiClient: opts.context.apiClient,
+			auth,
 		},
 		defaultPreload: "intent",
 		scrollRestoration: true,

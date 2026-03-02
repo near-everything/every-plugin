@@ -30,13 +30,27 @@ interface ProcessConfigBase {
 }
 
 const processConfigBases: Record<string, ProcessConfigBase> = {
+	"host-build": {
+		name: "host-build",
+		command: "bun",
+		args: ["run", "build:watch"],
+		cwd: "host",
+		readyPatterns: [/built in/i, /compiled.*successfully/i],
+		errorPatterns: [/error:/i, /failed/i, /exception/i],
+	},
 	host: {
 		name: "host",
 		command: "bun",
 		args: ["run", "dev"],
 		cwd: "host",
 		readyPatterns: [/Host (dev|production) server running at/i],
-		errorPatterns: [/error:/i, /failed/i, /exception/i],
+		errorPatterns: [
+			/error:/i,
+			/failed/i,
+			/exception/i,
+			// node --watch prints this when the script exits immediately
+			/Completed running '.+'. Waiting for file changes/i,
+		],
 	},
 	ui: {
 		name: "ui",
@@ -118,17 +132,25 @@ const detectStatus = (
 	line: string,
 	config: DevProcess,
 ): { status: ProcessStatus; isError: boolean } | null => {
+	const cleanLine = stripAnsi(line);
 	for (const pattern of config.errorPatterns) {
-		if (pattern.test(line)) {
+		if (pattern.test(cleanLine)) {
 			return { status: "error", isError: true };
 		}
 	}
 	for (const pattern of config.readyPatterns) {
-		if (pattern.test(line)) {
+		if (pattern.test(cleanLine)) {
 			return { status: "ready", isError: false };
 		}
 	}
 	return null;
+};
+
+const stripAnsi = (input: string): string => {
+	// Covers CSI (\x1b[...m) and common OSC sequences (eg hyperlinks).
+	return input
+		.replace(/\x1B\][^\x07]*\x07/g, "")
+		.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 };
 
 const killProcessTree = (pid: number) =>
@@ -200,7 +222,7 @@ export function buildRuntimeConfig(
 				options.uiSource === "remote"
 					? uiConfig.production
 					: uiConfig.development
-			}/remoteEntry.js`,
+			}/mf-manifest.json`,
 			source: options.uiSource,
 			ssrUrl: uiConfig.ssr,
 		},
@@ -214,7 +236,7 @@ export function buildRuntimeConfig(
 				options.apiSource === "remote"
 					? apiConfig.production
 					: apiConfig.development
-			}/remoteEntry.js`,
+			}/mf-manifest.json`,
 			source: options.apiSource,
 			proxy: options.proxy,
 			variables: apiConfig.variables,
@@ -260,6 +282,28 @@ export const spawnDevProcess = (
 			stdio: ["inherit", "pipe", "pipe"],
 		});
 
+		// If the process exits before it ever reports ready, surface that.
+		yield* Effect.fork(
+			Effect.promise(() => proc.exited).pipe(
+				Effect.andThen((code) =>
+					Effect.gen(function* () {
+						const currentStatus = yield* Ref.get(statusRef);
+						if (currentStatus === "ready") return;
+						callbacks.onLog(
+							config.name,
+							`Process exited before ready (exit code: ${code})`,
+							true,
+						);
+						yield* Ref.set(statusRef, "error");
+						callbacks.onStatus(config.name, "error");
+						yield* Deferred.succeed(readyDeferred, undefined).pipe(
+							Effect.ignore,
+						);
+					}),
+				),
+			),
+		);
+
 		const handleLine = (line: string, isStderr: boolean) =>
 			Effect.gen(function* () {
 				if (!line.trim()) return;
@@ -273,8 +317,11 @@ export const spawnDevProcess = (
 				if (detected) {
 					yield* Ref.set(statusRef, detected.status);
 					callbacks.onStatus(config.name, detected.status);
-					if (detected.status === "ready") {
-						yield* Deferred.succeed(readyDeferred, undefined);
+					// Unblock orchestration when the process either becomes ready or fails.
+					if (detected.status === "ready" || detected.status === "error") {
+						yield* Deferred.succeed(readyDeferred, undefined).pipe(
+							Effect.ignore,
+						);
 					}
 				}
 			});
@@ -461,13 +508,58 @@ export const spawnRemoteHost = (
 			mfCore.setGlobalFederationInstance(mf);
 		}
 
-		const remoteEntryUrl = remoteUrl.endsWith("/remoteEntry.js")
-			? remoteUrl
-			: `${remoteUrl}/remoteEntry.js`;
+		// Ensure manifest-based remotes have a usable SSR public path in Node.
+		mf.loaderHook.lifecycle.fetch.on((url, init) => {
+			if (typeof url !== "string" || !url.endsWith("/mf-manifest.json")) {
+				return;
+			}
+			return fetch(url, init)
+				.then((res) => res.json())
+				.then((json: any) => {
+					json.metaData ||= {};
+					json.metaData.ssrPublicPath ||= url.replace(
+						/\/mf-manifest\.json$/,
+						"/",
+					);
+					return new Response(JSON.stringify(json), {
+						headers: { "content-type": "application/json" },
+					});
+				});
+		});
 
-		mf.registerRemotes([{ name: "host", entry: remoteEntryUrl }]);
+		const baseUrl = remoteUrl
+			.replace(/\/remoteEntry\.js$/, "")
+			.replace(/\/mf-manifest\.json$/, "")
+			.replace(/\/$/, "");
+		const remoteEntryUrl = `${baseUrl}/remoteEntry.js`;
+		const manifestUrl = `${baseUrl}/mf-manifest.json`;
 
-		callbacks.onLog(config.name, `Loading host from ${remoteEntryUrl}...`);
+		const entryUrl = yield* Effect.tryPromise({
+			try: async () => {
+				try {
+					const res = await fetch(manifestUrl);
+					if (!res.ok) return remoteEntryUrl;
+					const json = (await res.json()) as Record<string, unknown>;
+					if (
+						json &&
+						typeof json === "object" &&
+						"metaData" in json &&
+						"exposes" in json &&
+						"shared" in json
+					) {
+						return manifestUrl;
+					}
+				} catch {
+					// ignore and fall back to remoteEntry.js
+				}
+				return remoteEntryUrl;
+			},
+			catch: () => remoteEntryUrl,
+		});
+
+		mf.registerRemotes([{ name: "host", entry: entryUrl }]);
+
+		callbacks.onLog(config.name, `Loading host from ${entryUrl}...`);
 
 		const hostModule = yield* Effect.tryPromise({
 			try: () =>

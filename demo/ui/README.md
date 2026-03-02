@@ -1,6 +1,6 @@
 # ui
 
-Remote frontend module with TanStack Router and Module Federation.
+Remote UI application consumed by the host via Module Federation.
 
 ## Module Federation
 
@@ -8,8 +8,7 @@ Exposed as remote module via `remoteEntry.js`:
 
 | Export | Path | Description |
 |--------|------|-------------|
-| `./Router` | `./src/router.tsx` | TanStack Router instance |
-| `./Hydrate` | `./src/hydrate.tsx` | SSR hydration entry |
+| `./Router` | `./src/router.tsx` | UI router factory (file-based routes) |
 | `./components` | `./src/components/index.ts` | Reusable UI components |
 | `./providers` | `./src/providers/index.tsx` | Context providers |
 | `./hooks` | `./src/hooks/index.ts` | React hooks |
@@ -26,8 +25,11 @@ Exposed as remote module via `remoteEntry.js`:
 
 ```bash
 bos dev --host remote   # Typical: remote host, local UI + API
-bos dev --api remote    # Isolate UI work
+bos dev                # Full local development
 ```
+
+UI is typically accessed through the host (the host provides `runtimeConfig` and
+`apiClient` via Router context).
 
 ## Configuration
 
@@ -43,7 +45,6 @@ bos dev --api remote    # Isolate UI work
       "ssr": "https://example-ui-ssr.zephyrcloud.app",
       "exposes": {
         "./Router": "./src/router.tsx",
-        "./Hydrate": "./src/hydrate.tsx",
         "./components": "./src/components/index.ts",
         "./providers": "./src/providers/index.tsx",
         "./hooks": "./src/hooks/index.ts",
@@ -68,8 +69,8 @@ bos dev --api remote    # Isolate UI work
 
 File-based routing with auth guards via TanStack Router:
 
-- `_authenticated.tsx` - Requires login, redirects to `/login`
-- `_authenticated/_admin.tsx` - Requires admin role
+- `_layout/_authenticated.tsx` - Requires login, redirects to `/login`
+- `_layout/_authenticated/_admin.tsx` - Requires admin role
 
 ## Tech Stack
 

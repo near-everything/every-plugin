@@ -556,14 +556,14 @@ function buildRuntimeConfig(
 		ui: {
 			name: uiConfig?.name ?? "ui",
 			url: uiUrlOverride ?? uiConfig?.[env] ?? "",
-			entry: `${uiUrlOverride ?? uiConfig?.[env] ?? ""}/remoteEntry.js`,
+			entry: `${uiUrlOverride ?? uiConfig?.[env] ?? ""}/mf-manifest.json`,
 			ssrUrl: uiSsrUrlOverride ?? uiConfig?.ssr,
 			source: env === "development" ? "local" : "remote",
 		},
 		api: {
 			name: apiConfig?.name ?? "api",
 			url: apiConfig?.[env] ?? "",
-			entry: `${apiConfig?.[env] ?? ""}/remoteEntry.js`,
+			entry: `${apiConfig?.[env] ?? ""}/mf-manifest.json`,
 			source: env === "development" ? "local" : "remote",
 			proxy: apiProxy,
 			variables: apiVariables,
