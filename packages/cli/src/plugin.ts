@@ -57,6 +57,7 @@ import {
 	runNavigationFlow,
 	SessionRecorder,
 } from "./lib/session-recorder";
+import { syncAndGenerateSharedUi } from "./lib/shared-ui";
 import { syncFiles } from "./lib/sync";
 import { run } from "./utils/run";
 import { colors, icons } from "./utils/theme";
@@ -317,6 +318,29 @@ export default createPlugin({
 				proxy: input.proxy,
 			});
 
+			// Keep shared.ui versions/policy synced and generate .bos artifacts.
+			// Direction follows host mode:
+			// - local host: catalog -> bos.config.json
+			// - remote host: bos.config.json -> catalog
+			try {
+				const sharedSync = await syncAndGenerateSharedUi({
+					configDir: deps.configDir,
+					hostMode: appConfig.host,
+				});
+				if (sharedSync.catalogChanged) {
+					// Ensure local deps match published host expectations.
+					await run("bun", ["install"], { cwd: deps.configDir });
+				}
+				// Refresh loaded config for downstream runtimeConfig building.
+				const refreshed = await loadConfig({
+					cwd: deps.configDir,
+					force: true,
+				});
+				deps.bosConfig = refreshed?.config ?? deps.bosConfig;
+			} catch {
+				// Non-fatal: dev can still run with existing config.
+			}
+
 			if (appConfig.host === "remote") {
 				const remoteUrl = deps.bosConfig?.app.host.production;
 				if (!remoteUrl) {
@@ -493,6 +517,19 @@ export default createPlugin({
 			const allPackages = deps.bosConfig ? Object.keys(deps.bosConfig.app) : [];
 			const { configDir } = deps;
 
+			// Ensure shared deps are generated before builds.
+			try {
+				const sharedSync = await syncAndGenerateSharedUi({
+					configDir,
+					hostMode: "local",
+				});
+				if (sharedSync.catalogChanged) {
+					await run("bun", ["install"], { cwd: configDir });
+				}
+			} catch {
+				// Non-fatal
+			}
+
 			const targets =
 				input.packages === "all"
 					? allPackages
@@ -594,6 +631,24 @@ export default createPlugin({
 		publish: builder.publish.handler(
 			async ({ input }: { input: PublishOptions }) => {
 				const { bosConfig, nearPrivateKey } = deps;
+
+				// Ensure shared deps are synced from local catalog before publishing.
+				try {
+					const sharedSync = await syncAndGenerateSharedUi({
+						configDir: deps.configDir,
+						hostMode: "local",
+					});
+					if (sharedSync.catalogChanged) {
+						await run("bun", ["install"], { cwd: deps.configDir });
+					}
+					const refreshed = await loadConfig({
+						cwd: deps.configDir,
+						force: true,
+					});
+					deps.bosConfig = refreshed?.config ?? deps.bosConfig;
+				} catch {
+					// Non-fatal
+				}
 
 				if (!bosConfig) {
 					return {
@@ -1614,7 +1669,10 @@ export default createPlugin({
 				const tempDeps: Record<string, string> = {};
 				for (const [name, config] of Object.entries(sharedDeps)) {
 					const version =
-						(config as { requiredVersion?: string }).requiredVersion || "*";
+						(config as { version?: string; requiredVersion?: string })
+							.version ||
+						(config as { requiredVersion?: string }).requiredVersion ||
+						"*";
 					tempDeps[name] = version.replace(/^[\^~]/, "");
 				}
 
@@ -1658,14 +1716,20 @@ export default createPlugin({
 				for (const [name, newVersion] of Object.entries(
 					updatedPkg.dependencies,
 				)) {
+					const existing = sharedDeps[name] as
+						| { version?: string; requiredVersion?: string }
+						| undefined;
 					const oldVersion =
-						(sharedDeps[name] as { requiredVersion?: string })
-							?.requiredVersion || "";
+						existing?.version ??
+						(existing?.requiredVersion
+							? existing.requiredVersion.replace(/^[^\d]*/, "")
+							: "");
 					if (newVersion !== oldVersion) {
 						updated.push({ name, from: oldVersion, to: newVersion });
 						updatedConfig.shared[category][name] = {
-							...(sharedDeps[name] as object),
-							requiredVersion: newVersion,
+							...(existing as object),
+							version: newVersion,
+							requiredVersion: `^${newVersion}`,
 						};
 					}
 				}
@@ -1873,29 +1937,18 @@ export default createPlugin({
 				// Config is written to disk, subsequent code uses updatedBosConfig directly
 				// Cache will be refreshed on next loadConfig() call
 
-				const sharedUiDeps: Record<string, string> = {};
-				const sharedUi = updatedBosConfig.shared?.ui as
-					| Record<string, { requiredVersion?: string }>
-					| undefined;
-				if (sharedUi) {
-					for (const [name, config] of Object.entries(sharedUi)) {
-						if (config.requiredVersion) {
-							sharedUiDeps[name] = config.requiredVersion;
-						}
-					}
-				}
+				// Sync shared deps from published config into local catalog and
+				// generate .bos artifacts.
+				const sharedSync = await syncAndGenerateSharedUi({
+					configDir,
+					hostMode: "remote",
+				});
 
 				const rootPkgPath = `${configDir}/package.json`;
 				const rootPkg = (await Bun.file(rootPkgPath).json()) as {
 					workspaces: { packages: string[]; catalog: Record<string, string> };
 					[key: string]: unknown;
 				};
-
-				rootPkg.workspaces.catalog = {
-					...rootPkg.workspaces.catalog,
-					...sharedUiDeps,
-				};
-				await Bun.write(rootPkgPath, JSON.stringify(rootPkg, null, 2));
 
 				const packages = ["host", "ui", "api"];
 				const packagesUpdated: string[] = [];
@@ -1951,6 +2004,9 @@ export default createPlugin({
 					force: input.force,
 				});
 
+				// Ensure dependencies are actually installed after syncing catalog.
+				await run("bun", ["install"], { cwd: configDir });
+
 				const filesSynced =
 					results.length > 0
 						? results.map((r) => ({ package: r.package, files: r.files }))
@@ -1962,7 +2018,7 @@ export default createPlugin({
 					gateway,
 					socialUrl,
 					hostUrl,
-					catalogUpdated: true,
+					catalogUpdated: sharedSync.catalogChanged,
 					packagesUpdated,
 					filesSynced,
 				};

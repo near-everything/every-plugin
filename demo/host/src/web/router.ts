@@ -36,13 +36,14 @@ export async function createAppRouter(opts: {
 	const isServer = typeof window === "undefined";
 	const hostUrl = opts.context.runtimeConfig.hostUrl;
 	const uiEntry = isServer
-		? `${hostUrl}/__mf/ui/ssr/mf-manifest.json`
+		? `${hostUrl}/__mf/ui/ssr/remoteEntry.js`
 		: `/__mf/ui/mf-manifest.json`;
 
 	const ui = await loadFederatedModule<UiRouterRemote>({
 		remoteName: "ui",
 		entry: uiEntry,
 		module: "Router",
+		shared: opts.context.runtimeConfig.shared?.ui,
 	});
 	const result = ui.createRouter({
 		history: opts.history,

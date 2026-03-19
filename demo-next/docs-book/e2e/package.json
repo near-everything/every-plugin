@@ -1,0 +1,13 @@
+{
+	"name": "docs-book-e2e",
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"test": "playwright test",
+		"test:ui": "playwright test --ui"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.51.0",
+		"playwright": "^1.51.0"
+	}
+}

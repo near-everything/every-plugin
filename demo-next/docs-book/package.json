@@ -1,0 +1,22 @@
+{
+	"name": "docs-book",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "bun run ../../packages/everything-dev-next/cli.js dev",
+		"start": "NODE_ENV=production bun run ../../packages/everything-dev-next/cli.js start",
+		"build": "echo 'Use everything-dev-next build' && exit 1",
+		"test:e2e": "bash e2e/run-playwright.sh test",
+		"test:e2e:ui": "bash e2e/run-playwright.sh test --ui",
+		"test:e2e:debug": "bash e2e/run-playwright.sh test --debug",
+		"test:e2e:remote": "TEST_MODE=remote bash e2e/run-playwright.sh test"
+	},
+	"dependencies": {
+		"everything-dev-next": "workspace:*"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.50.0",
+		"playwright": "^1.50.0"
+	}
+}

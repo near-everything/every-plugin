@@ -15,7 +15,31 @@ const configPath =
 	process.env.BOS_CONFIG_PATH ?? path.resolve(__dirname, "../bos.config.json");
 
 const bosConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
-const sharedUi = bosConfig.shared?.ui ?? {};
+
+// Prefer generated shared deps (normalized + versioned).
+const generatedSharedPath = path.resolve(
+	__dirname,
+	"../.bos/generated/shared-ui.json",
+);
+const generatedShared = fs.existsSync(generatedSharedPath)
+	? JSON.parse(fs.readFileSync(generatedSharedPath, "utf8"))
+	: null;
+
+const sharedUi = generatedShared?.ui?.deps
+	? Object.fromEntries(
+			Object.entries(generatedShared.ui.deps as Record<string, any>).map(
+				([name, dep]) => [
+					name,
+					{
+						requiredVersion: dep.requiredVersion,
+						singleton: dep.singleton,
+						eager: dep.eager,
+						strictVersion: dep.strictVersion,
+					},
+				],
+			),
+		)
+	: (bosConfig.shared?.ui ?? {});
 
 function updateBosConfig(url: string) {
 	try {

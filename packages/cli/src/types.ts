@@ -58,12 +58,25 @@ export const GatewayConfigSchema = z.object({
 export type GatewayConfig = z.infer<typeof GatewayConfigSchema>;
 
 export const SharedDepConfigSchema = z.object({
+	version: z.string().describe("Exact installed version"),
 	requiredVersion: z.string().optional(),
 	singleton: z.boolean().optional(),
 	eager: z.boolean().optional(),
 	strictVersion: z.boolean().optional(),
+	shareScope: z.string().optional(),
 });
 export type SharedDepConfig = z.infer<typeof SharedDepConfigSchema>;
+
+// Input schema is permissive to support migrations.
+export const SharedDepConfigInputSchema = z.object({
+	version: z.string().optional(),
+	requiredVersion: z.string().optional(),
+	singleton: z.boolean().optional(),
+	eager: z.boolean().optional(),
+	strictVersion: z.boolean().optional(),
+	shareScope: z.string().optional(),
+});
+export type SharedDepConfigInput = z.infer<typeof SharedDepConfigInputSchema>;
 
 export const SyncConfigSchema = z.object({
 	scripts: z.union([z.array(z.string()), z.literal(true)]).optional(),
@@ -113,7 +126,7 @@ export const BosConfigInputSchema = z.object({
 		})
 		.optional(),
 	shared: z
-		.record(z.string(), z.record(z.string(), SharedDepConfigSchema))
+		.record(z.string(), z.record(z.string(), SharedDepConfigInputSchema))
 		.optional(),
 	app: z
 		.object({
@@ -142,6 +155,7 @@ export const PortConfigSchema = z.object({
 export type PortConfig = z.infer<typeof PortConfigSchema>;
 
 export const SharedConfigSchema = z.object({
+	version: z.string(),
 	requiredVersion: z.string().optional(),
 	singleton: z.boolean().optional(),
 	eager: z.boolean().optional(),

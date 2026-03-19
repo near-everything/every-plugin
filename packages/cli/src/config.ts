@@ -20,6 +20,37 @@ import {
 	ConfigResolutionError,
 } from "./types";
 
+function extractSemverExact(input: unknown): string | null {
+	if (typeof input !== "string") return null;
+	// Accept either exact or range strings (eg ^1.2.3, ~1.2.3, >=1.2.3)
+	const match = input.match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/);
+	return match ? match[0] : null;
+}
+
+function migrateSharedDeps(raw: BosConfigInput): BosConfigInput {
+	if (!raw.shared || typeof raw.shared !== "object") return raw;
+
+	const shared = raw.shared as Record<string, Record<string, any>>;
+	for (const category of Object.keys(shared)) {
+		const deps = shared[category];
+		if (!deps || typeof deps !== "object") continue;
+		for (const [name, cfg] of Object.entries(deps)) {
+			if (!cfg || typeof cfg !== "object") continue;
+			const anyCfg = cfg as Record<string, unknown>;
+			const version =
+				extractSemverExact(anyCfg.version) ??
+				extractSemverExact(anyCfg.requiredVersion);
+			if (version) {
+				anyCfg.version = version;
+				anyCfg.requiredVersion = `^${version}`;
+			}
+			deps[name] = anyCfg as any;
+		}
+	}
+
+	return raw;
+}
+
 // Re-export types
 export type {
 	AppConfig,
@@ -193,9 +224,10 @@ export async function loadConfig(options?: {
 			new Set(),
 			extendedChain,
 		);
+		const migratedConfig = migrateSharedDeps(rawConfig);
 
 		// Validate with strict schema
-		const validated = BosConfigSchema.parse(rawConfig);
+		const validated = BosConfigSchema.parse(migratedConfig);
 
 		// Cache result
 		configCache.set(configPath, { config: validated, timestamp: Date.now() });

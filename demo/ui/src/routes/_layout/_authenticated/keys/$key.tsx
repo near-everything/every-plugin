@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { useApiClient } from "@/lib/app-context";
+import { useApiClient } from "@/lib/host-context";
 
 import type { ApiClient } from "@/types";
 

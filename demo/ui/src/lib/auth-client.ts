@@ -2,6 +2,7 @@ export {
 	createAuthClient,
 	getRuntimeAccount,
 	useAuthClient,
-	useRuntimeConfig,
 	useUiContext,
 } from "./app-context";
+
+export { useRuntimeConfig } from "./host-context";

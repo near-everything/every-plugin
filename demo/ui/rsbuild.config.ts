@@ -19,7 +19,31 @@ const buildKind =
 
 const bosConfigPath = path.resolve(__dirname, "../bos.config.json");
 const bosConfig = JSON.parse(fs.readFileSync(bosConfigPath, "utf8"));
-const uiSharedDeps = bosConfig.shared?.ui ?? {};
+
+// Prefer generated shared deps (normalized + versioned).
+const generatedSharedPath = path.resolve(
+	__dirname,
+	"../.bos/generated/shared-ui.json",
+);
+const generatedShared = fs.existsSync(generatedSharedPath)
+	? JSON.parse(fs.readFileSync(generatedSharedPath, "utf8"))
+	: null;
+
+const uiSharedDeps = generatedShared?.ui?.deps
+	? Object.fromEntries(
+			Object.entries(generatedShared.ui.deps as Record<string, any>).map(
+				([name, dep]) => [
+					name,
+					{
+						requiredVersion: dep.requiredVersion,
+						singleton: dep.singleton,
+						eager: dep.eager,
+						strictVersion: dep.strictVersion,
+					},
+				],
+			),
+		)
+	: (bosConfig.shared?.ui ?? {});
 
 function updateBosConfig(field: "production" | "ssr", url: string) {
 	try {
@@ -42,7 +66,11 @@ function updateBosConfig(field: "production" | "ssr", url: string) {
 	}
 }
 
-const shared = {
+const sharedForWeb = {
+	...uiSharedDeps,
+};
+
+const sharedForNode = {
 	...uiSharedDeps,
 	react: {
 		...(uiSharedDeps as any).react,
@@ -56,21 +84,50 @@ const shared = {
 
 const plugins = [
 	pluginReact(),
-	pluginModuleFederation({
-		name: normalizedName,
-		filename: "remoteEntry.js",
-		dts: false,
-		experiments: { asyncStartup: true },
-		exposes: {
-			"./Router": "./src/router.tsx",
-			"./components": "./src/components/index.ts",
-			"./providers": "./src/providers/index.tsx",
-			"./hooks": "./src/hooks/index.ts",
-			"./types": "./src/types/index.ts",
+	pluginModuleFederation(
+		{
+			name: normalizedName,
+			filename: "remoteEntry.js",
+			dts: false,
+			experiments: { asyncStartup: true },
+			exposes: {
+				"./Router": "./src/router.tsx",
+				"./components": "./src/components/index.ts",
+				"./providers": "./src/providers/index.tsx",
+				"./hooks": "./src/hooks/index.ts",
+				"./types": "./src/types/index.ts",
+			},
+			shared: sharedForWeb,
 		},
-		runtimePlugins: [require.resolve("@module-federation/node/runtimePlugin")],
-		shared,
-	}),
+		{
+			environment: "mf",
+		},
+	),
+	pluginModuleFederation(
+		{
+			name: normalizedName,
+			filename: "remoteEntry.js",
+			dts: false,
+			experiments: { asyncStartup: true },
+			library: { type: "commonjs-module" },
+			remoteType: "script",
+			exposes: {
+				"./Router": "./src/router.tsx",
+				"./components": "./src/components/index.ts",
+				"./providers": "./src/providers/index.tsx",
+				"./hooks": "./src/hooks/index.ts",
+				"./types": "./src/types/index.ts",
+			},
+			runtimePlugins: [
+				require.resolve("@module-federation/node/runtimePlugin"),
+			],
+			shared: sharedForNode,
+		},
+		{
+			target: "node",
+			environment: "mf-ssr",
+		},
+	),
 ];
 
 if (shouldDeploy) {
@@ -101,7 +158,10 @@ export default defineConfig({
 		},
 	},
 	server: {
-		port: 3002,
+		port: Number(process.env.PORT) || 3002,
+		// Do not serve index.html for missing assets in dev.
+		// This avoids MF executing HTML at remoteEntry URLs ("Unexpected token '<'").
+		htmlFallback: false,
 		printUrls: ({ urls }) => urls.filter((url) => url.includes("localhost")),
 		headers: {
 			"Access-Control-Allow-Origin": "*",
@@ -120,6 +180,7 @@ export default defineConfig({
 	},
 	environments: {
 		mf: {
+			...({ server: { base: "/__mf/ui/" } } as any),
 			source: {
 				entry: {
 					index: "./src/remote-dev.ts",
@@ -150,6 +211,7 @@ export default defineConfig({
 			},
 		},
 		"mf-ssr": {
+			...({ server: { base: "/__mf/ui/ssr/" } } as any),
 			source: {
 				entry: {
 					index: "./src/remote-dev.ts",

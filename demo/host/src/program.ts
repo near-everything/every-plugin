@@ -348,8 +348,7 @@ export const createStartServer = (onReady?: () => void) =>
 		//
 		// Client assets:  /__mf/ui/*      -> config.ui.url/*
 		// SSR assets:     /__mf/ui/ssr/*  -> config.ui.ssrUrl/* (or ui.url in local dev)
-		const uiSsrTarget =
-			config.ui.ssrUrl ?? (config.ui.source === "local" ? config.ui.url : "");
+		const uiSsrTarget = config.ui.ssrUrl;
 
 		app.all("/__mf/ui/ssr/*", async (c: Context) => {
 			if (!uiSsrTarget) {
@@ -490,15 +489,44 @@ export const runServer = (input: ServerInput): ServerHandle => {
 	let serverFiber: Fiber.RuntimeFiber<void, never> | null = null;
 
 	const program = Effect.gen(function* () {
-		const readyDeferred = yield* Deferred.make<void>();
+		const readyDeferred = yield* Deferred.make<void, Error>();
+
+		const completeReady = (eff: Effect.Effect<void, Error>) => {
+			try {
+				Deferred.unsafeDone(readyDeferred, eff);
+			} catch {
+				// ignore double-completion
+			}
+		};
 
 		const fiber = yield* Effect.forkDaemon(
 			Effect.scoped(
-				createStartServer(() => Deferred.unsafeDone(readyDeferred, Exit.void)),
+				createStartServer(() => {
+					completeReady(Effect.void);
+				}),
 			),
 		);
 
 		serverFiber = fiber;
+
+		// If the server fiber exits before we become ready, fail readiness.
+		yield* Effect.forkDaemon(
+			Effect.gen(function* () {
+				const exit = yield* Fiber.await(fiber);
+				if (Exit.isSuccess(exit)) {
+					completeReady(Effect.fail(new Error("Server exited before ready")));
+					return;
+				}
+
+				const squashed = Cause.squash(exit.cause);
+				const details = extractErrorDetails(squashed);
+				completeReady(
+					Effect.fail(
+						new Error(`Server failed before ready: ${details.message}`),
+					),
+				);
+			}).pipe(Effect.catchAll(() => Effect.void)),
+		);
 
 		yield* Deferred.await(readyDeferred);
 	});

@@ -1,0 +1,52 @@
+{
+  "account": "docs-book.near",
+  "shared": {
+    "ui": {
+      "react": {
+        "version": "19.0.0",
+        "requiredVersion": "^19.0.0",
+        "singleton": true,
+        "eager": true,
+        "shareScope": "default"
+      },
+      "react-dom": {
+        "version": "19.0.0",
+        "requiredVersion": "^19.0.0",
+        "singleton": true,
+        "eager": true,
+        "shareScope": "default"
+      },
+      "@tanstack/react-router": {
+        "version": "1.157.16",
+        "requiredVersion": "^1.157.16",
+        "singleton": true,
+        "eager": true,
+        "shareScope": "default"
+      },
+      "@tanstack/react-query": {
+        "version": "5.90.20",
+        "requiredVersion": "^5.90.20",
+        "singleton": true,
+        "eager": true,
+        "shareScope": "default"
+      }
+    }
+  },
+  "app": {
+    "host": {
+      "development": "http://localhost:3000",
+      "production": "https://docs-book.example.com"
+    },
+    "ui": {
+      "name": "ui",
+      "development": "http://localhost:3002",
+      "production": "https://ui.docs-book.example.com",
+      "ssr": "https://ssr.ui.docs-book.example.com"
+    },
+    "api": {
+      "name": "api",
+      "development": "http://localhost:3014",
+      "production": "https://api.docs-book.example.com"
+    }
+  }
+}

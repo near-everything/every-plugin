@@ -4,9 +4,9 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "node --watch dist/server/server.cjs",
+		"dev": "node --watch --import tsx src/server-entry.ts",
 		"build": "rsbuild build",
-		"build:watch": "rsbuild build --watch",
+		"build:watch": "rsbuild build --environment mf --watch",
 		"deploy": "DEPLOY=true rsbuild build",
 		"bootstrap": "tsx bootstrap.ts",
 		"preview": "NODE_ENV=production node dist/server/server.cjs",
@@ -45,6 +45,10 @@
 		"near-kit": "catalog:",
 		"react": "catalog:",
 		"react-dom": "catalog:"
+	},
+	"peerDependencies": {
+		"react": ">=19",
+		"react-dom": ">=19"
 	},
 	"devDependencies": {
 		"everything-dev": "link:everything-dev",

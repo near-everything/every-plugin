@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "rsbuild dev --environment mf",
+		"dev:ssr": "rsbuild dev --environment mf-ssr",
 		"build": "bun run build:client && bun run build:ssr && bun run build:merge-mf",
 		"deploy": "DEPLOY=true bun run build",
 		"build:client": "UI_BUILD_KIND=client rsbuild build --environment mf",
@@ -59,8 +60,8 @@
 		"@tanstack/react-query": "catalog:",
 		"@tanstack/react-router": "catalog:",
 		"near-kit": "catalog:",
-		"react": "catalog:",
-		"react-dom": "catalog:"
+		"react": ">=19",
+		"react-dom": ">=19"
 	},
 	"devDependencies": {
 		"everything-dev": "link:everything-dev",

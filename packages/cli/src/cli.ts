@@ -282,7 +282,7 @@ async function main() {
 				interceptors: [onError((error: unknown) => formatORPCError(error))],
 			});
 
-			app.get("/", (c) =>
+			app.get("/", (c: any) =>
 				c.json({
 					ok: true,
 					plugin: "everything-dev",
@@ -295,7 +295,7 @@ async function main() {
 				}),
 			);
 
-			app.all("/api/rpc/*", async (c) => {
+			app.all("/api/rpc/*", async (c: any) => {
 				const rpcResult = await rpcHandler.handle(c.req.raw, {
 					prefix: "/api/rpc",
 					context: {},
@@ -305,7 +305,7 @@ async function main() {
 					: c.text("Not Found", 404);
 			});
 
-			app.all("/api", async (c) => {
+			app.all("/api", async (c: any) => {
 				const apiResult = await apiHandler.handle(c.req.raw, {
 					prefix: "/api",
 					context: {},
@@ -315,7 +315,7 @@ async function main() {
 					: c.text("Not Found", 404);
 			});
 
-			app.all("/api/*", async (c) => {
+			app.all("/api/*", async (c: any) => {
 				const apiResult = await apiHandler.handle(c.req.raw, {
 					prefix: "/api",
 					context: {},

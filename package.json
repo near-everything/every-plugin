@@ -32,6 +32,8 @@
 		"templates/*",
 		"plugins/*",
 		"examples/*",
+		"demo-next/*",
+		"demo-next/docs-book/*",
 		"packages/every-plugin/tests/fixtures/*"
 	]
 }

@@ -2,7 +2,8 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useApiClient, useAuthClient } from "@/lib/app-context";
+import { useAuthClient } from "@/lib/app-context";
+import { useApiClient } from "@/lib/host-context";
 
 import type { ApiClient } from "@/types";
 

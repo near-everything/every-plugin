@@ -1,5 +1,5 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { useAuth } from "everything-dev/runtime/react";
+import { useAuth } from "@/lib/host-context";
 import { useAuthClient } from "../lib/app-context";
 
 export function UserNav() {

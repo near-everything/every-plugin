@@ -7,10 +7,10 @@ import {
 	Scripts,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
-import { HostContextProvider } from "everything-dev/runtime/react";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { useUiContext } from "@/lib/app-context";
+import { HostContextProvider } from "@/lib/host-context";
 import type { RouterContext } from "@/types";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 

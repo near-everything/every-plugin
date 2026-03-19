@@ -7,6 +7,7 @@ import {
 	type RemoteConfig,
 	type SourceMode,
 } from "../config";
+import { patchManifestFetchForSsrPublicPath } from "../mf";
 import type { RuntimeConfig } from "../types";
 
 export interface DevProcess {
@@ -62,10 +63,11 @@ const processConfigBases: Record<string, ProcessConfigBase> = {
 	},
 	"ui-ssr": {
 		name: "ui-ssr",
+		// Spawn rsbuild directly so dev works even if package.json scripts are out of sync.
 		command: "bun",
-		args: ["run", "build:ssr", "--watch"],
+		args: ["x", "rsbuild", "dev", "--environment", "mf-ssr"],
 		cwd: "ui",
-		readyPatterns: [/compiled.*successfully/i, /built in/i],
+		readyPatterns: [/ready in/i, /compiled.*successfully/i, /➜.*local:/i],
 		errorPatterns: [/error/i, /failed/i],
 	},
 	api: {
@@ -98,8 +100,10 @@ export const getProcessConfig = (
 			? parsePort((bosConfig.app.ui as RemoteConfig).development)
 			: 3002;
 	} else if (pkg === "ui-ssr") {
-		// SSR build watcher doesn't need a port (build process, not server)
-		port = 0;
+		const uiPort = bosConfig?.app?.ui
+			? parsePort((bosConfig.app.ui as RemoteConfig).development)
+			: 3002;
+		port = uiPort + 1;
 	} else if (pkg === "api") {
 		port = bosConfig?.app?.api
 			? parsePort((bosConfig.app.api as RemoteConfig).development)
@@ -108,9 +112,7 @@ export const getProcessConfig = (
 		port = 0;
 	}
 
-	// Set BUILD_TARGET for SSR build process
-	const processEnv =
-		pkg === "ui-ssr" ? { ...env, BUILD_TARGET: "server" } : env;
+	const processEnv = env;
 
 	return { ...base, port, env: processEnv };
 };
@@ -147,10 +149,12 @@ const detectStatus = (
 };
 
 const stripAnsi = (input: string): string => {
-	// Covers CSI (\x1b[...m) and common OSC sequences (eg hyperlinks).
+	// Covers CSI (ESC[...m) and common OSC sequences (eg hyperlinks).
+	const ESC = String.fromCharCode(27);
+	const BEL = String.fromCharCode(7);
 	return input
-		.replace(/\x1B\][^\x07]*\x07/g, "")
-		.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+		.replace(new RegExp(`${ESC}\\][^${BEL}]*${BEL}`, "g"), "")
+		.replace(new RegExp(`${ESC}\\[[0-?]*[ -/]*[@-~]`, "g"), "");
 };
 
 const killProcessTree = (pid: number) =>
@@ -224,7 +228,10 @@ export function buildRuntimeConfig(
 					: uiConfig.development
 			}/mf-manifest.json`,
 			source: options.uiSource,
-			ssrUrl: uiConfig.ssr,
+			ssrUrl:
+				options.uiSource === "remote"
+					? uiConfig.ssr
+					: `http://localhost:${parsePort(uiConfig.development) + 1}`,
 		},
 		api: {
 			name: apiConfig.name,
@@ -507,25 +514,7 @@ export const spawnRemoteHost = (
 			mf = mfRuntime.createInstance({ name: "cli-host", remotes: [] });
 			mfCore.setGlobalFederationInstance(mf);
 		}
-
-		// Ensure manifest-based remotes have a usable SSR public path in Node.
-		mf.loaderHook.lifecycle.fetch.on((url, init) => {
-			if (typeof url !== "string" || !url.endsWith("/mf-manifest.json")) {
-				return;
-			}
-			return fetch(url, init)
-				.then((res) => res.json())
-				.then((json: any) => {
-					json.metaData ||= {};
-					json.metaData.ssrPublicPath ||= url.replace(
-						/\/mf-manifest\.json$/,
-						"/",
-					);
-					return new Response(JSON.stringify(json), {
-						headers: { "content-type": "application/json" },
-					});
-				});
-		});
+		patchManifestFetchForSsrPublicPath(mf);
 
 		const baseUrl = remoteUrl
 			.replace(/\/remoteEntry\.js$/, "")

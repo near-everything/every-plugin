@@ -1,5 +1,7 @@
+import type { QueryClient } from "@tanstack/react-query";
+import type { HostRuntimeContext } from "everything-dev/runtime";
 import * as React from "react";
-import type { HostRuntimeContext } from "./index";
+import type { ApiClient, RuntimeConfig } from "@/types";
 
 const HostContext = React.createContext<HostRuntimeContext | null>(null);
 
@@ -20,18 +22,20 @@ export function useHostContext(): HostRuntimeContext {
 	return ctx;
 }
 
-export function useRuntimeConfig() {
-	return useHostContext().runtimeConfig;
+export function useRuntimeConfig(): RuntimeConfig {
+	return useHostContext().runtimeConfig as RuntimeConfig;
 }
 
 export function useAuth() {
 	return useHostContext().auth;
 }
 
+export function useApiClient(): ApiClient;
+export function useApiClient<TApiClient = unknown>(): TApiClient;
 export function useApiClient<TApiClient = unknown>(): TApiClient {
 	return useHostContext().apiClient as TApiClient;
 }
 
-export function useQueryClient<TQueryClient = unknown>(): TQueryClient {
-	return useHostContext().queryClient as TQueryClient;
+export function useQueryClient(): QueryClient {
+	return useHostContext().queryClient as QueryClient;
 }

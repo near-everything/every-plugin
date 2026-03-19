@@ -4,19 +4,13 @@ import { createAuthClient as createBetterAuthClient } from "better-auth/react";
 import { siwnClient } from "better-near-auth/client";
 import { useMemo } from "react";
 
-import type { ApiClient, RouterContext, RuntimeConfig } from "@/types";
+import { useRuntimeConfig } from "@/lib/host-context";
+
+import type { RouterContext, RuntimeConfig } from "@/types";
 
 export function useUiContext(): RouterContext {
 	const router = useRouter();
 	return router.options.context as RouterContext;
-}
-
-export function useRuntimeConfig(): RuntimeConfig {
-	return useUiContext().runtimeConfig;
-}
-
-export function useApiClient(): ApiClient {
-	return useUiContext().apiClient;
 }
 
 export function getRuntimeAccount(
@@ -40,7 +34,7 @@ export function createAuthClient(runtimeConfig: RuntimeConfig) {
 }
 
 export function useAuthClient() {
-	const { runtimeConfig } = useUiContext();
+	const runtimeConfig = useRuntimeConfig();
 	return useMemo(
 		() => createAuthClient(runtimeConfig),
 		[runtimeConfig.hostUrl, runtimeConfig.account],

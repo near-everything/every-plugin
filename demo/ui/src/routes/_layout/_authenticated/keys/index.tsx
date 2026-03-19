@@ -6,7 +6,7 @@ import {
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useApiClient } from "@/lib/app-context";
+import { useApiClient } from "@/lib/host-context";
 
 export const Route = createFileRoute("/_layout/_authenticated/keys/")({
 	loader: async ({ context }) => {

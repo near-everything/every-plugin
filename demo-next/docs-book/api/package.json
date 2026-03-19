@@ -1,0 +1,25 @@
+{
+	"name": "api",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "rspack dev",
+		"build": "rspack build",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"every-plugin": "workspace:*",
+		"effect": "^3.16.0",
+		"zod": "^3.25.0"
+	},
+	"devDependencies": {
+		"@module-federation/enhanced": "^0.24.1",
+		"@module-federation/node": "^2.7.32",
+		"@rspack/core": "^1.3.21",
+		"@rspack/cli": "^1.3.21",
+		"@types/node": "^22.10.2",
+		"tsx": "^4.21.0",
+		"typescript": "^5.7.2"
+	}
+}
